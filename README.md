@@ -6,7 +6,7 @@ EasyEarth - QGIS plugin powered by huggingface, Flask and Connexion
 Check the demo [here](https://drive.google.com/file/d/1AShHsXkYoBj4zltAGkdnzEfKp2GSFFeS/view)
 
 
-!![image](https://github.com/user-attachments/assets/749cc195-a149-4ccd-9d3f-edb3a2040cf7)
+![image](https://github.com/user-attachments/assets/749cc195-a149-4ccd-9d3f-edb3a2040cf7)
 
 
 ```http
