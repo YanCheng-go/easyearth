@@ -72,6 +72,9 @@ cp -r ./easyearth_plugin ~/.local/share/QGIS/QGIS3/profiles/default/python/plugi
 3. Click Browse image and select an image to play with 
 4. Click Start Drawing.
 
+![QGIS Plugin GUI](https://github.com/user-attachments/assets/7233c11c-cc7f-4fd8-8dc5-196db4a4220b)
+
+
 ## Run EasyEarth outside QGIS
 Start the docker container and send requests to the server using curl or any other HTTP client.
 ```bash
