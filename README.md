@@ -93,11 +93,12 @@ Send prompts to the server and get predictions from SAM model. Check the generat
 curl -X POST http://127.0.0.1:3781/v1/easyearth/sam-predict -H "Content-Type: application/json" -d '{
   "image_path": "/usr/src/app/user/DJI_0108.JPG",
   "embedding_path": "/usr/src/app/user/embeddings/DJI_0108.pt",  # if empty, the code will generate embeddings first
+  "model_path": "facebook/sam-vit-large", # model path from huggingface
   "prompts": [
     {
       "type": "Point",
       "data": {
-        "points": [[850, 1100]],
+        "points": [[850, 1100]],  # can be multiple points
       }
     }  
                       
@@ -105,10 +106,11 @@ curl -X POST http://127.0.0.1:3781/v1/easyearth/sam-predict -H "Content-Type: ap
 }'
 ```
 ### Use models with no prompts
-Call other segmentation models with out prompt engineering
+Call other segmentation models without prompt engineering
 ```bash
 curl -X POST http://127.0.0.1:3781/v1/easyearth/segment-predict -H "Content-Type: application/json" -d '{
   "image_path": "/usr/src/app/user/DJI_0108.JPG",
+  "model_path": "restor/tcd-segformer-mit-b2", # model path from huggingface
   "prompts": []
 }'
 ```
