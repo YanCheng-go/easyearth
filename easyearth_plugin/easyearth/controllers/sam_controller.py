@@ -217,12 +217,12 @@ def predict():
             sam = Sam(model_path)
 
             # Handle embeddings
-            embedding_path = data.get('embedding_path')
+            embedding_path = data.get('embedding_path', None)
             save_embeddings = data.get('save_embeddings', False)
 
             image_embeddings = None
 
-            if embedding_path and os.path.exists(embedding_path):
+            if embedding_path is not None and os.path.exists(embedding_path) and not save_embeddings:
                 try:
                     logger.debug(f"Loading cached embedding from: {embedding_path}")
                     embedding_data = torch.load(embedding_path)
@@ -245,7 +245,7 @@ def predict():
 
             # Generate new embeddings if needed
             else:
-                logger.info("Generating new embeddings")
+                logger.info("Generating new embeddings without saving.")
                 image_embeddings = sam.get_image_embeddings(image_array)
 
                 # generate an index file to relate the image to the embedding
@@ -262,7 +262,7 @@ def predict():
                 with open(index_path, 'w') as f:
                     json.dump(index, f)
 
-                if save_embeddings and embedding_path:
+                if save_embeddings and embedding_path is not None:
                     try:
                         os.makedirs(os.path.dirname(embedding_path), exist_ok=True)
                         # Save with metadata
@@ -271,6 +271,7 @@ def predict():
                             'image_shape': image_array.shape[:2],
                             'timestamp': datetime.now().isoformat()
                         }
+                        logger.debug(f"Saving new embedding to: {embedding_path}")
                         torch.save(embedding_data, embedding_path)
                     except Exception as e:
                         logger.error(f"Failed to save embeddings: {str(e)}")
@@ -316,45 +317,3 @@ def predict():
             'status': 'error',
             'message': f'Server error: {str(e)}'
         }), 500
-
-#
-# # test reorganize_prompts
-# if __name__ == "__main__":
-#     # Test reorganize_prompts function
-#     test_prompts = [
-#         {
-#             'type': 'Point',
-#             'data': {
-#                 'points': [[850, 1100]],
-#             }
-#         }
-#         ,
-#         {
-#             'type': 'Point',
-#             'data': {
-#                 'points': [[2250, 1000]],
-#             }
-#         }
-#     ]
-#
-#     transformed_prompts = reorganize_prompts(test_prompts)
-#
-#     from easyearth_plugin.easyearth.models.sam import Sam
-#     sam = Sam()
-#     image_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-#     raw_image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
-#     img_transform = rasterio.transform.from_bounds(0, 0, 1024, 1024, 1024, 1024)
-#     image_embeddings = sam.get_image_embeddings(raw_image)
-#
-#     # Test reproject_prompts function
-#     masks, scores = sam.get_masks(
-#         raw_image,
-#         image_embeddings=image_embeddings,
-#         input_points=transformed_prompts['points'] if len(transformed_prompts['points']) > 0 else None,
-#         input_labels=transformed_prompts['labels'] if len(transformed_prompts['labels']) > 0 else None,
-#         input_boxes=transformed_prompts['boxes'] if len(transformed_prompts['boxes']) > 0 else None,
-#         multimask_output=True
-#     )
-#     # to vector
-#     geojson = sam.raster_to_vector(masks, scores, img_transform,
-#                                    filename="/home/yan/PycharmProjects/easyearth/easyearth_plugin/tmp/masks_multipoints.geojson")
