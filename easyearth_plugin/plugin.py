@@ -1264,14 +1264,18 @@ class EasyEarthPlugin:
             # Remove existing layers
             if self.prompts_layer and self.prompts_layer.isValid():
                 QgsProject.instance().removeMapLayer(self.prompts_layer.id())
+                self.prompts_layer = None
             if self.predictions_layer and self.predictions_layer.isValid():
                 QgsProject.instance().removeMapLayer(self.predictions_layer.id())
+                self.predictions_layer = None
 
             # Remove existing temporary files
             if self.temp_prompts_geojson and os.path.exists(self.temp_prompts_geojson):
                 os.remove(self.temp_prompts_geojson)
+                self.prompts_layer = None
             if self.temp_predictions_geojson and os.path.exists(self.temp_predictions_geojson):
                 os.remove(self.temp_predictions_geojson)
+                self.predictions_layer = None
 
             # Reset feature count
             self.feature_count = 0
