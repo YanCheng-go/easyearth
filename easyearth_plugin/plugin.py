@@ -297,12 +297,12 @@ class EasyEarthPlugin:
             # Add common models
             # TODO: add and test model models
             self.model_combo.addItems([
-                "facebook/sam-vit-huge",
-                "restor/tcd-segformer-mit-b5",
                 "facebook/sam-vit-base",
                 "facebook/sam-vit-large"
+                "facebook/sam-vit-huge",
+                "restor/tcd-segformer-mit-b5",
             ])
-            self.model_combo.setEditText("facebook/sam-vit-huge")  # Default
+            self.model_combo.setEditText("facebook/sam-vit-base")  # Default
             self.model_combo.currentTextChanged.connect(self.on_model_changed)
             self.model_path = self.model_combo.currentText().strip()
 
