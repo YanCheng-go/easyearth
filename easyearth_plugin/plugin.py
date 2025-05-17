@@ -339,12 +339,11 @@ class EasyEarthPlugin:
             self.layer_combo = QComboBox()
             self.layer_combo.hide()
             image_layout.addWidget(self.layer_combo)
+            # Connect to layer selection change
+            self.layer_combo.currentIndexChanged.connect(self.on_layer_selected)
 
             image_group.setLayout(image_layout)
             main_layout.addWidget(image_group)
-
-            # Connect to layer selection change
-            self.layer_combo.currentIndexChanged.connect(self.on_layer_selected)
 
             # 4. Embedding Settings Group
             embedding_group = QGroupBox("Embedding Settings")
