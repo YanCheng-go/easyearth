@@ -1767,9 +1767,6 @@ class EasyEarthPlugin:
                     }
                     self.predictions_geojson["features"].append(feature)
 
-                # Add feature to the collection
-                self.predictions_geojson['features'].append(feature)
-
                 # Write initial GeoJSON file
                 with open(self.temp_predictions_geojson, 'w') as f:
                     json.dump(self.predictions_geojson, f)
