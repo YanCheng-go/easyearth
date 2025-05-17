@@ -1484,13 +1484,6 @@ class EasyEarthPlugin:
             for feature in self.prompts_layer.getFeatures():
                 # Check if the feature is new
                 timestamp = feature.attribute('timestamp')
-                # print the latest prediction time in the message bar
-                self.iface.messageBar().pushMessage(
-                    "Info",
-                    f"Latest prediction time: {self.last_pred_time}",
-                    level=Qgis.Info,
-                    duration=3
-                )
                 if timestamp is None or timestamp < self.last_pred_time:
                     continue
 
@@ -1762,15 +1755,17 @@ class EasyEarthPlugin:
                     }
                 }
 
-                # Add the new feature with properties
-                feature = {
-                    "type": "Feature",
-                    "properties": {
-                        "id": self.feature_count if hasattr(self, 'feature_count') else 1,
-                        "scores": features[0].get('properties', {}).get('scores', 0),
-                    },
-                    "geometry": features[0]['geometry']
-                }
+                # Add all new features with properties
+                for i, feat in enumerate(features):
+                    feature = {
+                        "type": "Feature",
+                        "properties": {
+                            "id": self.feature_count + i if hasattr(self, 'feature_count') else i + 1,
+                            "scores": feat.get('properties', {}).get('scores', 0),
+                        },
+                        "geometry": feat['geometry']
+                    }
+                    self.predictions_geojson["features"].append(feature)
 
                 # Add feature to the collection
                 self.predictions_geojson['features'].append(feature)
