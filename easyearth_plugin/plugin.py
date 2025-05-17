@@ -1413,6 +1413,7 @@ class EasyEarthPlugin:
         try:
             prompts = self.collect_all_prompts()  # Implement this to gather all drawn prompts
             self.get_prediction(prompts)
+            self.last_pred_time = time.time()  # Update last prediction time
         except Exception as e:
             self.logger.error(f"Error running prediction: {str(e)}")
             QMessageBox.critical(None, "Error", f"Failed to run prediction: {str(e)}")
@@ -2075,6 +2076,7 @@ class EasyEarthPlugin:
             self.logger.exception("Full traceback:")
             QMessageBox.critical(None, "Error", f"Failed to prepare layers: {str(e)}")
 
+    # TODO: update embedding path if the model path changed...
     def on_layer_selected(self, index):
         """Handle layer selection change and check for existing embeddings"""
         try:
