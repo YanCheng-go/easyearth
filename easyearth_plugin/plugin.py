@@ -1484,7 +1484,14 @@ class EasyEarthPlugin:
             for feature in self.prompts_layer.getFeatures():
                 # Check if the feature is new
                 timestamp = feature.attribute('timestamp')
-                if timestamp is None or timestamp <= self.last_pred_time:
+                # print the latest prediction time in the message bar
+                self.iface.messageBar().pushMessage(
+                    "Info",
+                    f"Latest prediction time: {self.last_pred_time}",
+                    level=Qgis.Info,
+                    duration=3
+                )
+                if timestamp is None or timestamp < self.last_pred_time:
                     continue
 
                 prompt_type = feature['type']
