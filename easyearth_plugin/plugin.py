@@ -650,7 +650,7 @@ class EasyEarthPlugin:
                 return
 
             # Load the image as a raster layer
-            raster_layer = QgsRasterLayer(image_path, "Selected Image")
+            raster_layer = QgsRasterLayer(image_path, os.path.basename(image_path))
             if not raster_layer.isValid():
                 QMessageBox.warning(None, "Error", "Invalid raster layer")
                 return
@@ -1272,7 +1272,7 @@ class EasyEarthPlugin:
                     raise ValueError("No image selected")
                 # Find the raster layer by name "Selected Image"
                 for layer in QgsProject.instance().mapLayers().values():
-                    if isinstance(layer, QgsRasterLayer) and layer.name() == "Selected Image":
+                    if isinstance(layer, QgsRasterLayer) and layer.name() == os.path.basename(self.image_path.text()):
                         raster_layer = layer
                         break
             else:
@@ -1657,7 +1657,7 @@ class EasyEarthPlugin:
             raster_layer = None
             if self.source_combo.currentText() == "File":
                 for layer in QgsProject.instance().mapLayers().values():
-                    if isinstance(layer, QgsRasterLayer) and layer.name() == "Selected Image":
+                    if isinstance(layer, QgsRasterLayer) and layer.name() == os.path.basename(self.image_path.text()):
                         raster_layer = layer
                         break
             else:
