@@ -1787,21 +1787,6 @@ class EasyEarthPlugin:
             self.logger.exception("Full traceback:")
             QMessageBox.critical(None, "Error", f"Failed to add predictions: {str(e)}")
 
-    def load_embedding(self, image_path):
-        """Load embedding for an image if it exists"""
-        try:
-            image_name = os.path.basename(image_path)
-            base_name = os.path.splitext(image_name)[0]
-            embedding_path = os.path.join(self.data_dir, 'embeddings', f"{base_name}.pt")
-
-            if os.path.exists(embedding_path):
-                # logger.info(f"Found existing embedding for {image_name}")
-                return True
-            return False
-        except Exception as e:
-            # logger.error(f"Error checking embedding: {str(e)}")
-            return False
-
     def count_docker_steps(self):
         """Count the total number of steps in docker-compose and Dockerfile"""
         try:
