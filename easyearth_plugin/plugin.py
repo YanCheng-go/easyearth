@@ -598,6 +598,31 @@ class EasyEarthPlugin:
             self.logger.error(f"Error updating embeddings: {str(e)}")
             QMessageBox.critical(None, "Error", f"Failed to update embeddings: {str(e)}")
 
+    def initialize_image_path(self):
+        """Reinitialize the image path input field"""
+        self.image_path.clear()
+        self.image_path.setPlaceholderText("Enter image path or click Browse...")
+        self.image_path.setEnabled(True)
+        self.browse_button.setEnabled(True)
+
+    def deactivate_embedding_section(self):
+        """Deactivate the embedding section if SAM model is not selected"""
+        self.no_embedding_radio.setEnabled(False)
+        self.load_embedding_radio.setEnabled(False)
+        self.save_embedding_radio.setEnabled(False)
+        self.embedding_path_edit.setEnabled(False)
+        self.embedding_browse_btn.setEnabled(False)
+
+    def initialize_embedding_path(self):
+        """Reinitialize the embedding path input field"""
+        self.embedding_path_edit.clear()
+        self.embedding_path_edit.setEnabled(False)
+        self.embedding_browse_btn.setEnabled(False)
+        self.no_embedding_radio.setChecked(True)
+        self.load_embedding_radio.setChecked(False)
+        self.save_embedding_radio.setChecked(False)
+
+
     def on_image_source_changed(self, text):
         """Handle image source selection change"""
         try:
@@ -605,7 +630,11 @@ class EasyEarthPlugin:
                 self.image_path.show()
                 self.browse_button.show()
                 self.layer_combo.hide()
-            else:
+                self.initialize_image_path()
+                self.initialize_embedding_path()
+                # Deactivate embedding section if SAM model is not selected
+                self.deactivate_embedding_section() if not self.is_sam_model() else None
+            elif text == "Layer":
                 self.image_path.hide()
                 self.browse_button.hide()
                 self.layer_combo.show()
@@ -613,11 +642,6 @@ class EasyEarthPlugin:
 
             # Clear any existing layers
             self.cleanup_previous_session()
-
-            # Create new prediction layers if a layer is selected
-            if text == "Layer" and self.layer_combo.currentData():
-                self.image_path.setText(self.layer_combo.currentData().source())
-                self.create_prediction_layers()
 
         except Exception as e:
             self.logger.error(f"Error in image source change: {str(e)}")
