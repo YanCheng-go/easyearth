@@ -343,6 +343,9 @@ class EasyEarthPlugin:
             image_group.setLayout(image_layout)
             main_layout.addWidget(image_group)
 
+            # Connect to layer selection change
+            self.layer_combo.currentIndexChanged.connect(self.on_layer_selected)
+
             # 4. Embedding Settings Group
             embedding_group = QGroupBox("Embedding Settings")
             embedding_layout = QVBoxLayout()
@@ -435,8 +438,8 @@ class EasyEarthPlugin:
             # TODO: move to after checking if docker image is running...and return mounted data folder using docker inspect
             self.data_dir = self.initialize_data_directory()
 
-            # Connect to project layer changes
-            QgsProject.instance().layersAdded.connect(self.update_layer_combo)
+            # Update the layer (raster) list in the combo box whenever a layer is added or removed
+            QgsProject.instance().layersAdded.connect(self.on_layers_added)
             QgsProject.instance().layersRemoved.connect(self.update_layer_combo)
 
             # Connect to QGIS quit signal
@@ -465,21 +468,32 @@ class EasyEarthPlugin:
             self.last_pred_time = time.time()
 
     def update_layer_combo(self):
-        """Update the layers combo box with current raster layers"""
+        """Update the layers combo box with current raster layers in the project"""
         try:
+            current_layer_id = self.layer_combo.currentData()
+            self.layer_combo.blockSignals(True)
             self.layer_combo.clear()
-            self.layer_combo.addItem("Select a layer...")
+            self.layer_combo.addItem("Select a layer...", None)
 
             # Add all raster layers to combo
             for layer in QgsProject.instance().mapLayers().values():
                 if isinstance(layer, QgsRasterLayer):
-                    self.layer_combo.addItem(layer.name(), layer)
+                    self.layer_combo.addItem(layer.name(), layer.id())
 
-            # Connect to layer selection change
-            self.layer_combo.currentIndexChanged.connect(self.on_layer_selected)
+            # Restore previous selection if possible
+            if current_layer_id:
+                index = self.layer_combo.findData(current_layer_id)
+                if index != -1:
+                    self.layer_combo.setCurrentIndex(index)
+            self.layer_combo.blockSignals(False)
 
         except Exception as e:
             self.logger.error(f"Error updating layer combo: {str(e)}")
+
+    def on_layers_added(self, layers):
+        # Only update if any added layer is a QgsRasterLayer
+        if any(isinstance(layer, QgsRasterLayer) for layer in layers):
+            self.update_layer_combo()
 
     def is_sam_model(self):
         is_sam = self.model_path.startswith("facebook/sam-")
@@ -1275,11 +1289,10 @@ class EasyEarthPlugin:
                     if isinstance(layer, QgsRasterLayer) and layer.name() == os.path.basename(self.image_path.text()):
                         raster_layer = layer
                         break
-            else:
-                # TODO: debug and test when choosing from opened layers
-                # TODO: use current or highlighted layer from layer combo box for Layer source
+            elif self.source_combo.currentText() == "Layer":
                 # Get layer directly from combo box for Layer source
-                raster_layer = self.layer_combo.currentData()
+                layer_id = self.layer_combo.currentData()
+                raster_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
 
             if not raster_layer:
                 raise ValueError("No raster layer found")
@@ -1653,17 +1666,18 @@ class EasyEarthPlugin:
                 self.predictions_layer = None
                 self.predictions_geojson = None
 
-            # Get the raster layer for coordinate transformation
             raster_layer = None
+            # Get the raster layer for coordinate transformation
             if self.source_combo.currentText() == "File":
                 for layer in QgsProject.instance().mapLayers().values():
                     if isinstance(layer, QgsRasterLayer) and layer.name() == os.path.basename(self.image_path.text()):
                         raster_layer = layer
                         break
-            else:
-                raster_layer = self.layer_combo.currentData()
+            elif self.source_combo.currentText() == "Layer":
+                layer_id = self.layer_combo.currentData()
+                raster_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
 
-            if not raster_layer:
+            if not raster_layer or not raster_layer.isValid():
                 raise ValueError("No raster layer found")
 
             # Get raster extent and dimensions
@@ -2127,22 +2141,25 @@ class EasyEarthPlugin:
             self.logger.exception("Full traceback:")
             QMessageBox.critical(None, "Error", f"Failed to prepare layers: {str(e)}")
 
-    # TODO: update embedding path if the model path changed...
     def on_layer_selected(self, index):
         """Handle layer selection change and check for existing embeddings"""
         try:
             if index > 0:  # Skip "Select a layer..." item
-                selected_layer = self.layer_combo.currentData()
+                layer_id = self.layer_combo.itemData(index)
+                selected_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
+
                 if not selected_layer:
                     return
-
-                self.image_path.setText(selected_layer.source())
 
                 # Create prediction layers
                 self.create_prediction_layers()
 
                 # Check for existing embedding
                 layer_source = selected_layer.source()
+
+                # Update the image path according to the source of the selected layer
+                self.image_path.setText(selected_layer.source())
+
                 image_name = os.path.splitext(os.path.basename(layer_source))[0]
                 self.update_embeddings(image_name)
 
