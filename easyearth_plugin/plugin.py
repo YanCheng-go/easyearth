@@ -1558,6 +1558,8 @@ class EasyEarthPlugin:
                 formatted_payload = (
                     f"Sending to server:\n"
                     f"- Host image path: {image_path}\n"
+                    f"- Host embedding path: {embedding_path}\n"
+                    f"- (re)Save embeddings: {save_embeddings}\n"
                     f"- Prompts: {json.dumps(prompts, indent=2)}\n"
                 )
 
@@ -1588,6 +1590,13 @@ class EasyEarthPlugin:
 
                 if response.status_code == 200:
                     try:
+                        # After the first response from the server, if it was to save the embedding, we need to load it directly instead and avoid saving it again
+                        if self.save_embedding_radio.isChecked():
+                            self.load_embedding_radio.setChecked(True)
+                            self.save_embedding_radio.setChecked(False)
+                            self.load_embedding_radio.setEnabled(True)
+                            self.update_embeddings()
+
                         response_json = response.json()
                         # self.logger.debug(f"Parsed response JSON: {json.dumps(response_json, indent=2)}")
 
