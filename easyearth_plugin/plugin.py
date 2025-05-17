@@ -303,8 +303,8 @@ class EasyEarthPlugin:
                 "facebook/sam-vit-large"
             ])
             self.model_combo.setEditText("facebook/sam-vit-huge")  # Default
-            self.model_combo.currentTextChanged.connect(self.update_drawing_enabled)
-            self.model_path = self.model_combo.currentText()
+            self.model_combo.currentTextChanged.connect(self.on_model_changed)
+            self.model_path = self.model_combo.currentText().strip()
 
             model_layout.addWidget(self.model_combo)
             model_group.setLayout(model_layout)
@@ -485,21 +485,105 @@ class EasyEarthPlugin:
         is_sam = self.model_path.startswith("facebook/sam-")
         return is_sam
 
-    def update_drawing_enabled(self):
-        """Enable drawing and embedding only if a SAM model is selected."""
+    def on_model_changed(self, text=None):
+        """1. Enable drawing and embedding only if a SAM model is selected.
+           2. Update the embedding path according to model selection."""
+
+        if text is not None:
+            self.model_path = text.strip()
+        else:
+            self.model_path = self.model_combo.currentText().strip()
+
         is_sam = self.is_sam_model()
+
         # Drawing section
         self.draw_button.setEnabled(is_sam)
         self.draw_type_combo.setEnabled(is_sam)
         self.realtime_checkbox.setEnabled(is_sam)
+        if not is_sam and self.draw_button.isChecked():
+            self.draw_button.setChecked(False)
+
         # Embedding section
+        self.embedding_path_edit.setEnabled(is_sam and not self.no_embedding_radio.isChecked())
+        self.embedding_browse_btn.setEnabled(is_sam and not self.no_embedding_radio.isChecked())
+        self.embedding_path_edit.clear() if not is_sam else None
         self.no_embedding_radio.setEnabled(is_sam)
         self.load_embedding_radio.setEnabled(is_sam)
         self.save_embedding_radio.setEnabled(is_sam)
-        self.embedding_path_edit.setEnabled(is_sam and not self.no_embedding_radio.isChecked())
-        self.embedding_browse_btn.setEnabled(is_sam and not self.no_embedding_radio.isChecked())
-        if not is_sam and self.draw_button.isChecked():
-            self.draw_button.setChecked(False)
+
+        # Update embedding path
+        if is_sam:
+            self.update_embeddings()
+
+    def update_embeddings(self, image_name=None):
+        """Update the embedding path based on the selected model and image"""
+        try:
+            # Get the image path
+            image_path = self.image_path.text()
+            if not image_path:
+                return
+
+            # Get the image name
+            image_name = os.path.splitext(os.path.basename(image_path))[0] if image_name is None else image_name
+
+            # Create embedding directory if it doesn't exist
+            embedding_dir = os.path.join(self.data_dir, 'embeddings')
+            os.makedirs(embedding_dir, exist_ok=True)
+
+            # Update the embedding path
+            model_version = self.model_path.replace('/', '_')
+            embedding_path = os.path.join(embedding_dir, f"{image_name}_{model_version}.pt")
+
+            if self.save_embedding_radio.isChecked():
+                # Save new embedding
+                self.embedding_path_edit.setText(embedding_path)
+                self.embedding_browse_btn.setEnabled(True)
+                self.embedding_path_edit.setEnabled(True)
+                self.iface.messageBar().pushMessage(
+                    "Info",
+                    f"Will save new embedding for {image_name}.",
+                    level=Qgis.Info,
+                    duration=5
+                )
+                self.logger.info(f"Will save new embedding to: {embedding_path}")
+            else:
+                # Check if embedding file exists
+                if os.path.exists(embedding_path):
+                    # Found existing embedding
+                    self.load_embedding_radio.setChecked(True)
+                    self.embedding_path_edit.setEnabled(True)
+                    self.embedding_browse_btn.setEnabled(True)
+
+                    # Set the embedding path in the text box
+                    self.embedding_path_edit.setText(embedding_path)
+
+                    self.iface.messageBar().pushMessage(
+                        "Info",
+                        f"Found existing embedding for {image_name}. Will use cached embedding for predictions.",
+                        level=Qgis.Info,
+                        duration=5
+                    )
+                    self.logger.info(f"Found existing embedding at: {embedding_path}")
+                else:
+                    # No existing embedding
+                    self.no_embedding_radio.setChecked(True)
+                    self.load_embedding_radio.setEnabled(False)  # TODO: what if the user have the embeddings saved somewhere else?
+                    # clear the embedding path
+                    self.embedding_path_edit.clear()
+                    self.embedding_browse_btn.setEnabled(False)
+                    self.embedding_path_edit.setEnabled(False)
+
+                    self.iface.messageBar().pushMessage(
+                        "Info",
+                        f"No existing embedding found for {image_name}. Will generate on the fly on first prediction. Select 'Save new embedding' to save it.",
+                        level=Qgis.Info,
+                        duration=5
+                    )
+                    self.logger.info(f"No existing embedding found, will save to: {embedding_path}")
+
+        except Exception as e:
+            self.logger.error(f"Error updating embeddings: {str(e)}")
+            QMessageBox.critical(None, "Error", f"Failed to update embeddings: {str(e)}")
 
     def on_image_source_changed(self, text):
         """Handle image source selection change"""
@@ -577,41 +661,10 @@ class EasyEarthPlugin:
             # Create prediction layers
             self.create_prediction_layers()
 
+            # Update the embedding path if SAM model is selected
             if self.is_sam_model():
-                # Check for existing embedding
-                image_name = os.path.splitext(os.path.basename(image_path))[0]
-                embedding_dir = os.path.join(self.data_dir, 'embeddings')
-                model_version = self.model_path.replace('/', '_')
-                embedding_path = os.path.join(embedding_dir, f"{image_name}_{model_version}.pt")
+                self.update_embeddings()
 
-                if os.path.exists(embedding_path):
-                    # Found existing embedding
-                    self.load_embedding_radio.setChecked(True)
-                    self.embedding_path_edit.setText(embedding_path)
-                    self.embedding_path_edit.setEnabled(True)
-                    self.embedding_browse_btn.setEnabled(True)
-
-                    self.iface.messageBar().pushMessage(
-                        "Info",
-                        f"Found existing embedding for {image_name}. Will use cached embedding for predictions.",
-                        level=Qgis.Info,
-                        duration=5
-                    )
-                    self.logger.info(f"Found existing embedding at: {embedding_path}")
-                else:
-                    # No existing embedding
-                    self.save_embedding_radio.setChecked(True)
-                    self.embedding_path_edit.setText(embedding_path)
-                    self.embedding_path_edit.setEnabled(True)
-                    self.embedding_browse_btn.setEnabled(True)
-
-                    self.iface.messageBar().pushMessage(
-                        "Info",
-                        f"No existing embedding found for {image_name}. Will generate and save embedding on first prediction.",
-                        level=Qgis.Info,
-                        duration=5
-                    )
-                    self.logger.info(f"No existing embedding found, will save to: {embedding_path}")
         except Exception as e:
             self.logger.error(f"Error loading image: {str(e)}")
             self.logger.exception("Full traceback:")
@@ -1882,6 +1935,10 @@ class EasyEarthPlugin:
                 self.embedding_path_edit.clear()
                 self.logger.debug("Cleared embedding path")
 
+            # Enable or disable the path input based on the selected option
+            if button == self.save_embedding_radio or button == self.load_embedding_radio:
+                self.update_embeddings()
+
             self.logger.debug(f"Path input enabled: {enable_path}")
         except Exception as e:
             self.logger.error(f"Error in embedding option change: {str(e)}")
@@ -2093,38 +2150,7 @@ class EasyEarthPlugin:
                 # Check for existing embedding
                 layer_source = selected_layer.source()
                 image_name = os.path.splitext(os.path.basename(layer_source))[0]
-                embedding_dir = os.path.join(self.data_dir, 'embeddings')
-                embedding_path = os.path.join(embedding_dir, f"{image_name}.pt")
-
-                if os.path.exists(embedding_path):
-                    # Found existing embedding
-                    self.load_embedding_radio.setChecked(True)
-                    self.embedding_path_edit.setText(embedding_path)
-                    self.embedding_path_edit.setEnabled(True)
-                    self.embedding_browse_btn.setEnabled(True)
-
-                    self.iface.messageBar().pushMessage(
-                        "Info",
-                        f"Found existing embedding for {image_name}. Will use cached embedding for predictions.",
-                        level=Qgis.Info,
-                        duration=5
-                    )
-                    self.logger.info(f"Found existing embedding at: {embedding_path}")
-                else:
-                    # No existing embedding
-                    self.save_embedding_radio.setChecked(True)
-                    embedding_path = os.path.join(embedding_dir, f"{image_name}.pt")
-                    self.embedding_path_edit.setText(embedding_path)
-                    self.embedding_path_edit.setEnabled(True)
-                    self.embedding_browse_btn.setEnabled(True)
-
-                    self.iface.messageBar().pushMessage(
-                        "Info",
-                        f"No existing embedding found for {image_name}. Will generate and save embedding on first prediction.",
-                        level=Qgis.Info,
-                        duration=5
-                    )
-                    self.logger.info(f"No existing embedding found, will save to: {embedding_path}")
+                self.update_embeddings(image_name)
 
         except Exception as e:
             self.logger.error(f"Error handling layer selection: {str(e)}")
