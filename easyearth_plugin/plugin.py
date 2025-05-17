@@ -298,7 +298,7 @@ class EasyEarthPlugin:
             # TODO: add and test model models
             self.model_combo.addItems([
                 "facebook/sam-vit-base",
-                "facebook/sam-vit-large"
+                "facebook/sam-vit-large",
                 "facebook/sam-vit-huge",
                 "restor/tcd-segformer-mit-b5",
             ])
