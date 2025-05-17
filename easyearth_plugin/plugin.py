@@ -142,6 +142,7 @@ class EasyEarthPlugin:
         self.temp_prompts_geojson = None
         self.temp_predictions_geojson = None
         self.real_time_prediction = False
+        self.last_pred_time = 0  # timestamp when the real-time prediction is unchecked. or the last batch prediction was done
         self.prompts_layer = None
         self.predictions_layer = None
 
@@ -452,11 +453,16 @@ class EasyEarthPlugin:
             self.logger.error(f"Error in initGui: {str(e)}")
             self.logger.exception("Full traceback:")
 
-    def on_realtime_checkbox_changed(self, state):
+    def on_realtime_checkbox_changed(self):
         """
         Enable or disable the prediction button based on real-time mode.
         """
+        # If real-time mode is checked, disable the prediction button, vice versa
         self.predict_button.setEnabled(not self.realtime_checkbox.isChecked())
+
+        # If real-time mode is unchecked, reset the last prediction time
+        if not self.realtime_checkbox.isChecked():
+            self.last_pred_time = time.time()
 
     def update_layer_combo(self):
         """Update the layers combo box with current raster layers"""
@@ -1267,6 +1273,9 @@ class EasyEarthPlugin:
                     }
                 }
 
+                # Add timestamp to prompt feature
+                prompt_feature["properties"]["timestamp"] = time.time()
+
                 # Add prompt to layer
                 self.add_prompt_to_layer([prompt_feature])
 
@@ -1372,15 +1381,19 @@ class EasyEarthPlugin:
         return QgsGeometry.fromPolygonXY([points])
 
     def collect_all_prompts(self):
-        """Collect all prompts from the prompts layer.
+        """Collect new prompts added after the last_pred_time
         Returns:
             list of dicts with prompt data
         """
         prompts = []
 
-        # TODO: if this, one cannot add on the go and then run predictions on multiple prompts.. unless this is down only on the new prompts added after unchecking prediction on the go
         if self.prompts_layer:
             for feature in self.prompts_layer.getFeatures():
+                # Check if the feature is new
+                timestamp = feature.attribute('timestamp')
+                if timestamp is None or timestamp <= self.last_pred_time:
+                    continue
+
                 prompt_type = feature['type']
                 geom = feature.geometry()
                 if prompt_type == 'Point':
