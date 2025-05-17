@@ -1384,9 +1384,9 @@ class EasyEarthPlugin:
                 prompt_type = feature['type']
                 geom = feature.geometry()
                 if prompt_type == 'Point':
-                    pt = geom.asPoint()
-                    #TODO: check if the ones sent to the server are in the right order
-                    prompts.append({'type': 'Point', 'data': {'points': [[int(pt.x()), int(pt.y())]]}}) # TODO: figure out labels for points, when used together with bounding boxes to remove part of the prediction masks
+                    x = feature['pixel_x']
+                    y = feature['pixel_y']
+                    prompts.append({'type': 'Point', 'data': {'points': [[x, y]]}}) # TODO: figure out labels for points, when used together with bounding boxes to remove part of the prediction masks
                 elif prompt_type == 'Box':
                     poly = geom.asPolygon()
                     prompts.append({'type': 'Box', 'data': {'boxes': [[int(poly[0][0].x()), int(poly[0][0].y()), int(poly[0][2].x()), int(poly[0][2].y())]]}})
