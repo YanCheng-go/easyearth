@@ -2110,7 +2110,21 @@ class EasyEarthPlugin:
             if not features:
                 raise ValueError("No features to add")
 
-            self.logger.debug(f"Incoming prompt features: {json.dumps(features, indent=2)}")
+            # self.logger.debug(f"Incoming prompt features: {json.dumps(features, indent=2)}")
+
+            # Ensure each feature has a 'type' property for styling
+            for feat in features:
+                if 'properties' not in feat:
+                    feat['properties'] = {}
+                if 'type' not in feat['properties']:
+                    # Guess type from geometry
+                    geom_type = feat.get('geometry', {}).get('type', '')
+                    if geom_type == 'Point':
+                        feat['properties']['type'] = 'Point'
+                    elif geom_type == 'Polygon':
+                        feat['properties']['type'] = 'Box'
+                    else:
+                        feat['properties']['type'] = 'Unknown'
 
             # If this is the first prompt, initialize everything
             if not hasattr(self, 'prompts_geojson') or self.prompts_geojson is None:
@@ -2123,52 +2137,34 @@ class EasyEarthPlugin:
                             "name": QgsProject.instance().crs().authid()
                         }
                     },
-                    "features": []  # Start with empty features list
+                    "features": features
                 }
+            else:
+                # Append new features
+                self.prompts_geojson['features'].extend(features)
 
-                # Add the new features
-                self.prompts_geojson['features'] = features
+            # Write GeoJSON file
+            with open(self.temp_prompts_geojson, 'w') as f:
+                json.dump(self.prompts_geojson, f)
 
-                # Write initial GeoJSON file
-                with open(self.temp_prompts_geojson, 'w') as f:
-                    json.dump(self.prompts_geojson, f)
-
-                # Verify file contents
-                self.logger.debug(f"Written GeoJSON content: {json.dumps(self.prompts_geojson, indent=2)}")
-
-                # Create new layer from this file
+            # If layer does not exist, create it
+            if not self.prompts_layer or not self.prompts_layer.isValid():
                 self.prompts_layer = QgsVectorLayer(
                     self.temp_prompts_geojson,
                     "Drawing Prompts",
                     "ogr"
                 )
-
                 if not self.prompts_layer.isValid():
                     raise ValueError("Failed to create valid vector layer")
-
-                # Add to project
                 QgsProject.instance().addMapLayer(self.prompts_layer)
-
-                # Apply styling
-                self.style_prompts_layer(self.prompts_layer)
-
-                self.logger.debug(f"Initial layer feature count: {self.prompts_layer.featureCount()}")
-
             else:
-                # Append new features to existing GeoJSON
-                self.prompts_geojson['features'].extend(features)
-
-                # Write updated GeoJSON
-                with open(self.temp_prompts_geojson, 'w') as f:
-                    json.dump(self.prompts_geojson, f)
-
-                # Verify file contents
-                self.logger.debug(f"Updated GeoJSON content: {json.dumps(self.prompts_geojson, indent=2)}")
-
-                # Reload the layer
+                # Reload layer to update features
                 self.prompts_layer.dataProvider().reloadData()
                 self.prompts_layer.updateExtents()
                 self.prompts_layer.triggerRepaint()
+
+            # Apply styling
+            self.style_prompts_layer(self.prompts_layer)
 
             # Update canvas
             self.iface.mapCanvas().refresh()
@@ -2176,7 +2172,7 @@ class EasyEarthPlugin:
             # Verify feature count
             actual_count = self.prompts_layer.featureCount()
             expected_count = len(self.prompts_geojson['features'])
-            self.logger.debug(f"Layer feature count: {actual_count} (added: {expected_count})")
+            self.logger.info(f"Layer feature count: {actual_count} (added: {expected_count})")
 
         except Exception as e:
             self.logger.error(f"Error adding prompts: {str(e)}")
