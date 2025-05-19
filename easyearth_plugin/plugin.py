@@ -1210,7 +1210,21 @@ class EasyEarthPlugin:
             return
 
         # Get raster layer information
-        extent, width, height = self.raster_extent, self.raster_width, self.raster_height
+        extent, width, height, raster_crs = self.raster_extent, self.raster_width, self.raster_height, self.raster_crs
+
+        # Transform start and end points to raster CRS
+        if self.project_crs != raster_crs and raster_crs is not None:
+            transform = QgsCoordinateTransform(self.project_crs, raster_crs, QgsProject.instance())
+            start_point = transform.transform(start_point)
+            end_point = transform.transform(end_point)
+            # convert to box_geom
+            box_geom = QgsGeometry.fromPolygonXY([[
+                start_point,
+                QgsPointXY(end_point.x(), start_point.y()),
+                end_point,
+                QgsPointXY(start_point.x(), end_point.y()),
+                start_point
+            ]])
 
         # Calculate pixel coordinates based on start and end points
         pixel_x = int((start_point.x() - extent.xMinimum()) * width / extent.width())
@@ -1303,8 +1317,12 @@ class EasyEarthPlugin:
                 return None
 
             draw_type = self.draw_type_combo.currentText()
+            extent, width, height, raster_crs = self.raster_extent, self.raster_width, self.raster_height, self.raster_crs
 
-            extent, width, height = self.raster_extent, self.raster_width, self.raster_height
+            # Transform point to raster CRS if needed
+            if self.project_crs != raster_crs and raster_crs is not None:
+                transform = QgsCoordinateTransform(self.project_crs, raster_crs, QgsProject.instance())
+                point = transform.transform(point)
 
             if draw_type == "Point":
                 # Reset rubber band for each new point to prevent line creation
@@ -1578,6 +1596,7 @@ class EasyEarthPlugin:
                             raise ValueError("Response missing 'features' field")
 
                         features = response_json['features']
+                        feature_crs = response_json.get('source_crs', None)
                         if not features:
                             self.iface.messageBar().pushMessage(
                                 "Warning",
@@ -1588,7 +1607,7 @@ class EasyEarthPlugin:
                             return
 
                         # Add the predictions to our layer
-                        self.add_features_to_layer(features, "predictions")
+                        self.add_features_to_layer(features, "predictions", crs=feature_crs)
 
                     except json.JSONDecodeError as e:
                         raise ValueError(f"Invalid JSON response: {str(e)}")
@@ -1969,7 +1988,7 @@ class EasyEarthPlugin:
                 if not selected_layer:
                     return
 
-                # Get imagr crs and extent
+                # Get image crs and extent
                 self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(selected_layer)
                 msg = (
                     f"Extent: X min: {self.raster_extent.xMinimum()}, X max: {self.raster_extent.xMaximum()}, "
@@ -2029,12 +2048,13 @@ class EasyEarthPlugin:
             return False
         return True
 
-    def add_features_to_layer(self, features, layer_type='prompts'):
+    def add_features_to_layer(self, features, layer_type='prompts', crs=None):
         """
         Add or append features to the specified layer (prompts or predictions).
         Args:
             features: list of GeoJSON features
             layer_type: 'prompts' or 'predictions'
+            crs: coordinate reference system for the features
         """
         try:
             if not features:
@@ -2060,24 +2080,7 @@ class EasyEarthPlugin:
                 layer_attr = 'predictions_layer'
                 layer_name = "SAM Predictions"
                 style_func = self.style_predictions_layer
-                # Transform pixel to map coordinates for polygons
-                extent, width, height, raster_crs = self.raster_extent, self.raster_width, self.raster_height, self.raster_crs
-                transform = QgsCoordinateTransform(raster_crs, self.project_crs, QgsProject.instance())
-                for feature in features:
-                    geom_json = feature.get('geometry')
-                    if geom_json and geom_json['type'] == 'Polygon':
-                        map_coords = []
-                        for ring in geom_json['coordinates']:
-                            map_ring = []
-                            for pixel_coord in ring:
-                                map_x = extent.xMinimum() + (pixel_coord[0] * extent.width() / width)
-                                map_y = extent.yMaximum() - (pixel_coord[1] * extent.height() / height)
-                                point = QgsPointXY(map_x, map_y)
-                                if raster_crs != self.project_crs:
-                                    point = transform.transform(point)
-                                map_ring.append(point)
-                            map_coords.append(map_ring)
-                        feature['geometry']['coordinates'] = [[(p.x(), p.y()) for p in ring] for ring in map_coords]
+
                 # Assign unique ids
                 if not hasattr(self, 'feature_count'):
                     self.feature_count = 0
