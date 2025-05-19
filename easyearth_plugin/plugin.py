@@ -671,6 +671,23 @@ class EasyEarthPlugin:
             # Add raster layer to the project
             QgsProject.instance().addMapLayer(raster_layer)
 
+            # Get image crs and extent
+            self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(
+                raster_layer)
+            msg = (
+                f"Extent: X min: {self.raster_extent.xMinimum()}, X max: {self.raster_extent.xMaximum()}, "
+                f"Y min: {self.raster_extent.yMinimum()}, Y max: {self.raster_extent.yMaximum()}; "
+                f"Width: {self.raster_width}; "
+                f"Height: {self.raster_height}; "
+                f"CRS: {self.raster_crs.authid()}"
+            )
+            self.iface.messageBar().pushMessage(
+                "Selected raster CRS and dimensions",
+                msg,
+                level=Qgis.Info,
+                duration=5
+            )
+
             # Create prediction layers
             self.create_prediction_layers()
 
@@ -1294,27 +1311,11 @@ class EasyEarthPlugin:
 
         return box_geom
 
-    def get_current_raster_info(self):
+    def get_current_raster_info(self, raster_layer=None):
         """Get current raster layer information for deriving pixel coordinates.
         Returns:
             tuple: extent, width, height of the raster layer
         """
-
-        # Get the raster layer
-        raster_layer = None
-        if self.source_combo.currentText() == "File":
-            # Check image path for File source
-            if not self.image_path.text():
-                raise ValueError("No image selected")
-            # Find the raster layer by name "Selected Image"
-            for layer in QgsProject.instance().mapLayers().values():
-                if isinstance(layer, QgsRasterLayer) and layer.name() == os.path.basename(self.image_path.text()):
-                    raster_layer = layer
-                    break
-        elif self.source_combo.currentText() == "Layer":
-            # Get layer directly from combo box for Layer source
-            layer_id = self.layer_combo.currentData()
-            raster_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
 
         if not raster_layer:
             raise ValueError("No raster layer found")
@@ -2135,6 +2136,22 @@ class EasyEarthPlugin:
                 if not selected_layer:
                     return
 
+                # Get imagr crs and extent
+                self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(selected_layer)
+                msg = (
+                    f"Extent: X min: {self.raster_extent.xMinimum()}, X max: {self.raster_extent.xMaximum()}, "
+                    f"Y min: {self.raster_extent.yMinimum()}, Y max: {self.raster_extent.yMaximum()}; "
+                    f"Width: {self.raster_width}; "
+                    f"Height: {self.raster_height}; "
+                    f"CRS: {self.raster_crs.authid()}"
+                )
+                self.iface.messageBar().pushMessage(
+                    "Selected raster CRS and dimensions",
+                    msg,
+                    level=Qgis.Info,
+                    duration=5
+                )
+
                 # Create prediction layers
                 self.create_prediction_layers()
 
@@ -2143,9 +2160,6 @@ class EasyEarthPlugin:
 
                 image_name = os.path.splitext(os.path.basename(layer_source))[0]
                 self.update_embeddings(image_name)
-
-                # Get imagr crs and extent
-                self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info()
 
         except Exception as e:
             self.logger.error(f"Error handling layer selection: {str(e)}")
@@ -2166,8 +2180,6 @@ class EasyEarthPlugin:
                 return
 
             self.load_image()
-            # Get imagr crs and extent
-            self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info()
 
         except Exception as e:
             self.logger.error(f"Error processing entered image path: {str(e)}")
