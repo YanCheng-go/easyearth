@@ -471,6 +471,7 @@ class EasyEarthPlugin:
         self.realtime_checkbox.setEnabled(is_sam)
         if not is_sam and self.draw_button.isChecked():
             self.draw_button.setChecked(False)
+            self.draw_button.setText("Start Drawing")
 
         # Embedding section
         self.embedding_path_edit.setEnabled(is_sam and not self.no_embedding_radio.isChecked())
@@ -1146,6 +1147,7 @@ class EasyEarthPlugin:
             self.logger.exception("Full traceback:")
             QMessageBox.critical(None, "Error", f"Failed to start drawing: {str(e)}")
             self.draw_button.setChecked(False)
+            self.draw_button.setText("Start Drawing")
 
     def cleanup_previous_session(self):
         """Clean up temporary files and layers from previous session"""
@@ -1951,7 +1953,7 @@ class EasyEarthPlugin:
             if self.draw_button.isChecked():
                 # If currently drawing, restart with new type
                 self.draw_button.setChecked(False)
-                self.toggle_drawing(True)
+                self.draw_button.setText("Start Drawing")
             # Switch map tool based on draw type
             if draw_type == "Point":
                 self.canvas.setMapTool(self.map_tool)
