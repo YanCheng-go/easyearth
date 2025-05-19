@@ -278,7 +278,7 @@ class EasyEarthPlugin:
             source_layout = QHBoxLayout()
             source_label = QLabel("Source:")
             self.source_combo = QComboBox()
-            self.source_combo.addItems(["File", "Layer"])
+            self.source_combo.addItems(["File", "Layer", "Link"])
             self.source_combo.currentTextChanged.connect(self.on_image_source_changed)
             source_layout.addWidget(source_label)
             source_layout.addWidget(self.source_combo)
@@ -294,6 +294,24 @@ class EasyEarthPlugin:
             file_layout.addWidget(self.image_path)
             file_layout.addWidget(self.browse_button)
             image_layout.addLayout(file_layout)
+
+            # Link input
+            self.download_button = QPushButton("Download")
+            self.download_button.hide()
+            self.download_button.clicked.connect(self.on_download_button_clicked)
+            file_layout.addWidget(self.download_button)
+
+            # Move these lines here (right after the download button):
+            self.progress_bar = QProgressBar()
+            self.progress_bar.setMinimum(0)
+            self.progress_bar.setMaximum(100)
+            self.progress_bar.hide()
+            file_layout.addWidget(self.progress_bar)  # <-- Add to file_layout
+
+            self.progress_status = QLabel()
+            self.progress_status.setWordWrap(True)
+            self.progress_status.hide()
+            file_layout.addWidget(self.progress_status)  # <-- Add to file_layout
 
             # Layer selection
             self.layer_combo = QComboBox()
@@ -600,6 +618,7 @@ class EasyEarthPlugin:
                 self.image_path.show()
                 self.browse_button.show()
                 self.layer_combo.hide()
+                self.download_button.hide()
                 self.initialize_image_path()
                 self.initialize_embedding_path()
                 # Deactivate embedding section if SAM model is not selected
@@ -607,8 +626,18 @@ class EasyEarthPlugin:
             elif text == "Layer":
                 self.image_path.hide()
                 self.browse_button.hide()
+                self.download_button.hide()
                 self.layer_combo.show()
                 self.update_layer_combo()
+            elif text == "Link":
+                self.image_path.show()
+                self.browse_button.hide()
+                self.download_button.show()
+                self.layer_combo.hide()
+                self.image_path.setPlaceholderText("Enter image URL (http/https)...")
+                self.image_path.clear()
+                self.initialize_embedding_path()
+                self.deactivate_embedding_section() if not self.is_sam_model() else None
 
             # Clear any existing layers
             self.cleanup_previous_session()
@@ -2018,10 +2047,55 @@ class EasyEarthPlugin:
             self.logger.exception("Full traceback:")
             QMessageBox.critical(None, "Error", f"Failed to handle layer selection: {str(e)}")
 
+    def on_download_button_clicked(self):
+        """Download image from URL and switch to File mode."""
+        try:
+            image_url = self.image_path.text().strip()
+            if not (image_url.startswith("http://") or image_url.startswith("https://")):
+                QMessageBox.warning(None, "Error", "Please enter a valid image URL.")
+                return
+
+            self.progress_bar.setValue(0)
+            self.progress_bar.setMaximum(100)
+            self.progress_bar.show()
+            self.progress_status.setText("Downloading image...")
+            self.progress_status.show()
+
+            local_filename = os.path.basename(image_url.split("?")[0])
+            save_path = os.path.join(self.data_dir, local_filename)
+            response = requests.get(image_url, stream=True)
+            total = int(response.headers.get('content-length', 0))
+            downloaded = 0
+            with open(save_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total > 0:
+                            percent = int(downloaded * 100 / total)
+                            self.progress_bar.setValue(percent)
+                            QApplication.processEvents()
+            self.progress_bar.hide()
+            self.progress_status.hide()
+
+            # Switch to File mode and update path
+            self.source_combo.setCurrentText("File")
+            self.image_path.setText(save_path)
+            self.load_image()
+        except Exception as e:
+            self.logger.error(f"Error downloading image: {str(e)}")
+            QMessageBox.critical(None, "Error", f"Failed to download image: {str(e)}")
+
     def on_image_path_entered(self):
         """Handle manual entry of image path."""
         try:
             image_path = self.image_path.text().strip()
+
+            if image_path.startswith("http://") or image_path.startswith("https://"):
+                # If the path is a URL, download the image
+                self.on_download_button_clicked()
+                return
+
             if not image_path or not os.path.exists(image_path):
                 QMessageBox.warning(None, "Error", f"Image file not found: {image_path}")
                 return
