@@ -6,7 +6,7 @@ EasyEarth - QGIS plugin powered by huggingface, Flask and Connexion
 Check the demo [here](https://drive.google.com/file/d/1AShHsXkYoBj4zltAGkdnzEfKp2GSFFeS/view)
 
 
-!![image](https://github.com/user-attachments/assets/749cc195-a149-4ccd-9d3f-edb3a2040cf7)
+![image](https://github.com/user-attachments/assets/749cc195-a149-4ccd-9d3f-edb3a2040cf7)
 
 
 ```http
@@ -72,6 +72,9 @@ cp -r ./easyearth_plugin ~/.local/share/QGIS/QGIS3/profiles/default/python/plugi
 3. Click Browse image and select an image to play with 
 4. Click Start Drawing.
 
+![QGIS Plugin GUI](https://github.com/user-attachments/assets/7233c11c-cc7f-4fd8-8dc5-196db4a4220b)
+
+
 ## Run EasyEarth outside QGIS
 Start the docker container and send requests to the server using curl or any other HTTP client.
 ```bash
@@ -90,11 +93,12 @@ Send prompts to the server and get predictions from SAM model. Check the generat
 curl -X POST http://127.0.0.1:3781/v1/easyearth/sam-predict -H "Content-Type: application/json" -d '{
   "image_path": "/usr/src/app/user/DJI_0108.JPG",
   "embedding_path": "/usr/src/app/user/embeddings/DJI_0108.pt",  # if empty, the code will generate embeddings first
+  "model_path": "facebook/sam-vit-large", # model path from huggingface
   "prompts": [
     {
       "type": "Point",
       "data": {
-        "points": [[850, 1100]],
+        "points": [[850, 1100]],  # can be multiple points
       }
     }  
                       
@@ -102,10 +106,11 @@ curl -X POST http://127.0.0.1:3781/v1/easyearth/sam-predict -H "Content-Type: ap
 }'
 ```
 ### Use models with no prompts
-Call other segmentation models with out prompt engineering
+Call other segmentation models without prompt engineering
 ```bash
 curl -X POST http://127.0.0.1:3781/v1/easyearth/segment-predict -H "Content-Type: application/json" -d '{
   "image_path": "/usr/src/app/user/DJI_0108.JPG",
+  "model_path": "restor/tcd-segformer-mit-b2", # model path from huggingface
   "prompts": []
 }'
 ```

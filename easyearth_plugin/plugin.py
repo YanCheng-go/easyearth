@@ -142,6 +142,7 @@ class EasyEarthPlugin:
         self.temp_prompts_geojson = None
         self.temp_predictions_geojson = None
         self.real_time_prediction = False
+        self.last_pred_time = 0  # timestamp when the real-time prediction is unchecked. or the last batch prediction was done
         self.prompts_layer = None
         self.predictions_layer = None
 
@@ -296,14 +297,14 @@ class EasyEarthPlugin:
             # Add common models
             # TODO: add and test model models
             self.model_combo.addItems([
+                "facebook/sam-vit-base",
+                "facebook/sam-vit-large",
                 "facebook/sam-vit-huge",
                 "restor/tcd-segformer-mit-b5",
-                "facebook/sam-vit-base",
-                "facebook/sam-vit-large"
             ])
-            self.model_combo.setEditText("facebook/sam-vit-huge")  # Default
-            self.model_combo.currentTextChanged.connect(self.update_drawing_enabled)
-            self.model_path = self.model_combo.currentText()
+            self.model_combo.setEditText("facebook/sam-vit-base")  # Default
+            self.model_combo.currentTextChanged.connect(self.on_model_changed)
+            self.model_path = self.model_combo.currentText().strip()
 
             model_layout.addWidget(self.model_combo)
             model_group.setLayout(model_layout)
@@ -338,6 +339,8 @@ class EasyEarthPlugin:
             self.layer_combo = QComboBox()
             self.layer_combo.hide()
             image_layout.addWidget(self.layer_combo)
+            # Connect to layer selection change
+            self.layer_combo.currentIndexChanged.connect(self.on_layer_selected)
 
             image_group.setLayout(image_layout)
             main_layout.addWidget(image_group)
@@ -434,8 +437,8 @@ class EasyEarthPlugin:
             # TODO: move to after checking if docker image is running...and return mounted data folder using docker inspect
             self.data_dir = self.initialize_data_directory()
 
-            # Connect to project layer changes
-            QgsProject.instance().layersAdded.connect(self.update_layer_combo)
+            # Update the layer (raster) list in the combo box whenever a layer is added or removed
+            QgsProject.instance().layersAdded.connect(self.on_layers_added)
             QgsProject.instance().layersRemoved.connect(self.update_layer_combo)
 
             # Connect to QGIS quit signal
@@ -452,48 +455,173 @@ class EasyEarthPlugin:
             self.logger.error(f"Error in initGui: {str(e)}")
             self.logger.exception("Full traceback:")
 
-    def on_realtime_checkbox_changed(self, state):
+    def on_realtime_checkbox_changed(self):
         """
         Enable or disable the prediction button based on real-time mode.
         """
+        # If real-time mode is checked, disable the prediction button, vice versa
         self.predict_button.setEnabled(not self.realtime_checkbox.isChecked())
 
+        # If real-time mode is unchecked, reset the last prediction time
+        if not self.realtime_checkbox.isChecked():
+            self.last_pred_time = time.time()
+
     def update_layer_combo(self):
-        """Update the layers combo box with current raster layers"""
+        """Update the layers combo box with current raster layers in the project"""
         try:
+            current_layer_id = self.layer_combo.currentData()
+            self.layer_combo.blockSignals(True)
             self.layer_combo.clear()
-            self.layer_combo.addItem("Select a layer...")
+            self.layer_combo.addItem("Select a layer...", None)
 
             # Add all raster layers to combo
             for layer in QgsProject.instance().mapLayers().values():
                 if isinstance(layer, QgsRasterLayer):
-                    self.layer_combo.addItem(layer.name(), layer)
+                    self.layer_combo.addItem(layer.name(), layer.id())
 
-            # Connect to layer selection change
-            self.layer_combo.currentIndexChanged.connect(self.on_layer_selected)
+            # Restore previous selection if possible
+            if current_layer_id:
+                index = self.layer_combo.findData(current_layer_id)
+                if index != -1:
+                    self.layer_combo.setCurrentIndex(index)
+            self.layer_combo.blockSignals(False)
 
         except Exception as e:
             self.logger.error(f"Error updating layer combo: {str(e)}")
+
+    def on_layers_added(self, layers):
+        # Only update if any added layer is a QgsRasterLayer
+        if any(isinstance(layer, QgsRasterLayer) for layer in layers):
+            self.update_layer_combo()
 
     def is_sam_model(self):
         is_sam = self.model_path.startswith("facebook/sam-")
         return is_sam
 
-    def update_drawing_enabled(self):
-        """Enable drawing and embedding only if a SAM model is selected."""
+    def on_model_changed(self, text=None):
+        """1. Enable drawing and embedding only if a SAM model is selected.
+           2. Update the embedding path according to model selection."""
+
+        if text is not None:
+            self.model_path = text.strip()
+        else:
+            self.model_path = self.model_combo.currentText().strip()
+
         is_sam = self.is_sam_model()
+
         # Drawing section
         self.draw_button.setEnabled(is_sam)
         self.draw_type_combo.setEnabled(is_sam)
         self.realtime_checkbox.setEnabled(is_sam)
+        if not is_sam and self.draw_button.isChecked():
+            self.draw_button.setChecked(False)
+
         # Embedding section
+        self.embedding_path_edit.setEnabled(is_sam and not self.no_embedding_radio.isChecked())
+        self.embedding_browse_btn.setEnabled(is_sam and not self.no_embedding_radio.isChecked())
+        self.embedding_path_edit.clear() if not is_sam else None
         self.no_embedding_radio.setEnabled(is_sam)
         self.load_embedding_radio.setEnabled(is_sam)
         self.save_embedding_radio.setEnabled(is_sam)
-        self.embedding_path_edit.setEnabled(is_sam and not self.no_embedding_radio.isChecked())
-        self.embedding_browse_btn.setEnabled(is_sam and not self.no_embedding_radio.isChecked())
-        if not is_sam and self.draw_button.isChecked():
-            self.draw_button.setChecked(False)
+
+        # Update embedding path
+        if is_sam:
+            self.update_embeddings()
+
+    def update_embeddings(self, image_name=None):
+        """Update the embedding path based on the selected model and image"""
+        try:
+            # Get the image path
+            image_path = self.image_path.text()
+            if not image_path:
+                return
+
+            # Get the image name
+            image_name = os.path.splitext(os.path.basename(image_path))[0] if image_name is None else image_name
+
+            # Create embedding directory if it doesn't exist
+            embedding_dir = os.path.join(self.data_dir, 'embeddings')
+            os.makedirs(embedding_dir, exist_ok=True)
+
+            # Update the embedding path
+            model_version = self.model_path.replace('/', '_')
+            embedding_path = os.path.join(embedding_dir, f"{image_name}_{model_version}.pt")
+
+            if self.save_embedding_radio.isChecked():
+                # Save new embedding
+                self.embedding_path_edit.setText(embedding_path)
+                self.embedding_browse_btn.setEnabled(True)
+                self.embedding_path_edit.setEnabled(True)
+                self.iface.messageBar().pushMessage(
+                    "Info",
+                    f"Will save new embedding for {image_name}.",
+                    level=Qgis.Info,
+                    duration=5
+                )
+                self.logger.info(f"Will save new embedding to: {embedding_path}")
+            else:
+                # Check if embedding file exists
+                if os.path.exists(embedding_path):
+                    # Found existing embedding
+                    self.load_embedding_radio.setChecked(True)
+                    self.embedding_path_edit.setEnabled(True)
+                    self.embedding_browse_btn.setEnabled(True)
+
+                    # Set the embedding path in the text box
+                    self.embedding_path_edit.setText(embedding_path)
+
+                    self.iface.messageBar().pushMessage(
+                        "Info",
+                        f"Found existing embedding for {image_name}. Will use cached embedding for predictions.",
+                        level=Qgis.Info,
+                        duration=5
+                    )
+                    self.logger.info(f"Found existing embedding at: {embedding_path}")
+                else:
+                    # No existing embedding
+                    self.no_embedding_radio.setChecked(True)
+                    self.load_embedding_radio.setEnabled(False)  # TODO: what if the user have the embeddings saved somewhere else?
+                    # clear the embedding path
+                    self.embedding_path_edit.clear()
+                    self.embedding_browse_btn.setEnabled(False)
+                    self.embedding_path_edit.setEnabled(False)
+
+                    self.iface.messageBar().pushMessage(
+                        "Info",
+                        f"No existing embedding found for {image_name}. Will generate on the fly on first prediction. Select 'Save new embedding' to save it.",
+                        level=Qgis.Info,
+                        duration=5
+                    )
+                    self.logger.info(f"No existing embedding found, will save to: {embedding_path}")
+
+        except Exception as e:
+            self.logger.error(f"Error updating embeddings: {str(e)}")
+            QMessageBox.critical(None, "Error", f"Failed to update embeddings: {str(e)}")
+
+    def initialize_image_path(self):
+        """Reinitialize the image path input field"""
+        self.image_path.clear()
+        self.image_path.setPlaceholderText("Enter image path or click Browse...")
+        self.image_path.setEnabled(True)
+        self.browse_button.setEnabled(True)
+
+    def deactivate_embedding_section(self):
+        """Deactivate the embedding section if SAM model is not selected"""
+        self.no_embedding_radio.setEnabled(False)
+        self.load_embedding_radio.setEnabled(False)
+        self.save_embedding_radio.setEnabled(False)
+        self.embedding_path_edit.setEnabled(False)
+        self.embedding_browse_btn.setEnabled(False)
+
+    def initialize_embedding_path(self):
+        """Reinitialize the embedding path input field"""
+        self.embedding_path_edit.clear()
+        self.embedding_path_edit.setEnabled(False)
+        self.embedding_browse_btn.setEnabled(False)
+        self.no_embedding_radio.setChecked(True)
+        self.load_embedding_radio.setChecked(False)
+        self.save_embedding_radio.setChecked(False)
+
 
     def on_image_source_changed(self, text):
         """Handle image source selection change"""
@@ -502,7 +630,11 @@ class EasyEarthPlugin:
                 self.image_path.show()
                 self.browse_button.show()
                 self.layer_combo.hide()
-            else:
+                self.initialize_image_path()
+                self.initialize_embedding_path()
+                # Deactivate embedding section if SAM model is not selected
+                self.deactivate_embedding_section() if not self.is_sam_model() else None
+            elif text == "Layer":
                 self.image_path.hide()
                 self.browse_button.hide()
                 self.layer_combo.show()
@@ -510,11 +642,6 @@ class EasyEarthPlugin:
 
             # Clear any existing layers
             self.cleanup_previous_session()
-
-            # Create new prediction layers if a layer is selected
-            if text == "Layer" and self.layer_combo.currentData():
-                self.image_path.setText(self.layer_combo.currentData().source())
-                self.create_prediction_layers()
 
         except Exception as e:
             self.logger.error(f"Error in image source change: {str(e)}")
@@ -560,7 +687,7 @@ class EasyEarthPlugin:
                 return
 
             # Load the image as a raster layer
-            raster_layer = QgsRasterLayer(image_path, "Selected Image")
+            raster_layer = QgsRasterLayer(image_path, os.path.basename(image_path))
             if not raster_layer.isValid():
                 QMessageBox.warning(None, "Error", "Invalid raster layer")
                 return
@@ -571,41 +698,10 @@ class EasyEarthPlugin:
             # Create prediction layers
             self.create_prediction_layers()
 
+            # Update the embedding path if SAM model is selected
             if self.is_sam_model():
-                # Check for existing embedding
-                image_name = os.path.splitext(os.path.basename(image_path))[0]
-                embedding_dir = os.path.join(self.data_dir, 'embeddings')
-                model_version = self.model_path.replace('/', '_')
-                embedding_path = os.path.join(embedding_dir, f"{image_name}_{model_version}.pt")
+                self.update_embeddings()
 
-                if os.path.exists(embedding_path):
-                    # Found existing embedding
-                    self.load_embedding_radio.setChecked(True)
-                    self.embedding_path_edit.setText(embedding_path)
-                    self.embedding_path_edit.setEnabled(True)
-                    self.embedding_browse_btn.setEnabled(True)
-
-                    self.iface.messageBar().pushMessage(
-                        "Info",
-                        f"Found existing embedding for {image_name}. Will use cached embedding for predictions.",
-                        level=Qgis.Info,
-                        duration=5
-                    )
-                    self.logger.info(f"Found existing embedding at: {embedding_path}")
-                else:
-                    # No existing embedding
-                    self.save_embedding_radio.setChecked(True)
-                    self.embedding_path_edit.setText(embedding_path)
-                    self.embedding_path_edit.setEnabled(True)
-                    self.embedding_browse_btn.setEnabled(True)
-
-                    self.iface.messageBar().pushMessage(
-                        "Info",
-                        f"No existing embedding found for {image_name}. Will generate and save embedding on first prediction.",
-                        level=Qgis.Info,
-                        duration=5
-                    )
-                    self.logger.info(f"No existing embedding found, will save to: {embedding_path}")
         except Exception as e:
             self.logger.error(f"Error loading image: {str(e)}")
             self.logger.exception("Full traceback:")
@@ -638,71 +734,6 @@ class EasyEarthPlugin:
 
         except Exception as e:
             self.logger.error(f"Error creating empty GeoJSON: {str(e)}")
-            raise
-
-    def create_vector_layer(self, geojson_path, layer_name, layer_type):
-        """Create and style a vector layer with project CRS"""
-        try:
-            # Create vector layer with polygon geometry
-            layer = QgsVectorLayer(f"Polygon?crs={QgsProject.instance().crs().authid()}",
-                                 layer_name, "memory")
-
-            if not layer.isValid():
-                raise Exception(f"Failed to create {layer_name} layer")
-
-            # Add fields based on layer type
-            provider = layer.dataProvider()
-            if layer_type == "prompt":
-                fields = QgsFields()
-                fields.append(QgsField("id", QVariant.Int))
-                fields.append(QgsField("type", QVariant.String))
-                provider.addAttributes(fields)
-            else:  # prediction
-                fields = QgsFields()
-                fields.append(QgsField("id", QVariant.Int))
-                fields.append(QgsField("confidence", QVariant.Double))
-                fields.append(QgsField("class", QVariant.String))
-                provider.addAttributes(fields)
-
-            layer.updateFields()
-
-            # Save as GeoJSON
-            save_options = QgsVectorFileWriter.SaveVectorOptions()
-            save_options.driverName = "GeoJSON"
-            save_options.fileEncoding = "UTF-8"
-
-            # Write the empty layer to GeoJSON
-            writer = QgsVectorFileWriter.writeAsVectorFormat(
-                layer,
-                geojson_path,
-                "UTF-8",
-                QgsProject.instance().crs(),
-                "GeoJSON",
-                layerOptions=['COORDINATE_PRECISION=15']
-            )
-
-            if writer[0] != QgsVectorFileWriter.NoError:
-                raise Exception(f"Failed to write GeoJSON file: {writer[0]}")
-
-            # Now create the actual layer from the GeoJSON file
-            layer = QgsVectorLayer(geojson_path, layer_name, "ogr")
-            if not layer.isValid():
-                raise Exception(f"Failed to create valid layer from GeoJSON: {geojson_path}")
-
-            # Add to project
-            QgsProject.instance().addMapLayer(layer)
-
-            # Apply styling
-            if layer_type == "prompt":
-                self.style_prompts_layer(layer)
-            else:
-                self.style_predictions_layer(layer)
-
-            self.logger.debug(f"Created vector layer: {layer_name} from {geojson_path}")
-            return layer
-
-        except Exception as e:
-            self.logger.error(f"Error creating vector layer: {str(e)}")
             raise
 
     def style_prompts_layer(self, layer):
@@ -1168,14 +1199,18 @@ class EasyEarthPlugin:
             # Remove existing layers
             if self.prompts_layer and self.prompts_layer.isValid():
                 QgsProject.instance().removeMapLayer(self.prompts_layer.id())
+                self.prompts_layer = None
             if self.predictions_layer and self.predictions_layer.isValid():
                 QgsProject.instance().removeMapLayer(self.predictions_layer.id())
+                self.predictions_layer = None
 
             # Remove existing temporary files
             if self.temp_prompts_geojson and os.path.exists(self.temp_prompts_geojson):
                 os.remove(self.temp_prompts_geojson)
+                self.prompts_layer = None
             if self.temp_predictions_geojson and os.path.exists(self.temp_predictions_geojson):
                 os.remove(self.temp_predictions_geojson)
+                self.predictions_layer = None
 
             # Reset feature count
             self.feature_count = 0
@@ -1213,14 +1248,13 @@ class EasyEarthPlugin:
                     raise ValueError("No image selected")
                 # Find the raster layer by name "Selected Image"
                 for layer in QgsProject.instance().mapLayers().values():
-                    if isinstance(layer, QgsRasterLayer) and layer.name() == "Selected Image":
+                    if isinstance(layer, QgsRasterLayer) and layer.name() == os.path.basename(self.image_path.text()):
                         raster_layer = layer
                         break
-            else:
-                # TODO: debug and test when choosing from opened layers
-                # TODO: use current or highlighted layer from layer combo box for Layer source
+            elif self.source_combo.currentText() == "Layer":
                 # Get layer directly from combo box for Layer source
-                raster_layer = self.layer_combo.currentData()
+                layer_id = self.layer_combo.currentData()
+                raster_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
 
             if not raster_layer:
                 raise ValueError("No raster layer found")
@@ -1266,6 +1300,9 @@ class EasyEarthPlugin:
                         "pixel_y": py
                     }
                 }
+
+                # Add timestamp to prompt feature
+                prompt_feature["properties"]["timestamp"] = time.time()
 
                 # Add prompt to layer
                 self.add_prompt_to_layer([prompt_feature])
@@ -1372,21 +1409,25 @@ class EasyEarthPlugin:
         return QgsGeometry.fromPolygonXY([points])
 
     def collect_all_prompts(self):
-        """Collect all prompts from the prompts layer.
+        """Collect new prompts added after the last_pred_time
         Returns:
             list of dicts with prompt data
         """
         prompts = []
 
-        # TODO: if this, one cannot add on the go and then run predictions on multiple prompts.. unless this is down only on the new prompts added after unchecking prediction on the go
         if self.prompts_layer:
             for feature in self.prompts_layer.getFeatures():
+                # Check if the feature is new
+                timestamp = feature.attribute('timestamp')
+                if timestamp is None or timestamp < self.last_pred_time:
+                    continue
+
                 prompt_type = feature['type']
                 geom = feature.geometry()
                 if prompt_type == 'Point':
-                    pt = geom.asPoint()
-                    #TODO: check if the ones sent to the server are in the right order
-                    prompts.append({'type': 'Point', 'data': {'points': [[int(pt.x()), int(pt.y())]]}}) # TODO: figure out labels for points, when used together with bounding boxes to remove part of the prediction masks
+                    x = feature['pixel_x']
+                    y = feature['pixel_y']
+                    prompts.append({'type': 'Point', 'data': {'points': [[x, y]]}}) # TODO: figure out labels for points, when used together with bounding boxes to remove part of the prediction masks
                 elif prompt_type == 'Box':
                     poly = geom.asPolygon()
                     prompts.append({'type': 'Box', 'data': {'boxes': [[int(poly[0][0].x()), int(poly[0][0].y()), int(poly[0][2].x()), int(poly[0][2].y())]]}})
@@ -1400,6 +1441,7 @@ class EasyEarthPlugin:
         try:
             prompts = self.collect_all_prompts()  # Implement this to gather all drawn prompts
             self.get_prediction(prompts)
+            self.last_pred_time = time.time()  # Update last prediction time
         except Exception as e:
             self.logger.error(f"Error running prediction: {str(e)}")
             QMessageBox.critical(None, "Error", f"Failed to run prediction: {str(e)}")
@@ -1491,6 +1533,8 @@ class EasyEarthPlugin:
                 formatted_payload = (
                     f"Sending to server:\n"
                     f"- Host image path: {image_path}\n"
+                    f"- Host embedding path: {embedding_path}\n"
+                    f"- (re)Save embeddings: {save_embeddings}\n"
                     f"- Prompts: {json.dumps(prompts, indent=2)}\n"
                 )
 
@@ -1521,6 +1565,13 @@ class EasyEarthPlugin:
 
                 if response.status_code == 200:
                     try:
+                        # After the first response from the server, if it was to save the embedding, we need to load it directly instead and avoid saving it again
+                        if self.save_embedding_radio.isChecked():
+                            self.load_embedding_radio.setChecked(True)
+                            self.save_embedding_radio.setChecked(False)
+                            self.load_embedding_radio.setEnabled(True)
+                            self.update_embeddings()
+
                         response_json = response.json()
                         # self.logger.debug(f"Parsed response JSON: {json.dumps(response_json, indent=2)}")
 
@@ -1577,17 +1628,18 @@ class EasyEarthPlugin:
                 self.predictions_layer = None
                 self.predictions_geojson = None
 
-            # Get the raster layer for coordinate transformation
             raster_layer = None
+            # Get the raster layer for coordinate transformation
             if self.source_combo.currentText() == "File":
                 for layer in QgsProject.instance().mapLayers().values():
-                    if isinstance(layer, QgsRasterLayer) and layer.name() == "Selected Image":
+                    if isinstance(layer, QgsRasterLayer) and layer.name() == os.path.basename(self.image_path.text()):
                         raster_layer = layer
                         break
-            else:
-                raster_layer = self.layer_combo.currentData()
+            elif self.source_combo.currentText() == "Layer":
+                layer_id = self.layer_combo.currentData()
+                raster_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
 
-            if not raster_layer:
+            if not raster_layer or not raster_layer.isValid():
                 raise ValueError("No raster layer found")
 
             # Get raster extent and dimensions
@@ -1638,18 +1690,17 @@ class EasyEarthPlugin:
                     }
                 }
 
-                # Add the new feature with properties
-                feature = {
-                    "type": "Feature",
-                    "properties": {
-                        "id": self.feature_count if hasattr(self, 'feature_count') else 1,
-                        "scores": features[0].get('properties', {}).get('scores', 0),
-                    },
-                    "geometry": features[0]['geometry']
-                }
-
-                # Add feature to the collection
-                self.predictions_geojson['features'].append(feature)
+                # Add all new features with properties
+                for i, feat in enumerate(features):
+                    feature = {
+                        "type": "Feature",
+                        "properties": {
+                            "id": self.feature_count + i if hasattr(self, 'feature_count') else i + 1,
+                            "scores": feat.get('properties', {}).get('scores', 0),
+                        },
+                        "geometry": feat['geometry']
+                    }
+                    self.predictions_geojson["features"].append(feature)
 
                 # Write initial GeoJSON file
                 with open(self.temp_predictions_geojson, 'w') as f:
@@ -1710,21 +1761,6 @@ class EasyEarthPlugin:
             self.logger.error(f"Error adding predictions: {str(e)}")
             self.logger.exception("Full traceback:")
             QMessageBox.critical(None, "Error", f"Failed to add predictions: {str(e)}")
-
-    def load_embedding(self, image_path):
-        """Load embedding for an image if it exists"""
-        try:
-            image_name = os.path.basename(image_path)
-            base_name = os.path.splitext(image_name)[0]
-            embedding_path = os.path.join(self.data_dir, 'embeddings', f"{base_name}.pt")
-
-            if os.path.exists(embedding_path):
-                # logger.info(f"Found existing embedding for {image_name}")
-                return True
-            return False
-        except Exception as e:
-            # logger.error(f"Error checking embedding: {str(e)}")
-            return False
 
     def count_docker_steps(self):
         """Count the total number of steps in docker-compose and Dockerfile"""
@@ -1867,6 +1903,10 @@ class EasyEarthPlugin:
             if not enable_path:
                 self.embedding_path_edit.clear()
                 self.logger.debug("Cleared embedding path")
+
+            # Enable or disable the path input based on the selected option
+            if button == self.save_embedding_radio or button == self.load_embedding_radio:
+                self.update_embeddings()
 
             self.logger.debug(f"Path input enabled: {enable_path}")
         except Exception as e:
@@ -2066,50 +2106,23 @@ class EasyEarthPlugin:
         """Handle layer selection change and check for existing embeddings"""
         try:
             if index > 0:  # Skip "Select a layer..." item
-                selected_layer = self.layer_combo.currentData()
+                layer_id = self.layer_combo.itemData(index)
+                selected_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
+
                 if not selected_layer:
                     return
-
-                self.image_path.setText(selected_layer.source())
 
                 # Create prediction layers
                 self.create_prediction_layers()
 
                 # Check for existing embedding
                 layer_source = selected_layer.source()
+
+                # Update the image path according to the source of the selected layer
+                self.image_path.setText(selected_layer.source())
+
                 image_name = os.path.splitext(os.path.basename(layer_source))[0]
-                embedding_dir = os.path.join(self.data_dir, 'embeddings')
-                embedding_path = os.path.join(embedding_dir, f"{image_name}.pt")
-
-                if os.path.exists(embedding_path):
-                    # Found existing embedding
-                    self.load_embedding_radio.setChecked(True)
-                    self.embedding_path_edit.setText(embedding_path)
-                    self.embedding_path_edit.setEnabled(True)
-                    self.embedding_browse_btn.setEnabled(True)
-
-                    self.iface.messageBar().pushMessage(
-                        "Info",
-                        f"Found existing embedding for {image_name}. Will use cached embedding for predictions.",
-                        level=Qgis.Info,
-                        duration=5
-                    )
-                    self.logger.info(f"Found existing embedding at: {embedding_path}")
-                else:
-                    # No existing embedding
-                    self.save_embedding_radio.setChecked(True)
-                    embedding_path = os.path.join(embedding_dir, f"{image_name}.pt")
-                    self.embedding_path_edit.setText(embedding_path)
-                    self.embedding_path_edit.setEnabled(True)
-                    self.embedding_browse_btn.setEnabled(True)
-
-                    self.iface.messageBar().pushMessage(
-                        "Info",
-                        f"No existing embedding found for {image_name}. Will generate and save embedding on first prediction.",
-                        level=Qgis.Info,
-                        duration=5
-                    )
-                    self.logger.info(f"No existing embedding found, will save to: {embedding_path}")
+                self.update_embeddings(image_name)
 
         except Exception as e:
             self.logger.error(f"Error handling layer selection: {str(e)}")
