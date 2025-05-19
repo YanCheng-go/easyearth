@@ -2067,9 +2067,6 @@ class EasyEarthPlugin:
                 # Check for existing embedding
                 layer_source = selected_layer.source()
 
-                # Update the image path according to the source of the selected layer
-                self.image_path.setText(selected_layer.source())
-
                 image_name = os.path.splitext(os.path.basename(layer_source))[0]
                 self.update_embeddings(image_name)
 
