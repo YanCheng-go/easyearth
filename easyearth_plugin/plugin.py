@@ -29,63 +29,16 @@ import yaml
 import json
 from datetime import datetime
 
-# Setup logger function stays at module level
-def setup_logger():
-    """Set up the logger for the plugin"""
-    try:
-        # Create logs directory if it doesn't exist
-        plugin_dir = os.path.dirname(__file__)
-        log_dir = os.path.join(plugin_dir, 'logs')
-        os.makedirs(log_dir, exist_ok=True)
+from .core.utils import setup_logger
+from .core.prompt_editor import BoxMapTool
 
-        # Create log file name with timestamp
-        log_file = os.path.join(log_dir, f'plugin_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
-
-        # Create formatter
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-        # Create file handler
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(formatter)
-        file_handler.setLevel(logging.DEBUG)
-
-        # Create console handler
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        console_handler.setLevel(logging.DEBUG)
-
-        # Get logger
-        logger = logging.getLogger('EasyEarth')
-        logger.setLevel(logging.DEBUG)
-
-        # Remove any existing handlers
-        logger.handlers = []
-
-        # Add handlers
-        logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
-
-        # Log initial message
-        logger.info("=== EasyEarth Plugin Started ===")
-        logger.info(f"Log file: {log_file}")
-
-        return logger
-
-    except Exception as e:
-        print(f"Failed to setup logger: {str(e)}")
-        return None
-
-# Create global logger instance
-logger = setup_logger()
 
 class EasyEarthPlugin:
     def __init__(self, iface):
         self.iface = iface
 
         # Initialize logger
-        # Use the global logger
-        global logger
-        self.logger = logger
+        self.logger = setup_logger()
 
         if self.logger is None:
             # If global logger failed to initialize, create a basic logger
