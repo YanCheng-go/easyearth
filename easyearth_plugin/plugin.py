@@ -125,6 +125,12 @@ class EasyEarthPlugin:
 
         self.model_path = None
 
+        # initialize image crs and extent...
+        self.raster_crs = None
+        self.raster_extent = None
+        self.raster_width = None
+        self.raster_height = None
+
     def add_action(self, icon_path, text, callback, enabled_flag=True,
                   add_to_menu=True, add_to_toolbar=True, status_tip=None,
                   whats_this=None, parent=None):
@@ -1203,7 +1209,7 @@ class EasyEarthPlugin:
             return
 
         # Get raster layer information
-        extent, width, height = self.get_current_raster_info()
+        extent, width, height = self.raster_extent, self.raster_width, self.raster_height
 
         # Calculate pixel coordinates based on start and end points
         pixel_x = int((start_point.x() - extent.xMinimum()) * width / extent.width())
@@ -1296,8 +1302,9 @@ class EasyEarthPlugin:
         extent = raster_layer.extent()
         width = raster_layer.width()
         height = raster_layer.height()
+        crs = raster_layer.crs()
 
-        return extent, width, height
+        return extent, width, height, crs
 
     def handle_draw_click(self, point, button):
         """Handle canvas clicks for drawing points or boxes
@@ -1311,7 +1318,7 @@ class EasyEarthPlugin:
 
             draw_type = self.draw_type_combo.currentText()
 
-            extent, width, height = self.get_current_raster_info()
+            extent, width, height = self.raster_extent, self.raster_width, self.raster_height
 
             if draw_type == "Point":
                 # Reset rubber band for each new point to prevent line creation
@@ -1632,27 +1639,10 @@ class EasyEarthPlugin:
                 self.predictions_layer = None
                 self.predictions_geojson = None
 
-            raster_layer = None
-            # Get the raster layer for coordinate transformation
-            if self.source_combo.currentText() == "File":
-                for layer in QgsProject.instance().mapLayers().values():
-                    if isinstance(layer, QgsRasterLayer) and layer.name() == os.path.basename(self.image_path.text()):
-                        raster_layer = layer
-                        break
-            elif self.source_combo.currentText() == "Layer":
-                layer_id = self.layer_combo.currentData()
-                raster_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
-
-            if not raster_layer or not raster_layer.isValid():
-                raise ValueError("No raster layer found")
-
             # Get raster extent and dimensions
-            extent = raster_layer.extent()
-            width = raster_layer.width()
-            height = raster_layer.height()
+            extent, width, height, raster_crs = self.raster_extent, self.raster_width, self.raster_height, self.raster_crs
 
             # Create coordinate transform if needed
-            raster_crs = raster_layer.crs()
             project_crs = QgsProject.instance().crs()
             transform = QgsCoordinateTransform(raster_crs, project_crs, QgsProject.instance())
 
@@ -2133,6 +2123,9 @@ class EasyEarthPlugin:
                 image_name = os.path.splitext(os.path.basename(layer_source))[0]
                 self.update_embeddings(image_name)
 
+                # Get imagr crs and extent
+                self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info()
+
         except Exception as e:
             self.logger.error(f"Error handling layer selection: {str(e)}")
             self.logger.exception("Full traceback:")
@@ -2152,6 +2145,9 @@ class EasyEarthPlugin:
                 return
 
             self.load_image()
+            # Get imagr crs and extent
+            self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info()
+
         except Exception as e:
             self.logger.error(f"Error processing entered image path: {str(e)}")
             QMessageBox.critical(None, "Error", f"Failed to load image: {str(e)}")
