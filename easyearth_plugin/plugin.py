@@ -88,7 +88,6 @@ class EasyEarthPlugin:
         self.temp_rubber_band = None
         self.start_point = None
         self.drawn_features = []
-        self.temp_vector_path = os.path.join(tempfile.gettempdir(), 'drawn_features.gpkg')
         self.drawn_layer = None
         self.temp_geojson_path = os.path.join(tempfile.gettempdir(), 'drawn_features.geojson')
         self.feature_count = 0  # For generating unique IDs
@@ -598,7 +597,6 @@ class EasyEarthPlugin:
         self.load_embedding_radio.setChecked(False)
         self.save_embedding_radio.setChecked(False)
 
-
     def on_image_source_changed(self, text):
         """Handle image source selection change"""
         try:
@@ -699,35 +697,6 @@ class EasyEarthPlugin:
             self.logger.error(f"Error loading image: {str(e)}")
             self.logger.exception("Full traceback:")
             QMessageBox.critical(None, "Error", f"Failed to load image: {str(e)}")
-
-    def create_empty_geojson(self, file_path):
-        """Create an empty GeoJSON file with project CRS"""
-        try:
-            # Get project CRS
-            project_crs = QgsProject.instance().crs()
-
-            # Create GeoJSON structure with CRS information
-            empty_geojson = {
-                "type": "FeatureCollection",
-                "name": os.path.basename(file_path),
-                "crs": {
-                    "type": "name",
-                    "properties": {
-                        "name": project_crs.authid()
-                    }
-                },
-                "features": []
-            }
-
-            # Write to file
-            with open(file_path, 'w') as f:
-                json.dump(empty_geojson, f)
-
-            self.logger.debug(f"Created empty GeoJSON file at: {file_path}")
-
-        except Exception as e:
-            self.logger.error(f"Error creating empty GeoJSON: {str(e)}")
-            raise
 
     def style_prompts_layer(self, layer):
         """Style the prompts layer with different symbols for points and boxes"""
