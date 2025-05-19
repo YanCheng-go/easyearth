@@ -103,6 +103,9 @@ class EasyEarthPlugin:
         self.map_tool = QgsMapToolEmitPoint(self.canvas)
         self.map_tool.canvasClicked.connect(self.handle_draw_click)
 
+        # Initialize tool for drawing boxes
+        self.box_tool = BoxMapTool(self.canvas, self.on_box_drawn)
+
         # Initialize rubber bands
         self.rubber_band = QgsRubberBand(self.canvas, QgsWkbTypes.PointGeometry)
         self.rubber_band.setColor(QColor(255, 0, 0))
@@ -1115,8 +1118,6 @@ class EasyEarthPlugin:
                     self.logger.error("canvas not initialized!")
                     raise Exception("Canvas not properly initialized")
 
-                self.canvas.setMapTool(self.map_tool)
-
                 # Initialize rubber bands if not already done
                 if not hasattr(self, 'rubber_band'):
                     self.logger.info("Creating new rubber band")
@@ -1180,6 +1181,69 @@ class EasyEarthPlugin:
         except Exception as e:
             self.logger.error(f"Error cleaning up previous session: {str(e)}")
             raise
+
+    def on_box_drawn(self, box_geom, start_point, end_point):
+        """Handle box drawing completion
+        Args:
+            box_geom (QgsGeometry): The drawn box geometry
+            start_point (QgsPointXY): The starting point of the box
+            end_point (QgsPointXY): The ending point of the box
+        """
+
+        # Calculate pixel coordinates based on start and end points
+        bbox = box_geom.boundingBox()
+        pixel_x = int(start_point.x())
+        pixel_y = int(start_point.y())
+        pixel_width = int(bbox.width())
+        pixel_height = int(bbox.height())
+
+        # Show message bar with box coordinates
+        self.iface.messageBar().pushMessage(
+            "Box Info",
+            f"Box coordinates sent to server: ({pixel_x}, {pixel_y}, {pixel_x + pixel_width}, {pixel_y + pixel_height})",
+            level=Qgis.Info,
+            duration=3
+        )
+
+        # Create prompt feature
+        feature = {
+            "type": "Feature",
+            "geometry": json.loads(box_geom.asJson()),
+            "properties": {
+                "id": self.prompt_count,
+                "type": "Box",
+                "pixel_x": pixel_x,
+                "pixel_y": pixel_y,
+                "pixel_width": pixel_width,
+                "pixel_height": pixel_height,
+                "timestamp": time.time()
+            }
+        }
+
+        # Add prompt feature to layer
+        self.add_prompt_to_layer([feature])
+
+        # Increment prompt counter
+        self.prompt_count += 1
+
+        # Prepare prompt for server
+        prompt = [{
+            'type': 'Box',
+            'data': {
+                "boxes": [[
+                    pixel_x,
+                    pixel_y,
+                    pixel_x + pixel_width,
+                    pixel_y + pixel_height
+                ]],
+            }
+        }]
+
+        # Send prediction request if realtime checkbox is checked
+        if self.realtime_checkbox.isChecked():
+            self.get_prediction(prompt)
+
+        return box_geom
 
     def handle_draw_click(self, point, button):
         """Handle canvas clicks for drawing points or boxes
@@ -1250,7 +1314,9 @@ class EasyEarthPlugin:
                         "id": self.prompt_count if hasattr(self, 'prompt_count') else 1,
                         "type": "Point",
                         "pixel_x": px,
-                        "pixel_y": py
+                        "pixel_y": py,
+                        "pixel_width": 0,
+                        "pixel_height": 0,
                     }
                 }
 
@@ -1274,92 +1340,14 @@ class EasyEarthPlugin:
 
                 if self.realtime_checkbox.isChecked():
                     self.get_prediction(prompt)
-
-            elif draw_type == "Box":
-                if not self.start_point:
-                    # Start drawing box
-                    self.start_point = point
-                    self.temp_rubber_band.reset(QgsWkbTypes.PolygonGeometry)
-                    self.temp_rubber_band.addPoint(point)
-
-                    # Show start point coordinates
-                    self.iface.messageBar().pushMessage(
-                        "Box Start Point",
-                        f"Start point - Map: ({point.x():.2f}, {point.y():.2f})",
-                        level=Qgis.Info,
-                        duration=3
-                    )
-                else:
-                    # TODO: to be verified and updated
-                    # Calculate pixel coordinates for start point
-                    start_px = int((self.start_point.x() - extent.xMinimum()) * width / extent.width())
-                    start_py = int((extent.yMaximum() - self.start_point.y()) * height / extent.height())
-
-                    # Calculate pixel coordinates for end point
-                    end_px = int((point.x() - extent.xMinimum()) * width / extent.width())
-                    end_py = int((extent.yMaximum() - point.y()) * height / extent.height())
-
-                    # Ensure coordinates are within image bounds
-                    start_px = max(0, min(start_px, width - 1))
-                    start_py = max(0, min(start_py, height - 1))
-                    end_px = max(0, min(end_px, width - 1))
-                    end_py = max(0, min(end_py, height - 1))
-
-                    # Show box coordinates
-                    self.iface.messageBar().pushMessage(
-                        "Box Info",
-                        f"Box coordinates sent to server: [{min(start_px, end_px)}, {min(start_py, end_py)}, "
-                        f"{max(start_px, end_px)}, {max(start_py, end_py)}]",
-                        level=Qgis.Info,
-                        duration=3
-                    )
-
-                    # Create box geometry for display
-                    box_geom = self.create_box_geometry(self.start_point, point)
-                    self.rubber_band.addGeometry(box_geom)
-
-                    # Prepare box prompt
-                    prompt = [{
-                        'type': 'Box',
-                        'data': {
-                            "boxes": [[
-                                min(start_px, end_px),
-                                min(start_py, end_py),
-                                max(start_px, end_px),
-                                max(start_py, end_py)
-                            ]]
-                        }
-                    }]
-
-                    if self.realtime_checkbox.isChecked():
-                        # Get prediction
-                        self.get_prediction(prompt)
-
-                    # Reset for next box
-                    self.temp_rubber_band.reset()
-                    self.start_point = None
+                return point
+            else:
+                pass
 
         except Exception as e:
             self.logger.error(f"Error handling draw click: {str(e)}")
             self.logger.exception("Full traceback:")
             QMessageBox.critical(None, "Error", f"Failed to handle drawing: {str(e)}")
-
-    def create_box_geometry(self, start, end):
-        """Create a box geometry from two points
-        Args:
-            start: QgsPointXY start point
-            end: QgsPointXY end point
-        Returns:
-            QgsGeometry box geometry
-        """
-        points = [
-            QgsPointXY(start.x(), start.y()),
-            QgsPointXY(end.x(), start.y()),
-            QgsPointXY(end.x(), end.y()),
-            QgsPointXY(start.x(), end.y()),
-            QgsPointXY(start.x(), start.y())
-        ]
-        return QgsGeometry.fromPolygonXY([points])
 
     def collect_all_prompts(self):
         """Collect new prompts added after the last_pred_time
@@ -1903,6 +1891,14 @@ class EasyEarthPlugin:
                 # If currently drawing, restart with new type
                 self.draw_button.setChecked(False)
                 self.toggle_drawing(True)
+            # Switch map tool based on draw type
+            if draw_type == "Point":
+                self.canvas.setMapTool(self.map_tool)
+            elif draw_type == "Box":
+                self.canvas.setMapTool(self.box_tool)
+            else:
+                self.canvas.unsetMapTool(self.map_tool)
+                self.canvas.unsetMapTool(self.box_tool)
         except Exception as e:
             self.logger.error(f"Error in draw type change: {str(e)}")
 
