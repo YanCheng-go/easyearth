@@ -1190,12 +1190,32 @@ class EasyEarthPlugin:
             end_point (QgsPointXY): The ending point of the box
         """
 
+        # Check if the box is valid
+        if not box_geom.isGeosValid():
+            self.iface.messageBar().pushMessage(
+                "Error",
+                "Invalid box geometry",
+                level=Qgis.Critical,
+                duration=3
+            )
+            return
+
+        # Get raster layer information
+        extent, width, height = self.get_current_raster_info()
+
         # Calculate pixel coordinates based on start and end points
-        bbox = box_geom.boundingBox()
-        pixel_x = int(start_point.x())
-        pixel_y = int(start_point.y())
-        pixel_width = int(bbox.width())
-        pixel_height = int(bbox.height())
+        pixel_x = int((start_point.x() - extent.xMinimum()) * width / extent.width())
+        pixel_y = int((extent.yMaximum() - start_point.y()) * height / extent.height())
+        pixel_width = int((end_point.x() - start_point.x()) * width / extent.width())
+        pixel_height = int((start_point.y() - end_point.y()) * height / extent.height())
+        # Ensure coordinates are within image bounds
+        pixel_x = max(0, min(pixel_x, width - 1))
+        pixel_y = max(0, min(pixel_y, height - 1))
+        pixel_width = max(0, min(pixel_width, width - pixel_x))
+        pixel_height = max(0, min(pixel_height, height - pixel_y))
+        # Ensure pixel width and height are positive
+        pixel_width = max(1, pixel_width)
+        pixel_height = max(1, pixel_height)
 
         # Show message bar with box coordinates
         self.iface.messageBar().pushMessage(
@@ -1245,6 +1265,38 @@ class EasyEarthPlugin:
 
         return box_geom
 
+    def get_current_raster_info(self):
+        """Get current raster layer information for deriving pixel coordinates.
+        Returns:
+            tuple: extent, width, height of the raster layer
+        """
+
+        # Get the raster layer
+        raster_layer = None
+        if self.source_combo.currentText() == "File":
+            # Check image path for File source
+            if not self.image_path.text():
+                raise ValueError("No image selected")
+            # Find the raster layer by name "Selected Image"
+            for layer in QgsProject.instance().mapLayers().values():
+                if isinstance(layer, QgsRasterLayer) and layer.name() == os.path.basename(self.image_path.text()):
+                    raster_layer = layer
+                    break
+        elif self.source_combo.currentText() == "Layer":
+            # Get layer directly from combo box for Layer source
+            layer_id = self.layer_combo.currentData()
+            raster_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
+
+        if not raster_layer:
+            raise ValueError("No raster layer found")
+
+        # Get raster dimensions and extent
+        extent = raster_layer.extent()
+        width = raster_layer.width()
+        height = raster_layer.height()
+
+        return extent, width, height
+
     def handle_draw_click(self, point, button):
         """Handle canvas clicks for drawing points or boxes
         Args:
@@ -1257,29 +1309,7 @@ class EasyEarthPlugin:
 
             draw_type = self.draw_type_combo.currentText()
 
-            # Get the raster layer
-            raster_layer = None
-            if self.source_combo.currentText() == "File":
-                # Check image path for File source
-                if not self.image_path.text():
-                    raise ValueError("No image selected")
-                # Find the raster layer by name "Selected Image"
-                for layer in QgsProject.instance().mapLayers().values():
-                    if isinstance(layer, QgsRasterLayer) and layer.name() == os.path.basename(self.image_path.text()):
-                        raster_layer = layer
-                        break
-            elif self.source_combo.currentText() == "Layer":
-                # Get layer directly from combo box for Layer source
-                layer_id = self.layer_combo.currentData()
-                raster_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
-
-            if not raster_layer:
-                raise ValueError("No raster layer found")
-
-            # Get raster dimensions and extent
-            extent = raster_layer.extent()
-            width = raster_layer.width()
-            height = raster_layer.height()
+            extent, width, height = self.get_current_raster_info()
 
             if draw_type == "Point":
                 # Reset rubber band for each new point to prevent line creation
