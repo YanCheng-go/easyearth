@@ -131,6 +131,9 @@ class EasyEarthPlugin:
         self.raster_width = None
         self.raster_height = None
 
+        self.project_crs = QgsProject.instance().crs()
+        QgsProject.instance().crsChanged.connect(self.on_project_crs_changed)
+
     def add_action(self, icon_path, text, callback, enabled_flag=True,
                   add_to_menu=True, add_to_toolbar=True, status_tip=None,
                   whats_this=None, parent=None):
@@ -416,6 +419,16 @@ class EasyEarthPlugin:
         except Exception as e:
             self.logger.error(f"Error in initGui: {str(e)}")
             self.logger.exception("Full traceback:")
+
+    def on_project_crs_changed(self):
+        """Update the cached project CRS when the project CRS changes."""
+        self.project_crs = QgsProject.instance().crs()
+        self.iface.messageBar().pushMessage(
+            "Info",
+            f"Project CRS changed to: {self.project_crs.authid()}",
+            level=Qgis.Info,
+            duration=5
+        )
 
     def on_realtime_checkbox_changed(self):
         """
