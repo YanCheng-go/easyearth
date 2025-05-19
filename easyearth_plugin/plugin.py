@@ -1385,7 +1385,7 @@ class EasyEarthPlugin:
                 prompt_feature["properties"]["timestamp"] = time.time()
 
                 # Add prompt to layer
-                self.add_prompt_to_layer([prompt_feature])
+                self.add_features_to_layer([prompt_feature], "prompts")
 
                 # Increment prompt counter
                 self.prompt_count = getattr(self, 'prompt_count', 1) + 1
@@ -1625,7 +1625,7 @@ class EasyEarthPlugin:
                             return
 
                         # Add the predictions to our layer
-                        self.add_predictions_to_layer(features)
+                        self.add_features_to_layer(features, "predictions")
 
                     except json.JSONDecodeError as e:
                         raise ValueError(f"Invalid JSON response: {str(e)}")
@@ -1649,134 +1649,6 @@ class EasyEarthPlugin:
             QMessageBox.critical(None, "Error", f"Failed to get prediction: {str(e)}")
         finally:
             QApplication.restoreOverrideCursor()
-
-    def add_predictions_to_layer(self, features, properties=None):
-        """Add or append GeoJSON features to predictions layer"""
-        try:
-            if not features:
-                raise ValueError("No features to add")
-
-            # Check if layer is still valid
-            if hasattr(self, 'predictions_layer') and self.predictions_layer and not self.predictions_layer.isValid():
-                self.predictions_layer = None
-                self.predictions_geojson = None
-
-            # Get raster extent and dimensions
-            extent, width, height, raster_crs = self.raster_extent, self.raster_width, self.raster_height, self.raster_crs
-
-            # Create coordinate transform if needed
-            project_crs = QgsProject.instance().crs()
-            transform = QgsCoordinateTransform(raster_crs, project_crs, QgsProject.instance())
-
-            # Convert features from pixel to map coordinates
-            for feature in features:
-                geom_json = feature.get('geometry')
-                if geom_json and geom_json['type'] == 'Polygon':
-                    map_coords = []
-                    for ring in geom_json['coordinates']:
-                        map_ring = []
-                        for pixel_coord in ring:
-                            # Convert pixel coordinates to map coordinates
-                            map_x = extent.xMinimum() + (pixel_coord[0] * extent.width() / width)
-                            map_y = extent.yMaximum() - (pixel_coord[1] * extent.height() / height)
-                            point = QgsPointXY(map_x, map_y)
-
-                            # Transform coordinates if needed
-                            if raster_crs != project_crs:
-                                point = transform.transform(point)
-
-                            map_ring.append(point)
-                        map_coords.append(map_ring)
-
-                    # Update geometry with transformed coordinates
-                    feature['geometry']['coordinates'] = [[(p.x(), p.y()) for p in ring] for ring in map_coords]
-
-            # If this is the first prediction, initialize everything
-            if not hasattr(self, 'predictions_geojson') or self.predictions_geojson is None:
-                # Initialize the GeoJSON structure
-                # TODO: add properties to the GeoJSON structure
-                self.predictions_geojson = {
-                    "type": "FeatureCollection",
-                    "features": [],
-                    "crs": {
-                        "type": "name",
-                        "properties": {
-                            "name": QgsProject.instance().crs().authid()
-                        }
-                    }
-                }
-
-                # Add all new features with properties
-                for i, feat in enumerate(features):
-                    feature = {
-                        "type": "Feature",
-                        "properties": {
-                            "id": self.feature_count + i if hasattr(self, 'feature_count') else i + 1,
-                            "scores": feat.get('properties', {}).get('scores', 0),
-                        },
-                        "geometry": feat['geometry']
-                    }
-                    self.predictions_geojson["features"].append(feature)
-
-                # Write initial GeoJSON file
-                with open(self.temp_predictions_geojson, 'w') as f:
-                    json.dump(self.predictions_geojson, f)
-
-                # Verify file contents
-                self.logger.debug(f"Written GeoJSON content: {json.dumps(self.predictions_geojson, indent=2)}")
-
-                # Create new layer from this file
-                self.predictions_layer = QgsVectorLayer(
-                    self.temp_predictions_geojson,
-                    "SAM Predictions",
-                    "ogr"
-                )
-
-                if not self.predictions_layer.isValid():
-                    raise ValueError("Failed to create valid vector layer")
-
-                # Add to project
-                QgsProject.instance().addMapLayer(self.predictions_layer)
-
-                # Apply styling
-                self.style_predictions_layer(self.predictions_layer)
-
-                self.logger.debug(f"Initial layer feature count: {self.predictions_layer.featureCount()}")
-            else:
-                # Append new features to existing GeoJSON
-                self.predictions_geojson['features'].extend(features)
-
-                # Write updated GeoJSON
-                with open(self.temp_predictions_geojson, 'w') as f:
-                    json.dump(self.predictions_geojson, f, indent=2)
-
-                # Check if layer is still in project
-                if self.predictions_layer and QgsProject.instance().mapLayer(self.predictions_layer.id()):
-                    self.predictions_layer.dataProvider().reloadData()
-                    self.predictions_layer.updateExtents()
-                    self.predictions_layer.triggerRepaint()
-                else:
-                    # Recreate layer if it was removed
-                    self.predictions_layer = QgsVectorLayer(
-                        self.temp_predictions_geojson,
-                        "SAM Predictions",
-                        "ogr"
-                    )
-                    QgsProject.instance().addMapLayer(self.predictions_layer)
-                    self.style_predictions_layer(self.predictions_layer)
-
-            # Update canvas
-            self.iface.mapCanvas().refresh()
-
-            # Verify feature count
-            actual_count = self.predictions_layer.featureCount()
-            expected_count = len(self.predictions_geojson['features'])
-            self.logger.debug(f"Layer feature count: {actual_count} (added: {expected_count})")
-
-        except Exception as e:
-            self.logger.error(f"Error adding predictions: {str(e)}")
-            self.logger.exception("Full traceback:")
-            QMessageBox.critical(None, "Error", f"Failed to add predictions: {str(e)}")
 
     def count_docker_steps(self):
         """Count the total number of steps in docker-compose and Dockerfile"""
@@ -2196,77 +2068,118 @@ class EasyEarthPlugin:
             return False
         return True
 
-    def add_prompt_to_layer(self, features):
-        """Add or append prompt features to prompts layer"""
+    def add_features_to_layer(self, features, layer_type='prompts', properties=None):
+        """
+        Add or append features to the specified layer (prompts or predictions).
+        Args:
+            features: list of GeoJSON features
+            layer_type: 'prompts' or 'predictions'
+            properties: optional properties for predictions
+        """
         try:
             if not features:
                 raise ValueError("No features to add")
 
-            # self.logger.debug(f"Incoming prompt features: {json.dumps(features, indent=2)}")
+            # Set up layer-specific variables
+            if layer_type == 'prompts':
+                geojson_attr = 'prompts_geojson'
+                temp_geojson = self.temp_prompts_geojson
+                layer_attr = 'prompts_layer'
+                layer_name = "Drawing Prompts"
+                style_func = self.style_prompts_layer
+                # Ensure 'type' property for styling
+                for feat in features:
+                    if 'properties' not in feat:
+                        feat['properties'] = {}
+                    if 'type' not in feat['properties']:
+                        geom_type = feat.get('geometry', {}).get('type', '')
+                        feat['properties']['type'] = 'Point' if geom_type == 'Point' else 'Box' if geom_type == 'Polygon' else 'Unknown'
+            elif layer_type == 'predictions':
+                geojson_attr = 'predictions_geojson'
+                temp_geojson = self.temp_predictions_geojson
+                layer_attr = 'predictions_layer'
+                layer_name = "SAM Predictions"
+                style_func = self.style_predictions_layer
+                # Transform pixel to map coordinates for polygons
+                extent, width, height, raster_crs = self.raster_extent, self.raster_width, self.raster_height, self.raster_crs
+                transform = QgsCoordinateTransform(raster_crs, self.project_crs, QgsProject.instance())
+                for feature in features:
+                    geom_json = feature.get('geometry')
+                    if geom_json and geom_json['type'] == 'Polygon':
+                        map_coords = []
+                        for ring in geom_json['coordinates']:
+                            map_ring = []
+                            for pixel_coord in ring:
+                                map_x = extent.xMinimum() + (pixel_coord[0] * extent.width() / width)
+                                map_y = extent.yMaximum() - (pixel_coord[1] * extent.height() / height)
+                                point = QgsPointXY(map_x, map_y)
+                                if raster_crs != self.project_crs:
+                                    point = transform.transform(point)
+                                map_ring.append(point)
+                            map_coords.append(map_ring)
+                        feature['geometry']['coordinates'] = [[(p.x(), p.y()) for p in ring] for ring in map_coords]
+                # Assign unique ids
+                if not hasattr(self, 'feature_count'):
+                    self.feature_count = 0
+                start_id = self.feature_count
+                features = [{
+                    "type": "Feature",
+                    "properties": {
+                        "id": start_id + i,
+                        "scores": feat.get('properties', {}).get('scores', 0),
+                    },
+                    "geometry": feat['geometry']
+                } for i, feat in enumerate(features)]
+                self.feature_count += len(features)
+            else:
+                raise ValueError("Invalid layer_type")
 
-            # Ensure each feature has a 'type' property for styling
-            for feat in features:
-                if 'properties' not in feat:
-                    feat['properties'] = {}
-                if 'type' not in feat['properties']:
-                    # Guess type from geometry
-                    geom_type = feat.get('geometry', {}).get('type', '')
-                    if geom_type == 'Point':
-                        feat['properties']['type'] = 'Point'
-                    elif geom_type == 'Polygon':
-                        feat['properties']['type'] = 'Box'
-                    else:
-                        feat['properties']['type'] = 'Unknown'
-
-            # If this is the first prompt, initialize everything
-            if not hasattr(self, 'prompts_geojson') or self.prompts_geojson is None:
-                # Initialize the GeoJSON structure
-                self.prompts_geojson = {
+            # Prepare or update GeoJSON
+            geojson = getattr(self, geojson_attr, None)
+            if not geojson:
+                geojson = {
                     "type": "FeatureCollection",
+                    "features": features,
                     "crs": {
                         "type": "name",
                         "properties": {
-                            "name": QgsProject.instance().crs().authid()
+                            "name": self.project_crs.authid() if layer_type == 'prompts' else self.raster_crs.authid()
                         }
-                    },
-                    "features": features
+                    }
                 }
             else:
-                # Append new features
-                self.prompts_geojson['features'].extend(features)
+                geojson['features'].extend(features)
+            setattr(self, geojson_attr, geojson)
 
             # Write GeoJSON file
-            with open(self.temp_prompts_geojson, 'w') as f:
-                json.dump(self.prompts_geojson, f)
+            with open(temp_geojson, 'w') as f:
+                json.dump(geojson, f)
 
-            # If layer does not exist, create it
-            if not self.prompts_layer or not self.prompts_layer.isValid():
-                self.prompts_layer = QgsVectorLayer(
-                    self.temp_prompts_geojson,
-                    "Drawing Prompts",
-                    "ogr"
-                )
-                if not self.prompts_layer.isValid():
+            # Create or update layer
+            layer = getattr(self, layer_attr, None)
+            if not layer:
+                layer = QgsVectorLayer(temp_geojson, layer_name, "ogr")
+                if not layer.isValid():
                     raise ValueError("Failed to create valid vector layer")
-                QgsProject.instance().addMapLayer(self.prompts_layer)
+                QgsProject.instance().addMapLayer(layer)
+                setattr(self, layer_attr, layer)
             else:
-                # Reload layer to update features
-                self.prompts_layer.dataProvider().reloadData()
-                self.prompts_layer.updateExtents()
-                self.prompts_layer.triggerRepaint()
+                layer.dataProvider().reloadData()
+                layer.updateExtents()
+                layer.triggerRepaint()
 
             # Apply styling
-            self.style_prompts_layer(self.prompts_layer)
+            style_func(layer)
 
-            # Update canvas
+            # Refresh canvas
             self.iface.mapCanvas().refresh()
 
-            # Verify feature count
-            actual_count = self.prompts_layer.featureCount()
-            expected_count = len(self.prompts_geojson['features'])
-            self.logger.info(f"Layer feature count: {actual_count} (added: {expected_count})")
+            # Log feature count
+            actual_count = layer.featureCount()
+            expected_count = len(geojson['features'])
+            self.logger.info(f"{layer_name} feature count: {actual_count} (added: {expected_count})")
 
         except Exception as e:
-            self.logger.error(f"Error adding prompts: {str(e)}")
+            self.logger.error(f"Error adding {layer_type}: {str(e)}")
             self.logger.exception("Full traceback:")
-            QMessageBox.critical(None, "Error", f"Failed to add prompts: {str(e)}")
+            QMessageBox.critical(None, "Error", f"Failed to add {layer_type}: {str(e)}")
