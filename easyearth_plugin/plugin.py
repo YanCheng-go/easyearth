@@ -1,6 +1,15 @@
 # TODO: split into multiple files, plugin.py, docker_manager.py, ui.py, layer_manager.py, prediction.py, utils.py
 # TODO: allow scrapping from wms file...
 # TODO: add function for converting local models to hugging face models
+# TODO: allow loading multiple images, create a prompt layer and a prediction layer for each image... zoom to layers to draw on and run prediction on...good for multiple images over the same location - timeseries
+
+# TODO: handle situations when regretting the drawing, and refine the predictions, editing
+# TODO: incorporate SAM2, text prompt
+# TODO: models with no prompts
+# TODO: test for windows and macbook
+# TODO: ease the incorporation of more models
+
+"""Entry point for the QGIS plugin. Handles plugin registration, menu/toolbar actions, and high-level coordination."""
 
 from qgis.PyQt.QtWidgets import (QAction, QDockWidget, QPushButton, QVBoxLayout,
                                 QWidget, QMessageBox, QLabel, QHBoxLayout,
@@ -14,78 +23,24 @@ from qgis.core import (QgsVectorLayer, QgsFeature, QgsGeometry, QgsPolygon,
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
 import os
 import requests
-import base64
-from PIL import Image
-import io
-import numpy as np
 import subprocess
-import signal
 import time
 import logging
-import shutil
 import tempfile
-import sys
 import yaml
 import json
 from datetime import datetime
 
-# Setup logger function stays at module level
-def setup_logger():
-    """Set up the logger for the plugin"""
-    try:
-        # Create logs directory if it doesn't exist
-        plugin_dir = os.path.dirname(__file__)
-        log_dir = os.path.join(plugin_dir, 'logs')
-        os.makedirs(log_dir, exist_ok=True)
+from .core.utils import setup_logger
+from .core.prompt_editor import BoxMapTool
 
-        # Create log file name with timestamp
-        log_file = os.path.join(log_dir, f'plugin_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
-
-        # Create formatter
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-        # Create file handler
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(formatter)
-        file_handler.setLevel(logging.DEBUG)
-
-        # Create console handler
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        console_handler.setLevel(logging.DEBUG)
-
-        # Get logger
-        logger = logging.getLogger('EasyEarth')
-        logger.setLevel(logging.DEBUG)
-
-        # Remove any existing handlers
-        logger.handlers = []
-
-        # Add handlers
-        logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
-
-        # Log initial message
-        logger.info("=== EasyEarth Plugin Started ===")
-        logger.info(f"Log file: {log_file}")
-
-        return logger
-
-    except Exception as e:
-        print(f"Failed to setup logger: {str(e)}")
-        return None
-
-# Create global logger instance
-logger = setup_logger()
 
 class EasyEarthPlugin:
     def __init__(self, iface):
         self.iface = iface
 
         # Initialize logger
-        # Use the global logger
-        global logger
-        self.logger = logger
+        self.logger = setup_logger()
 
         if self.logger is None:
             # If global logger failed to initialize, create a basic logger
@@ -135,10 +90,10 @@ class EasyEarthPlugin:
         self.temp_rubber_band = None
         self.start_point = None
         self.drawn_features = []
-        self.temp_vector_path = os.path.join(tempfile.gettempdir(), 'drawn_features.gpkg')
         self.drawn_layer = None
         self.temp_geojson_path = os.path.join(tempfile.gettempdir(), 'drawn_features.geojson')
         self.feature_count = 0  # For generating unique IDs
+        self.prompt_count = 0  # For generating unique IDs
         self.temp_prompts_geojson = None
         self.temp_predictions_geojson = None
         self.real_time_prediction = False
@@ -149,6 +104,9 @@ class EasyEarthPlugin:
         # Initialize map tool
         self.map_tool = QgsMapToolEmitPoint(self.canvas)
         self.map_tool.canvasClicked.connect(self.handle_draw_click)
+
+        # Initialize tool for drawing boxes
+        self.box_tool = BoxMapTool(self.canvas, self.on_box_drawn)
 
         # Initialize rubber bands
         self.rubber_band = QgsRubberBand(self.canvas, QgsWkbTypes.PointGeometry)
@@ -162,12 +120,23 @@ class EasyEarthPlugin:
         self.start_point = None
         self.predictions_geojson = None
         self.predictions_layer = None
+        self.prompts_geojson = None
+        self.prompts_layer = None
 
         # Initialize data directory
         self.data_dir = self.plugin_dir + '/user'
         self.tmp_dir = os.path.join(self.plugin_dir, 'tmp')
 
         self.model_path = None
+
+        # initialize image crs and extent...
+        self.raster_crs = None
+        self.raster_extent = None
+        self.raster_width = None
+        self.raster_height = None
+
+        self.project_crs = QgsProject.instance().crs()
+        QgsProject.instance().crsChanged.connect(self.on_project_crs_changed)
 
     def add_action(self, icon_path, text, callback, enabled_flag=True,
                   add_to_menu=True, add_to_toolbar=True, status_tip=None,
@@ -318,7 +287,7 @@ class EasyEarthPlugin:
             source_layout = QHBoxLayout()
             source_label = QLabel("Source:")
             self.source_combo = QComboBox()
-            self.source_combo.addItems(["File", "Layer"])
+            self.source_combo.addItems(["File", "Layer", "Link"])
             self.source_combo.currentTextChanged.connect(self.on_image_source_changed)
             source_layout.addWidget(source_label)
             source_layout.addWidget(self.source_combo)
@@ -334,6 +303,24 @@ class EasyEarthPlugin:
             file_layout.addWidget(self.image_path)
             file_layout.addWidget(self.browse_button)
             image_layout.addLayout(file_layout)
+
+            # Link input
+            self.download_button = QPushButton("Download")
+            self.download_button.hide()
+            self.download_button.clicked.connect(self.on_download_button_clicked)
+            file_layout.addWidget(self.download_button)
+
+            # Move these lines here (right after the download button):
+            self.progress_bar = QProgressBar()
+            self.progress_bar.setMinimum(0)
+            self.progress_bar.setMaximum(100)
+            self.progress_bar.hide()
+            file_layout.addWidget(self.progress_bar)  # <-- Add to file_layout
+
+            self.progress_status = QLabel()
+            self.progress_status.setWordWrap(True)
+            self.progress_status.hide()
+            file_layout.addWidget(self.progress_status)  # <-- Add to file_layout
 
             # Layer selection
             self.layer_combo = QComboBox()
@@ -455,6 +442,16 @@ class EasyEarthPlugin:
             self.logger.error(f"Error in initGui: {str(e)}")
             self.logger.exception("Full traceback:")
 
+    def on_project_crs_changed(self):
+        """Update the cached project CRS when the project CRS changes."""
+        self.project_crs = QgsProject.instance().crs()
+        self.iface.messageBar().pushMessage(
+            "Info",
+            f"Project CRS changed to: {self.project_crs.authid()}",
+            level=Qgis.Info,
+            duration=5
+        )
+
     def on_realtime_checkbox_changed(self):
         """
         Enable or disable the prediction button based on real-time mode.
@@ -515,6 +512,7 @@ class EasyEarthPlugin:
         self.realtime_checkbox.setEnabled(is_sam)
         if not is_sam and self.draw_button.isChecked():
             self.draw_button.setChecked(False)
+            self.draw_button.setText("Start Drawing")
 
         # Embedding section
         self.embedding_path_edit.setEnabled(is_sam and not self.no_embedding_radio.isChecked())
@@ -622,7 +620,6 @@ class EasyEarthPlugin:
         self.load_embedding_radio.setChecked(False)
         self.save_embedding_radio.setChecked(False)
 
-
     def on_image_source_changed(self, text):
         """Handle image source selection change"""
         try:
@@ -630,6 +627,7 @@ class EasyEarthPlugin:
                 self.image_path.show()
                 self.browse_button.show()
                 self.layer_combo.hide()
+                self.download_button.hide()
                 self.initialize_image_path()
                 self.initialize_embedding_path()
                 # Deactivate embedding section if SAM model is not selected
@@ -637,8 +635,18 @@ class EasyEarthPlugin:
             elif text == "Layer":
                 self.image_path.hide()
                 self.browse_button.hide()
+                self.download_button.hide()
                 self.layer_combo.show()
                 self.update_layer_combo()
+            elif text == "Link":
+                self.image_path.show()
+                self.browse_button.hide()
+                self.download_button.show()
+                self.layer_combo.hide()
+                self.image_path.setPlaceholderText("Enter image URL (http/https)...")
+                self.image_path.clear()
+                self.initialize_embedding_path()
+                self.deactivate_embedding_section() if not self.is_sam_model() else None
 
             # Clear any existing layers
             self.cleanup_previous_session()
@@ -695,6 +703,22 @@ class EasyEarthPlugin:
             # Add raster layer to the project
             QgsProject.instance().addMapLayer(raster_layer)
 
+            # Get image crs and extent
+            self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(raster_layer)
+            msg = (
+                f"Extent: X min: {self.raster_extent.xMinimum()}, X max: {self.raster_extent.xMaximum()}, "
+                f"Y min: {self.raster_extent.yMinimum()}, Y max: {self.raster_extent.yMaximum()}; "
+                f"Width: {self.raster_width}; "
+                f"Height: {self.raster_height}; "
+                f"CRS: {self.raster_crs.authid()}"
+            )
+            self.iface.messageBar().pushMessage(
+                "Selected raster CRS and dimensions",
+                msg,
+                level=Qgis.Info,
+                duration=5
+            )
+
             # Create prediction layers
             self.create_prediction_layers()
 
@@ -706,35 +730,6 @@ class EasyEarthPlugin:
             self.logger.error(f"Error loading image: {str(e)}")
             self.logger.exception("Full traceback:")
             QMessageBox.critical(None, "Error", f"Failed to load image: {str(e)}")
-
-    def create_empty_geojson(self, file_path):
-        """Create an empty GeoJSON file with project CRS"""
-        try:
-            # Get project CRS
-            project_crs = QgsProject.instance().crs()
-
-            # Create GeoJSON structure with CRS information
-            empty_geojson = {
-                "type": "FeatureCollection",
-                "name": os.path.basename(file_path),
-                "crs": {
-                    "type": "name",
-                    "properties": {
-                        "name": project_crs.authid()
-                    }
-                },
-                "features": []
-            }
-
-            # Write to file
-            with open(file_path, 'w') as f:
-                json.dump(empty_geojson, f)
-
-            self.logger.debug(f"Created empty GeoJSON file at: {file_path}")
-
-        except Exception as e:
-            self.logger.error(f"Error creating empty GeoJSON: {str(e)}")
-            raise
 
     def style_prompts_layer(self, layer):
         """Style the prompts layer with different symbols for points and boxes"""
@@ -952,7 +947,6 @@ class EasyEarthPlugin:
             self.logger.debug(f"Container status: '{container_status}'")
 
             # TODO: read mount information if the container is started outside QGIS
-
             if container_status and 'Up' in container_status:
                 self.logger.info(f"Container is running with status: {container_status}")
                 # Update UI and state
@@ -966,7 +960,7 @@ class EasyEarthPlugin:
         except Exception as e:
             self.logger.error(f"Error checking container status: {str(e)}")
             self.logger.exception("Full traceback:")
-            return False
+            self.docker_running = False
 
     def toggle_docker(self):
         """Toggle Docker container state"""
@@ -1097,7 +1091,7 @@ class EasyEarthPlugin:
         self.logger.debug(f"Docker output: {output}")
         self._process_docker_output(output)
 
-    def on_docker_finished(self, exit_code, exit_status):
+    def on_docker_finished(self, exit_code):
         """Handle Docker process completion"""
         try:
             if exit_code == 0:
@@ -1162,8 +1156,6 @@ class EasyEarthPlugin:
                     self.logger.error("canvas not initialized!")
                     raise Exception("Canvas not properly initialized")
 
-                self.canvas.setMapTool(self.map_tool)
-
                 # Initialize rubber bands if not already done
                 if not hasattr(self, 'rubber_band'):
                     self.logger.info("Creating new rubber band")
@@ -1179,6 +1171,14 @@ class EasyEarthPlugin:
 
                 self.draw_button.setText("Stop Drawing")
 
+                if self.draw_type_combo.currentText() == "Point":
+                        self.canvas.setMapTool(self.map_tool)
+                elif self.draw_type_combo.currentText() == "Box":
+                    self.canvas.setMapTool(self.box_tool)
+                else:
+                    self.unsetMapTool(self.map_tool)
+                    self.unsetMapTool(self.box_tool)
+
                 self.logger.info("Drawing session started successfully")
 
             else:
@@ -1192,6 +1192,7 @@ class EasyEarthPlugin:
             self.logger.exception("Full traceback:")
             QMessageBox.critical(None, "Error", f"Failed to start drawing: {str(e)}")
             self.draw_button.setChecked(False)
+            self.draw_button.setText("Start Drawing")
 
     def cleanup_previous_session(self):
         """Clean up temporary files and layers from previous session"""
@@ -1228,6 +1229,121 @@ class EasyEarthPlugin:
             self.logger.error(f"Error cleaning up previous session: {str(e)}")
             raise
 
+    def on_box_drawn(self, box_geom, start_point, end_point):
+        """Handle box drawing completion
+        Args:
+            box_geom (QgsGeometry): The drawn box geometry
+            start_point (QgsPointXY): The starting point of the box
+            end_point (QgsPointXY): The ending point of the box
+        """
+
+        # Check if the box is valid
+        if not box_geom.isGeosValid():
+            self.iface.messageBar().pushMessage(
+                "Error",
+                "Invalid box geometry",
+                level=Qgis.Critical,
+                duration=3
+            )
+            return
+
+        # Get raster layer information
+        extent, width, height, raster_crs = self.raster_extent, self.raster_width, self.raster_height, self.raster_crs
+
+        # Transform start and end points to raster CRS
+        if self.project_crs != raster_crs and raster_crs is not None:
+            transform = QgsCoordinateTransform(self.project_crs, raster_crs, QgsProject.instance())
+            start_point = transform.transform(start_point)
+            end_point = transform.transform(end_point)
+            # convert to box_geom
+            box_geom = QgsGeometry.fromPolygonXY([[
+                start_point,
+                QgsPointXY(end_point.x(), start_point.y()),
+                end_point,
+                QgsPointXY(start_point.x(), end_point.y()),
+                start_point
+            ]])
+
+        # Calculate pixel coordinates based on start and end points
+        pixel_x = int((start_point.x() - extent.xMinimum()) * width / extent.width())
+        pixel_y = int((extent.yMaximum() - start_point.y()) * height / extent.height())
+        pixel_width = int((end_point.x() - start_point.x()) * width / extent.width())
+        pixel_height = int((start_point.y() - end_point.y()) * height / extent.height())
+        # Ensure coordinates are within image bounds
+        pixel_x = max(0, min(pixel_x, width - 1))
+        pixel_y = max(0, min(pixel_y, height - 1))
+        pixel_width = max(0, min(pixel_width, width - pixel_x))
+        pixel_height = max(0, min(pixel_height, height - pixel_y))
+        # Ensure pixel width and height are positive
+        pixel_width = max(1, pixel_width)
+        pixel_height = max(1, pixel_height)
+
+        # Show message bar with box coordinates
+        self.iface.messageBar().pushMessage(
+            "Box Info",
+            f"Box coordinates sent to server: ({pixel_x}, {pixel_y}, {pixel_x + pixel_width}, {pixel_y + pixel_height})",
+            level=Qgis.Info,
+            duration=3
+        )
+
+        # Create prompt feature
+        feature = {
+            "type": "Feature",
+            "geometry": json.loads(box_geom.asJson()),
+            "properties": {
+                "id": self.prompt_count,
+                "type": "Box",
+                "pixel_x": pixel_x,
+                "pixel_y": pixel_y,
+                "pixel_width": pixel_width,
+                "pixel_height": pixel_height,
+                "timestamp": time.time()
+            }
+        }
+
+        # Add prompt feature to layer
+        self.add_features_to_layer([feature], "prompts")
+
+        # Increment prompt counter
+        self.prompt_count += 1
+
+        # Prepare prompt for server
+        prompt = [{
+            'type': 'Box',
+            'data': {
+                "boxes": [[
+                    pixel_x,
+                    pixel_y,
+                    pixel_x + pixel_width,
+                    pixel_y + pixel_height
+                ]],
+            }
+        }]
+
+        # Send prediction request if realtime checkbox is checked
+        if self.realtime_checkbox.isChecked():
+            self.get_prediction(prompt)
+
+        return box_geom
+
+    @staticmethod
+    def get_current_raster_info(raster_layer=None):
+        """Get current raster layer information for deriving pixel coordinates.
+        Returns:
+            tuple: extent, width, height of the raster layer
+        """
+
+        if not raster_layer:
+            raise ValueError("No raster layer found")
+
+        # Get raster dimensions and extent
+        extent = raster_layer.extent()
+        width = raster_layer.width()
+        height = raster_layer.height()
+        crs = raster_layer.crs()
+
+        return extent, width, height, crs
+
     def handle_draw_click(self, point, button):
         """Handle canvas clicks for drawing points or boxes
         Args:
@@ -1236,33 +1352,15 @@ class EasyEarthPlugin:
         """
         try:
             if not self.draw_button.isChecked() or button != Qt.LeftButton:
-                return
+                return None
 
             draw_type = self.draw_type_combo.currentText()
+            extent, width, height, raster_crs = self.raster_extent, self.raster_width, self.raster_height, self.raster_crs
 
-            # Get the raster layer
-            raster_layer = None
-            if self.source_combo.currentText() == "File":
-                # Check image path for File source
-                if not self.image_path.text():
-                    raise ValueError("No image selected")
-                # Find the raster layer by name "Selected Image"
-                for layer in QgsProject.instance().mapLayers().values():
-                    if isinstance(layer, QgsRasterLayer) and layer.name() == os.path.basename(self.image_path.text()):
-                        raster_layer = layer
-                        break
-            elif self.source_combo.currentText() == "Layer":
-                # Get layer directly from combo box for Layer source
-                layer_id = self.layer_combo.currentData()
-                raster_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
-
-            if not raster_layer:
-                raise ValueError("No raster layer found")
-
-            # Get raster dimensions and extent
-            extent = raster_layer.extent()
-            width = raster_layer.width()
-            height = raster_layer.height()
+            # Transform point to raster CRS if needed
+            if self.project_crs != raster_crs and raster_crs is not None:
+                transform = QgsCoordinateTransform(self.project_crs, raster_crs, QgsProject.instance())
+                point = transform.transform(point)
 
             if draw_type == "Point":
                 # Reset rubber band for each new point to prevent line creation
@@ -1297,7 +1395,9 @@ class EasyEarthPlugin:
                         "id": self.prompt_count if hasattr(self, 'prompt_count') else 1,
                         "type": "Point",
                         "pixel_x": px,
-                        "pixel_y": py
+                        "pixel_y": py,
+                        "pixel_width": 0,
+                        "pixel_height": 0,
                     }
                 }
 
@@ -1305,7 +1405,7 @@ class EasyEarthPlugin:
                 prompt_feature["properties"]["timestamp"] = time.time()
 
                 # Add prompt to layer
-                self.add_prompt_to_layer([prompt_feature])
+                self.add_features_to_layer([prompt_feature], "prompts")
 
                 # Increment prompt counter
                 self.prompt_count = getattr(self, 'prompt_count', 1) + 1
@@ -1321,92 +1421,14 @@ class EasyEarthPlugin:
 
                 if self.realtime_checkbox.isChecked():
                     self.get_prediction(prompt)
-
-            elif draw_type == "Box":
-                if not self.start_point:
-                    # Start drawing box
-                    self.start_point = point
-                    self.temp_rubber_band.reset(QgsWkbTypes.PolygonGeometry)
-                    self.temp_rubber_band.addPoint(point)
-
-                    # Show start point coordinates
-                    self.iface.messageBar().pushMessage(
-                        "Box Start Point",
-                        f"Start point - Map: ({point.x():.2f}, {point.y():.2f})",
-                        level=Qgis.Info,
-                        duration=3
-                    )
-                else:
-                    # TODO: to be verified and updated
-                    # Calculate pixel coordinates for start point
-                    start_px = int((self.start_point.x() - extent.xMinimum()) * width / extent.width())
-                    start_py = int((extent.yMaximum() - self.start_point.y()) * height / extent.height())
-
-                    # Calculate pixel coordinates for end point
-                    end_px = int((point.x() - extent.xMinimum()) * width / extent.width())
-                    end_py = int((extent.yMaximum() - point.y()) * height / extent.height())
-
-                    # Ensure coordinates are within image bounds
-                    start_px = max(0, min(start_px, width - 1))
-                    start_py = max(0, min(start_py, height - 1))
-                    end_px = max(0, min(end_px, width - 1))
-                    end_py = max(0, min(end_py, height - 1))
-
-                    # Show box coordinates
-                    self.iface.messageBar().pushMessage(
-                        "Box Info",
-                        f"Box coordinates sent to server: [{min(start_px, end_px)}, {min(start_py, end_py)}, "
-                        f"{max(start_px, end_px)}, {max(start_py, end_py)}]",
-                        level=Qgis.Info,
-                        duration=3
-                    )
-
-                    # Create box geometry for display
-                    box_geom = self.create_box_geometry(self.start_point, point)
-                    self.rubber_band.addGeometry(box_geom)
-
-                    # Prepare box prompt
-                    prompt = [{
-                        'type': 'Box',
-                        'data': {
-                            "boxes": [[
-                                min(start_px, end_px),
-                                min(start_py, end_py),
-                                max(start_px, end_px),
-                                max(start_py, end_py)
-                            ]]
-                        }
-                    }]
-
-                    if self.realtime_checkbox.isChecked():
-                        # Get prediction
-                        self.get_prediction(prompt)
-
-                    # Reset for next box
-                    self.temp_rubber_band.reset()
-                    self.start_point = None
+                return point
+            return None
 
         except Exception as e:
             self.logger.error(f"Error handling draw click: {str(e)}")
             self.logger.exception("Full traceback:")
             QMessageBox.critical(None, "Error", f"Failed to handle drawing: {str(e)}")
-
-    def create_box_geometry(self, start, end):
-        """Create a box geometry from two points
-        Args:
-            start: QgsPointXY start point
-            end: QgsPointXY end point
-        Returns:
-            QgsGeometry box geometry
-        """
-        points = [
-            QgsPointXY(start.x(), start.y()),
-            QgsPointXY(end.x(), start.y()),
-            QgsPointXY(end.x(), end.y()),
-            QgsPointXY(start.x(), end.y()),
-            QgsPointXY(start.x(), start.y())
-        ]
-        return QgsGeometry.fromPolygonXY([points])
+            return None
 
     def collect_all_prompts(self):
         """Collect new prompts added after the last_pred_time
@@ -1423,14 +1445,16 @@ class EasyEarthPlugin:
                     continue
 
                 prompt_type = feature['type']
-                geom = feature.geometry()
                 if prompt_type == 'Point':
                     x = feature['pixel_x']
                     y = feature['pixel_y']
                     prompts.append({'type': 'Point', 'data': {'points': [[x, y]]}}) # TODO: figure out labels for points, when used together with bounding boxes to remove part of the prediction masks
                 elif prompt_type == 'Box':
-                    poly = geom.asPolygon()
-                    prompts.append({'type': 'Box', 'data': {'boxes': [[int(poly[0][0].x()), int(poly[0][0].y()), int(poly[0][2].x()), int(poly[0][2].y())]]}})
+                    x1 = feature['pixel_x']
+                    y1 = feature['pixel_y']
+                    x2 = feature['pixel_x'] + feature['pixel_width']
+                    y2 = feature['pixel_y'] + feature['pixel_height']
+                    prompts.append({'type': 'Box', 'data': {'boxes': [[x1, y1, x2, y2]]}})
                 else:
                     self.logger.error(f"Unknown prompt type: {prompt_type}")
                     raise ValueError(f"Unknown prompt type: {prompt_type}")
@@ -1440,7 +1464,35 @@ class EasyEarthPlugin:
         """Run prediction: batch if prompts exist, else no-prompts prediction."""
         try:
             prompts = self.collect_all_prompts()  # Implement this to gather all drawn prompts
-            self.get_prediction(prompts)
+            # if there are boxes and points in the prompts, we need to run the prediction for both
+            if len(prompts) == 0:
+                self.iface.messageBar().pushMessage(
+                    "Info",
+                    "No prompts found. Please draw points or boxes.",
+                    level=Qgis.Info,
+                    duration=3
+                )
+                return
+            if len(prompts) > 0:
+                # Check if there are both points and boxes
+                has_points = any(p['type'] == 'Point' for p in prompts)
+                has_boxes = any(p['type'] == 'Box' for p in prompts)
+
+                if not (has_points and has_boxes):
+                    # Run prediction for all prompts if only one type is present
+                    self.get_prediction(prompts)
+                else:
+                    # Run prediction for points and boxes separately
+                    self.iface.messageBar().pushMessage(
+                        "Info",
+                        f"Running prediction for box and point prompts separatly.",
+                        level=Qgis.Info,
+                        duration=3
+                    )
+                    points = [p for p in prompts if p['type'] == 'Point']
+                    self.get_prediction(points)
+                    boxes = [p for p in prompts if p['type'] == 'Box']
+                    self.get_prediction(boxes)
             self.last_pred_time = time.time()  # Update last prediction time
         except Exception as e:
             self.logger.error(f"Error running prediction: {str(e)}")
@@ -1582,6 +1634,7 @@ class EasyEarthPlugin:
                             raise ValueError("Response missing 'features' field")
 
                         features = response_json['features']
+                        feature_crs = response_json.get('crs', None)
                         if not features:
                             self.iface.messageBar().pushMessage(
                                 "Warning",
@@ -1592,7 +1645,7 @@ class EasyEarthPlugin:
                             return
 
                         # Add the predictions to our layer
-                        self.add_predictions_to_layer(features)
+                        self.add_features_to_layer(features, "predictions", crs=feature_crs)
 
                     except json.JSONDecodeError as e:
                         raise ValueError(f"Invalid JSON response: {str(e)}")
@@ -1617,151 +1670,6 @@ class EasyEarthPlugin:
         finally:
             QApplication.restoreOverrideCursor()
 
-    def add_predictions_to_layer(self, features, properties=None):
-        """Add or append GeoJSON features to predictions layer"""
-        try:
-            if not features:
-                raise ValueError("No features to add")
-
-            # Check if layer is still valid
-            if hasattr(self, 'predictions_layer') and self.predictions_layer and not self.predictions_layer.isValid():
-                self.predictions_layer = None
-                self.predictions_geojson = None
-
-            raster_layer = None
-            # Get the raster layer for coordinate transformation
-            if self.source_combo.currentText() == "File":
-                for layer in QgsProject.instance().mapLayers().values():
-                    if isinstance(layer, QgsRasterLayer) and layer.name() == os.path.basename(self.image_path.text()):
-                        raster_layer = layer
-                        break
-            elif self.source_combo.currentText() == "Layer":
-                layer_id = self.layer_combo.currentData()
-                raster_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
-
-            if not raster_layer or not raster_layer.isValid():
-                raise ValueError("No raster layer found")
-
-            # Get raster extent and dimensions
-            extent = raster_layer.extent()
-            width = raster_layer.width()
-            height = raster_layer.height()
-
-            # Create coordinate transform if needed
-            raster_crs = raster_layer.crs()
-            project_crs = QgsProject.instance().crs()
-            transform = QgsCoordinateTransform(raster_crs, project_crs, QgsProject.instance())
-
-            # Convert features from pixel to map coordinates
-            for feature in features:
-                geom_json = feature.get('geometry')
-                if geom_json and geom_json['type'] == 'Polygon':
-                    map_coords = []
-                    for ring in geom_json['coordinates']:
-                        map_ring = []
-                        for pixel_coord in ring:
-                            # Convert pixel coordinates to map coordinates
-                            map_x = extent.xMinimum() + (pixel_coord[0] * extent.width() / width)
-                            map_y = extent.yMaximum() - (pixel_coord[1] * extent.height() / height)
-                            point = QgsPointXY(map_x, map_y)
-
-                            # Transform coordinates if needed
-                            if raster_crs != project_crs:
-                                point = transform.transform(point)
-
-                            map_ring.append(point)
-                        map_coords.append(map_ring)
-
-                    # Update geometry with transformed coordinates
-                    feature['geometry']['coordinates'] = [[(p.x(), p.y()) for p in ring] for ring in map_coords]
-
-            # If this is the first prediction, initialize everything
-            if not hasattr(self, 'predictions_geojson') or self.predictions_geojson is None:
-                # Initialize the GeoJSON structure
-                # TODO: add properties to the GeoJSON structure
-                self.predictions_geojson = {
-                    "type": "FeatureCollection",
-                    "features": [],
-                    "crs": {
-                        "type": "name",
-                        "properties": {
-                            "name": QgsProject.instance().crs().authid()
-                        }
-                    }
-                }
-
-                # Add all new features with properties
-                for i, feat in enumerate(features):
-                    feature = {
-                        "type": "Feature",
-                        "properties": {
-                            "id": self.feature_count + i if hasattr(self, 'feature_count') else i + 1,
-                            "scores": feat.get('properties', {}).get('scores', 0),
-                        },
-                        "geometry": feat['geometry']
-                    }
-                    self.predictions_geojson["features"].append(feature)
-
-                # Write initial GeoJSON file
-                with open(self.temp_predictions_geojson, 'w') as f:
-                    json.dump(self.predictions_geojson, f)
-
-                # Verify file contents
-                self.logger.debug(f"Written GeoJSON content: {json.dumps(self.predictions_geojson, indent=2)}")
-
-                # Create new layer from this file
-                self.predictions_layer = QgsVectorLayer(
-                    self.temp_predictions_geojson,
-                    "SAM Predictions",
-                    "ogr"
-                )
-
-                if not self.predictions_layer.isValid():
-                    raise ValueError("Failed to create valid vector layer")
-
-                # Add to project
-                QgsProject.instance().addMapLayer(self.predictions_layer)
-
-                # Apply styling
-                self.style_predictions_layer(self.predictions_layer)
-
-                self.logger.debug(f"Initial layer feature count: {self.predictions_layer.featureCount()}")
-            else:
-                # Append new features to existing GeoJSON
-                self.predictions_geojson['features'].extend(features)
-
-                # Write updated GeoJSON
-                with open(self.temp_predictions_geojson, 'w') as f:
-                    json.dump(self.predictions_geojson, f, indent=2)
-
-                # Check if layer is still in project
-                if self.predictions_layer and QgsProject.instance().mapLayer(self.predictions_layer.id()):
-                    self.predictions_layer.dataProvider().reloadData()
-                    self.predictions_layer.updateExtents()
-                    self.predictions_layer.triggerRepaint()
-                else:
-                    # Recreate layer if it was removed
-                    self.predictions_layer = QgsVectorLayer(
-                        self.temp_predictions_geojson,
-                        "SAM Predictions",
-                        "ogr"
-                    )
-                    QgsProject.instance().addMapLayer(self.predictions_layer)
-                    self.style_predictions_layer(self.predictions_layer)
-
-            # Update canvas
-            self.iface.mapCanvas().refresh()
-
-            # Verify feature count
-            actual_count = self.predictions_layer.featureCount()
-            expected_count = len(self.predictions_geojson['features'])
-            self.logger.debug(f"Layer feature count: {actual_count} (added: {expected_count})")
-
-        except Exception as e:
-            self.logger.error(f"Error adding predictions: {str(e)}")
-            self.logger.exception("Full traceback:")
-            QMessageBox.critical(None, "Error", f"Failed to add predictions: {str(e)}")
-
     def count_docker_steps(self):
         """Count the total number of steps in docker-compose and Dockerfile"""
         try:
@@ -1772,7 +1680,6 @@ class EasyEarthPlugin:
                 self.progress_bar.setMaximum(self.total_steps)
                 return
 
-            compose_path = os.path.join(self.plugin_dir, 'docker-compose.yml')
             dockerfile_path = os.path.join(self.plugin_dir, 'Dockerfile')
 
             steps = 0
@@ -1947,9 +1854,17 @@ class EasyEarthPlugin:
         try:
             self.logger.debug(f"Draw type changed to: {draw_type}")
             if self.draw_button.isChecked():
-                # If currently drawing, restart with new type
-                self.draw_button.setChecked(False)
-                self.toggle_drawing(True)
+                # Switch map tool based on draw type
+                if draw_type == "Point":
+                    self.canvas.setMapTool(self.map_tool)
+                elif draw_type == "Box":
+                    self.canvas.setMapTool(self.box_tool)
+                else:
+                    self.canvas.unsetMapTool(self.map_tool)
+                    self.canvas.unsetMapTool(self.box_tool)
+            else:
+                self.canvas.unsetMapTool(self.map_tool)
+                self.canvas.unsetMapTool(self.box_tool)
         except Exception as e:
             self.logger.error(f"Error in draw type change: {str(e)}")
 
@@ -1957,7 +1872,6 @@ class EasyEarthPlugin:
         """Initialize or load data directory configuration"""
         try:
             settings = QSettings()
-            data_dir = settings.value("easyearth/data_dir")
             default_data_dir = os.path.join(self.plugin_dir, 'user')
 
             # Create custom dialog for directory choice
@@ -2112,14 +2026,27 @@ class EasyEarthPlugin:
                 if not selected_layer:
                     return
 
+                # Get image crs and extent
+                self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(selected_layer)
+                msg = (
+                    f"Extent: X min: {self.raster_extent.xMinimum()}, X max: {self.raster_extent.xMaximum()}, "
+                    f"Y min: {self.raster_extent.yMinimum()}, Y max: {self.raster_extent.yMaximum()}; "
+                    f"Width: {self.raster_width}; "
+                    f"Height: {self.raster_height}; "
+                    f"CRS: {self.raster_crs.authid()}"
+                )
+                self.iface.messageBar().pushMessage(
+                    "Selected raster CRS and dimensions",
+                    msg,
+                    level=Qgis.Info,
+                    duration=5
+                )
+
                 # Create prediction layers
                 self.create_prediction_layers()
 
                 # Check for existing embedding
                 layer_source = selected_layer.source()
-
-                # Update the image path according to the source of the selected layer
-                self.image_path.setText(selected_layer.source())
 
                 image_name = os.path.splitext(os.path.basename(layer_source))[0]
                 self.update_embeddings(image_name)
@@ -2129,10 +2056,55 @@ class EasyEarthPlugin:
             self.logger.exception("Full traceback:")
             QMessageBox.critical(None, "Error", f"Failed to handle layer selection: {str(e)}")
 
+    def on_download_button_clicked(self):
+        """Download image from URL and switch to File mode."""
+        try:
+            image_url = self.image_path.text().strip()
+            if not (image_url.startswith("http://") or image_url.startswith("https://")):
+                QMessageBox.warning(None, "Error", "Please enter a valid image URL.")
+                return
+
+            self.progress_bar.setValue(0)
+            self.progress_bar.setMaximum(100)
+            self.progress_bar.show()
+            self.progress_status.setText("Downloading image...")
+            self.progress_status.show()
+
+            local_filename = os.path.basename(image_url.split("?")[0])
+            save_path = os.path.join(self.data_dir, local_filename)
+            response = requests.get(image_url, stream=True)
+            total = int(response.headers.get('content-length', 0))
+            downloaded = 0
+            with open(save_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total > 0:
+                            percent = int(downloaded * 100 / total)
+                            self.progress_bar.setValue(percent)
+                            QApplication.processEvents()
+            self.progress_bar.hide()
+            self.progress_status.hide()
+
+            # Switch to File mode and update path
+            self.source_combo.setCurrentText("File")
+            self.image_path.setText(save_path)
+            self.load_image()
+        except Exception as e:
+            self.logger.error(f"Error downloading image: {str(e)}")
+            QMessageBox.critical(None, "Error", f"Failed to download image: {str(e)}")
+
     def on_image_path_entered(self):
         """Handle manual entry of image path."""
         try:
             image_path = self.image_path.text().strip()
+
+            if image_path.startswith("http://") or image_path.startswith("https://"):
+                # If the path is a URL, download the image
+                self.on_download_button_clicked()
+                return
+
             if not image_path or not os.path.exists(image_path):
                 QMessageBox.warning(None, "Error", f"Image file not found: {image_path}")
                 return
@@ -2143,6 +2115,7 @@ class EasyEarthPlugin:
                 return
 
             self.load_image()
+
         except Exception as e:
             self.logger.error(f"Error processing entered image path: {str(e)}")
             QMessageBox.critical(None, "Error", f"Failed to load image: {str(e)}")
@@ -2158,81 +2131,162 @@ class EasyEarthPlugin:
             return False
         return True
 
-    def add_prompt_to_layer(self, features):
-        """Add or append prompt features to prompts layer"""
+    def add_features_to_layer(self, features, layer_type='prompts', crs=None):
+        """
+        Add or append features to the specified layer (prompts or predictions).
+        Args:
+            features: list of GeoJSON features
+            layer_type: 'prompts' or 'predictions'
+            crs: coordinate reference system for the features
+        """
         try:
             if not features:
                 raise ValueError("No features to add")
 
-            self.logger.debug(f"Incoming prompt features: {json.dumps(features, indent=2)}")
+            extent, width, height, raster_crs = self.raster_extent, self.raster_width, self.raster_height, self.raster_crs
 
-            # If this is the first prompt, initialize everything
-            if not hasattr(self, 'prompts_geojson') or self.prompts_geojson is None:
-                # Initialize the GeoJSON structure
-                self.prompts_geojson = {
+            # Set up layer-specific variables
+            if layer_type == 'prompts':
+                geojson_attr = 'prompts_geojson'
+                temp_geojson = self.temp_prompts_geojson
+                layer_attr = 'prompts_layer'
+                layer_name = "Drawing Prompts"
+                style_func = self.style_prompts_layer
+                # Ensure 'type' property for styling
+                for feat in features:
+                    if 'properties' not in feat:
+                        feat['properties'] = {}
+                    if 'type' not in feat['properties']:
+                        geom_type = feat.get('geometry', {}).get('type', '')
+                        feat['properties']['type'] = 'Point' if geom_type == 'Point' else 'Box' if geom_type == 'Polygon' else 'Unknown'
+
+                # convert project crs to raster crs
+                transform = QgsCoordinateTransform(self.project_crs, raster_crs, QgsProject.instance())
+                if self.project_crs != raster_crs:
+                    self.iface.messageBar().pushMessage(
+                        "Warning",
+                        f"Project CRS ({self.project_crs.authid()}) does not match raster CRS ({raster_crs.authid()}). "
+                        "Transforming prompts crs to match raster CRS.",
+                        level=Qgis.Warning,
+                        duration=5
+                    )
+                    for feature in features:
+                        geom_json = feature.get('geometry')
+                        if geom_json and geom_json['type'] == 'Polygon':
+                            map_coords = []
+                            for ring in geom_json['coordinates']:
+                                map_ring = []
+                                for map_x, map_y in ring:
+                                    point = QgsPointXY(map_x, map_y)
+                                    point = transform.transform(point)
+                                    map_ring.append(point)
+                                map_coords.append(map_ring)
+                            feature['geometry']['coordinates'] = [[(p.x(), p.y()) for p in ring] for ring in map_coords]
+                        if geom_json and geom_json['type'] == 'Point':
+                            map_x, map_y = geom_json['coordinates']
+                            point = QgsPointXY(map_x, map_y)
+                            point = transform.transform(point)
+                            feature['geometry']['coordinates'] = [point.x(), point.y()]
+
+            elif layer_type == 'predictions':
+                geojson_attr = 'predictions_geojson'
+                temp_geojson = self.temp_predictions_geojson
+                layer_attr = 'predictions_layer'
+                layer_name = "SAM Predictions"
+                style_func = self.style_predictions_layer
+
+                # Assign unique ids
+                if not hasattr(self, 'feature_count'):
+                    self.feature_count = 0
+                start_id = self.feature_count
+                features = [{
+                    "type": "Feature",
+                    "properties": {
+                        "id": start_id + i,
+                        "scores": feat.get('properties', {}).get('scores', 0),
+                    },
+                    "geometry": feat['geometry']
+                } for i, feat in enumerate(features)]
+                self.feature_count += len(features)
+
+                # TODO: fix no coordinate system input impact to 4326
+                # Transform pixel to map coordinates for polygons if feature_crs is None
+                if crs is None:
+                    # Transform pixel coordinates to map coordinates
+                    self.iface.messageBar().pushMessage(
+                        "Warning",
+                        f"Prediction CRS is None. Transforming pixel coordinates to project coordinates.",
+                        level=Qgis.Warning,
+                        duration=5
+                    )
+                    transform = QgsCoordinateTransform(raster_crs, self.project_crs, QgsProject.instance())
+                    for feature in features:
+                        geom_json = feature.get('geometry')
+                        if geom_json and geom_json['type'] == 'Polygon':
+                            map_coords = []
+                            for ring in geom_json['coordinates']:
+                                map_ring = []
+                                for pixel_coord in ring:
+                                    map_x = extent.xMinimum() + (pixel_coord[0] * extent.width() / width)
+                                    map_y = extent.yMaximum() - (pixel_coord[1] * extent.height() / height)
+                                    point = QgsPointXY(map_x, map_y)
+                                    point = transform.transform(point)
+                                    map_ring.append(point)
+                                map_coords.append(map_ring)
+                            feature['geometry']['coordinates'] = [[(p.x(), p.y()) for p in ring] for ring in map_coords]
+
+            else:
+                raise ValueError("Invalid layer_type")
+
+            # Prepare or update GeoJSON
+            geojson = getattr(self, geojson_attr, None)
+            if not geojson:
+                geojson = {
                     "type": "FeatureCollection",
+                    "features": features,
                     "crs": {
                         "type": "name",
                         "properties": {
-                            "name": QgsProject.instance().crs().authid()
+                            "name": self.raster_crs.authid()
                         }
-                    },
-                    "features": []  # Start with empty features list
+                    }
                 }
-
-                # Add the new features
-                self.prompts_geojson['features'] = features
-
-                # Write initial GeoJSON file
-                with open(self.temp_prompts_geojson, 'w') as f:
-                    json.dump(self.prompts_geojson, f)
-
-                # Verify file contents
-                self.logger.debug(f"Written GeoJSON content: {json.dumps(self.prompts_geojson, indent=2)}")
-
-                # Create new layer from this file
-                self.prompts_layer = QgsVectorLayer(
-                    self.temp_prompts_geojson,
-                    "Drawing Prompts",
-                    "ogr"
-                )
-
-                if not self.prompts_layer.isValid():
-                    raise ValueError("Failed to create valid vector layer")
-
-                # Add to project
-                QgsProject.instance().addMapLayer(self.prompts_layer)
-
-                # Apply styling
-                self.style_prompts_layer(self.prompts_layer)
-
-                self.logger.debug(f"Initial layer feature count: {self.prompts_layer.featureCount()}")
-
             else:
-                # Append new features to existing GeoJSON
-                self.prompts_geojson['features'].extend(features)
+                geojson['features'].extend(features)
+            setattr(self, geojson_attr, geojson)
 
-                # Write updated GeoJSON
-                with open(self.temp_prompts_geojson, 'w') as f:
-                    json.dump(self.prompts_geojson, f)
+            # Write GeoJSON file
+            with open(temp_geojson, 'w') as f:
+                json.dump(geojson, f)
 
-                # Verify file contents
-                self.logger.debug(f"Updated GeoJSON content: {json.dumps(self.prompts_geojson, indent=2)}")
+            # Create or update layer
+            layer = getattr(self, layer_attr, None)
+            if not layer:
+                layer = QgsVectorLayer(temp_geojson, layer_name, "ogr")
+                layer.setCrs(self.raster_crs)
+                layer.setExtent(self.raster_extent)
 
-                # Reload the layer
-                self.prompts_layer.dataProvider().reloadData()
-                self.prompts_layer.updateExtents()
-                self.prompts_layer.triggerRepaint()
+                if not layer.isValid():
+                    raise ValueError("Failed to create valid vector layer")
+                QgsProject.instance().addMapLayer(layer)
+                setattr(self, layer_attr, layer)
+            else:
+                layer.dataProvider().reloadData()
+                layer.updateExtents()
+                layer.triggerRepaint()
 
-            # Update canvas
+            # Apply styling
+            style_func(layer)
+
+            # Refresh canvas
             self.iface.mapCanvas().refresh()
 
-            # Verify feature count
-            actual_count = self.prompts_layer.featureCount()
-            expected_count = len(self.prompts_geojson['features'])
-            self.logger.debug(f"Layer feature count: {actual_count} (added: {expected_count})")
+            # Log feature count
+            actual_count = layer.featureCount()
+            expected_count = len(geojson['features'])
+            self.logger.info(f"{layer_name} feature count: {actual_count} (added: {expected_count})")
 
         except Exception as e:
-            self.logger.error(f"Error adding prompts: {str(e)}")
+            self.logger.error(f"Error adding {layer_type}: {str(e)}")
             self.logger.exception("Full traceback:")
-            QMessageBox.critical(None, "Error", f"Failed to add prompts: {str(e)}")
+            QMessageBox.critical(None, "Error", f"Failed to add {layer_type}: {str(e)}")

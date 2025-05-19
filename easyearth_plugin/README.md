@@ -101,6 +101,14 @@ curl -X POST http://127.0.0.1:3781/v1/easyearth/sam-predict -H "Content-Type: ap
   ]            
 }'
 ```
+
+## Table of supported models (continue adding more models...)
+| Model Name | Description | Prompt Type | Prompt Data |
+|------------|-------------|-------------|-------------|
+| sam | Segment Anything Model | Point | [[x, y], [x, y], ...] |
+| sam | Segment Anything Model | Box | [[x1, y1], [x2, y2]] |
+
+
 ### Use models with no prompts
 Call other segmentation models with out prompt engineering
 ```bash
