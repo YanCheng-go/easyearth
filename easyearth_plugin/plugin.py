@@ -1,6 +1,15 @@
 # TODO: split into multiple files, plugin.py, docker_manager.py, ui.py, layer_manager.py, prediction.py, utils.py
 # TODO: allow scrapping from wms file...
 # TODO: add function for converting local models to hugging face models
+# TODO: allow loading multiple images, create a prompt layer and a prediction layer for each image... zoom to layers to draw on and run prediction on...good for multiple images over the same location - timeseries
+
+# TODO: handle situations when regretting the drawing, and refine the predictions, editing
+# TODO: incorporate SAM2, text prompt
+# TODO: models with no prompts
+# TODO: test for windows and macbook
+# TODO: ease the incorporation of more models
+
+"""Entry point for the QGIS plugin. Handles plugin registration, menu/toolbar actions, and high-level coordination."""
 
 from qgis.PyQt.QtWidgets import (QAction, QDockWidget, QPushButton, QVBoxLayout,
                                 QWidget, QMessageBox, QLabel, QHBoxLayout,
