@@ -1256,7 +1256,7 @@ class EasyEarthPlugin:
         }
 
         # Add prompt feature to layer
-        self.add_prompt_to_layer([feature])
+        self.add_features_to_layer([feature], "prompts")
 
         # Increment prompt counter
         self.prompt_count += 1
