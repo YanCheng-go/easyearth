@@ -1625,7 +1625,7 @@ class EasyEarthPlugin:
                             raise ValueError("Response missing 'features' field")
 
                         features = response_json['features']
-                        feature_crs = response_json.get('source_crs', None)
+                        feature_crs = response_json.get('crs', None)
                         if not features:
                             self.iface.messageBar().pushMessage(
                                 "Warning",
@@ -2134,6 +2134,8 @@ class EasyEarthPlugin:
             if not features:
                 raise ValueError("No features to add")
 
+            extent, width, height, raster_crs = self.raster_extent, self.raster_width, self.raster_height, self.raster_crs
+
             # Set up layer-specific variables
             if layer_type == 'prompts':
                 geojson_attr = 'prompts_geojson'
@@ -2148,6 +2150,35 @@ class EasyEarthPlugin:
                     if 'type' not in feat['properties']:
                         geom_type = feat.get('geometry', {}).get('type', '')
                         feat['properties']['type'] = 'Point' if geom_type == 'Point' else 'Box' if geom_type == 'Polygon' else 'Unknown'
+
+                # convert project crs to raster crs
+                transform = QgsCoordinateTransform(self.project_crs, raster_crs, QgsProject.instance())
+                if self.project_crs != raster_crs:
+                    self.iface.messageBar().pushMessage(
+                        "Warning",
+                        f"Project CRS ({self.project_crs.authid()}) does not match raster CRS ({raster_crs.authid()}). "
+                        "Transforming prompts crs to match raster CRS.",
+                        level=Qgis.Warning,
+                        duration=5
+                    )
+                    for feature in features:
+                        geom_json = feature.get('geometry')
+                        if geom_json and geom_json['type'] == 'Polygon':
+                            map_coords = []
+                            for ring in geom_json['coordinates']:
+                                map_ring = []
+                                for map_x, map_y in ring:
+                                    point = QgsPointXY(map_x, map_y)
+                                    point = transform.transform(point)
+                                    map_ring.append(point)
+                                map_coords.append(map_ring)
+                            feature['geometry']['coordinates'] = [[(p.x(), p.y()) for p in ring] for ring in map_coords]
+                        if geom_json and geom_json['type'] == 'Point':
+                            map_x, map_y = geom_json['coordinates']
+                            point = QgsPointXY(map_x, map_y)
+                            point = transform.transform(point)
+                            feature['geometry']['coordinates'] = [point.x(), point.y()]
+
             elif layer_type == 'predictions':
                 geojson_attr = 'predictions_geojson'
                 temp_geojson = self.temp_predictions_geojson
@@ -2168,6 +2199,33 @@ class EasyEarthPlugin:
                     "geometry": feat['geometry']
                 } for i, feat in enumerate(features)]
                 self.feature_count += len(features)
+
+                # TODO: fix no coordinate system input impact to 4326
+                # Transform pixel to map coordinates for polygons if feature_crs is None
+                if crs is None:
+                    # Transform pixel coordinates to map coordinates
+                    self.iface.messageBar().pushMessage(
+                        "Warning",
+                        f"Prediction CRS is None. Transforming pixel coordinates to project coordinates.",
+                        level=Qgis.Warning,
+                        duration=5
+                    )
+                    transform = QgsCoordinateTransform(raster_crs, self.project_crs, QgsProject.instance())
+                    for feature in features:
+                        geom_json = feature.get('geometry')
+                        if geom_json and geom_json['type'] == 'Polygon':
+                            map_coords = []
+                            for ring in geom_json['coordinates']:
+                                map_ring = []
+                                for pixel_coord in ring:
+                                    map_x = extent.xMinimum() + (pixel_coord[0] * extent.width() / width)
+                                    map_y = extent.yMaximum() - (pixel_coord[1] * extent.height() / height)
+                                    point = QgsPointXY(map_x, map_y)
+                                    point = transform.transform(point)
+                                    map_ring.append(point)
+                                map_coords.append(map_ring)
+                            feature['geometry']['coordinates'] = [[(p.x(), p.y()) for p in ring] for ring in map_coords]
+
             else:
                 raise ValueError("Invalid layer_type")
 
@@ -2180,7 +2238,7 @@ class EasyEarthPlugin:
                     "crs": {
                         "type": "name",
                         "properties": {
-                            "name": self.project_crs.authid() if layer_type == 'prompts' else self.raster_crs.authid()
+                            "name": self.raster_crs.authid()
                         }
                     }
                 }
@@ -2196,6 +2254,9 @@ class EasyEarthPlugin:
             layer = getattr(self, layer_attr, None)
             if not layer:
                 layer = QgsVectorLayer(temp_geojson, layer_name, "ogr")
+                layer.setCrs(self.raster_crs)
+                layer.setExtent(self.raster_extent)
+
                 if not layer.isValid():
                     raise ValueError("Failed to create valid vector layer")
                 QgsProject.instance().addMapLayer(layer)
