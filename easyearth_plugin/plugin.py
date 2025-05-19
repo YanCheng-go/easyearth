@@ -14,17 +14,10 @@ from qgis.core import (QgsVectorLayer, QgsFeature, QgsGeometry, QgsPolygon,
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
 import os
 import requests
-import base64
-from PIL import Image
-import io
-import numpy as np
 import subprocess
-import signal
 import time
 import logging
-import shutil
 import tempfile
-import sys
 import yaml
 import json
 from datetime import datetime
@@ -91,6 +84,7 @@ class EasyEarthPlugin:
         self.drawn_layer = None
         self.temp_geojson_path = os.path.join(tempfile.gettempdir(), 'drawn_features.geojson')
         self.feature_count = 0  # For generating unique IDs
+        self.prompt_count = 0  # For generating unique IDs
         self.temp_prompts_geojson = None
         self.temp_predictions_geojson = None
         self.real_time_prediction = False
@@ -117,6 +111,8 @@ class EasyEarthPlugin:
         self.start_point = None
         self.predictions_geojson = None
         self.predictions_layer = None
+        self.prompts_geojson = None
+        self.prompts_layer = None
 
         # Initialize data directory
         self.data_dir = self.plugin_dir + '/user'
@@ -670,8 +666,7 @@ class EasyEarthPlugin:
             QgsProject.instance().addMapLayer(raster_layer)
 
             # Get image crs and extent
-            self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(
-                raster_layer)
+            self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(raster_layer)
             msg = (
                 f"Extent: X min: {self.raster_extent.xMinimum()}, X max: {self.raster_extent.xMaximum()}, "
                 f"Y min: {self.raster_extent.yMinimum()}, Y max: {self.raster_extent.yMaximum()}; "
@@ -914,7 +909,6 @@ class EasyEarthPlugin:
             self.logger.debug(f"Container status: '{container_status}'")
 
             # TODO: read mount information if the container is started outside QGIS
-
             if container_status and 'Up' in container_status:
                 self.logger.info(f"Container is running with status: {container_status}")
                 # Update UI and state
@@ -928,7 +922,7 @@ class EasyEarthPlugin:
         except Exception as e:
             self.logger.error(f"Error checking container status: {str(e)}")
             self.logger.exception("Full traceback:")
-            return False
+            self.docker_running = False
 
     def toggle_docker(self):
         """Toggle Docker container state"""
@@ -1059,7 +1053,7 @@ class EasyEarthPlugin:
         self.logger.debug(f"Docker output: {output}")
         self._process_docker_output(output)
 
-    def on_docker_finished(self, exit_code, exit_status):
+    def on_docker_finished(self, exit_code):
         """Handle Docker process completion"""
         try:
             if exit_code == 0:
@@ -1144,8 +1138,8 @@ class EasyEarthPlugin:
                 elif self.draw_type_combo.currentText() == "Box":
                     self.canvas.setMapTool(self.box_tool)
                 else:
-                    self.unsetmaptool(self.map_tool)
-                    self.unsetmaptool(self.box_tool)
+                    self.unsetMapTool(self.map_tool)
+                    self.unsetMapTool(self.box_tool)
 
                 self.logger.info("Drawing session started successfully")
 
@@ -1280,7 +1274,8 @@ class EasyEarthPlugin:
 
         return box_geom
 
-    def get_current_raster_info(self, raster_layer=None):
+    @staticmethod
+    def get_current_raster_info(raster_layer=None):
         """Get current raster layer information for deriving pixel coordinates.
         Returns:
             tuple: extent, width, height of the raster layer
@@ -1305,7 +1300,7 @@ class EasyEarthPlugin:
         """
         try:
             if not self.draw_button.isChecked() or button != Qt.LeftButton:
-                return
+                return None
 
             draw_type = self.draw_type_combo.currentText()
 
@@ -1371,13 +1366,13 @@ class EasyEarthPlugin:
                 if self.realtime_checkbox.isChecked():
                     self.get_prediction(prompt)
                 return point
-            else:
-                pass
+            return None
 
         except Exception as e:
             self.logger.error(f"Error handling draw click: {str(e)}")
             self.logger.exception("Full traceback:")
             QMessageBox.critical(None, "Error", f"Failed to handle drawing: {str(e)}")
+            return None
 
     def collect_all_prompts(self):
         """Collect new prompts added after the last_pred_time
@@ -1394,7 +1389,6 @@ class EasyEarthPlugin:
                     continue
 
                 prompt_type = feature['type']
-                geom = feature.geometry()
                 if prompt_type == 'Point':
                     x = feature['pixel_x']
                     y = feature['pixel_y']
@@ -1629,7 +1623,6 @@ class EasyEarthPlugin:
                 self.progress_bar.setMaximum(self.total_steps)
                 return
 
-            compose_path = os.path.join(self.plugin_dir, 'docker-compose.yml')
             dockerfile_path = os.path.join(self.plugin_dir, 'Dockerfile')
 
             steps = 0
@@ -1822,7 +1815,6 @@ class EasyEarthPlugin:
         """Initialize or load data directory configuration"""
         try:
             settings = QSettings()
-            data_dir = settings.value("easyearth/data_dir")
             default_data_dir = os.path.join(self.plugin_dir, 'user')
 
             # Create custom dialog for directory choice
@@ -2037,13 +2029,12 @@ class EasyEarthPlugin:
             return False
         return True
 
-    def add_features_to_layer(self, features, layer_type='prompts', properties=None):
+    def add_features_to_layer(self, features, layer_type='prompts'):
         """
         Add or append features to the specified layer (prompts or predictions).
         Args:
             features: list of GeoJSON features
             layer_type: 'prompts' or 'predictions'
-            properties: optional properties for predictions
         """
         try:
             if not features:
