@@ -1153,6 +1153,14 @@ class EasyEarthPlugin:
 
                 self.draw_button.setText("Stop Drawing")
 
+                if self.draw_type_combo.currentText() == "Point":
+                        self.canvas.setMapTool(self.map_tool)
+                elif self.draw_type_combo.currentText() == "Box":
+                    self.canvas.setMapTool(self.box_tool)
+                else:
+                    self.unsetmaptool(self.map_tool)
+                    self.unsetmaptool(self.box_tool)
+
                 self.logger.info("Drawing session started successfully")
 
             else:
@@ -1954,14 +1962,14 @@ class EasyEarthPlugin:
         try:
             self.logger.debug(f"Draw type changed to: {draw_type}")
             if self.draw_button.isChecked():
-                # If currently drawing, restart with new type
-                self.draw_button.setChecked(False)
-                self.draw_button.setText("Start Drawing")
-            # Switch map tool based on draw type
-            if draw_type == "Point":
-                self.canvas.setMapTool(self.map_tool)
-            elif draw_type == "Box":
-                self.canvas.setMapTool(self.box_tool)
+                # Switch map tool based on draw type
+                if draw_type == "Point":
+                    self.canvas.setMapTool(self.map_tool)
+                elif draw_type == "Box":
+                    self.canvas.setMapTool(self.box_tool)
+                else:
+                    self.canvas.unsetMapTool(self.map_tool)
+                    self.canvas.unsetMapTool(self.box_tool)
             else:
                 self.canvas.unsetMapTool(self.map_tool)
                 self.canvas.unsetMapTool(self.box_tool)
