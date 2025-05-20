@@ -64,6 +64,10 @@ class EasyEarthPlugin:
         self.image_name = f"{self.project_name}_{self.service_name}"
         self.sudo_password = None  # Add this to store password temporarily
 
+        # For docker images from docker hub
+        self.docker_hub_image_name = "maverickmiaow/easyearth"
+        self.docker_run_cmd = None
+
         # Initialize map tools and data
         self.canvas = iface.mapCanvas()
         self.point_tool = None
@@ -195,6 +199,27 @@ class EasyEarthPlugin:
             # Create main widget and layout
             main_widget = QWidget()
             main_layout = QVBoxLayout()
+
+            # --- Docker Run (Manual) Group ---
+            docker_run_group = QGroupBox("Docker Run (Manual)")
+            docker_run_layout = QVBoxLayout()
+            # Data folder selection
+            data_folder_layout = QHBoxLayout()
+            self.data_folder_edit = QLineEdit(self.data_dir)
+            self.data_folder_edit.setReadOnly(False)
+            self.data_folder_btn = QPushButton("Select Folder")
+            self.data_folder_btn.clicked.connect(self.select_data_folder)
+            data_folder_layout.addWidget(QLabel("Data Folder:"))
+            data_folder_layout.addWidget(self.data_folder_edit)
+            data_folder_layout.addWidget(self.data_folder_btn)
+            docker_run_layout.addLayout(data_folder_layout)
+            # Run/Stop docker button
+            self.docker_run_btn = QPushButton("Run Container")
+            self.docker_run_btn.clicked.connect(self.run_or_stop_container)
+            docker_run_layout.addWidget(self.docker_run_btn)
+            # Add docker to layout
+            docker_run_group.setLayout(docker_run_layout)
+            main_layout.addWidget(docker_run_group)
 
             # 1. Docker Control Group
             docker_group = QGroupBox("Docker Control")
@@ -443,6 +468,77 @@ class EasyEarthPlugin:
         except Exception as e:
             self.logger.error(f"Error in initGui: {str(e)}")
             self.logger.exception("Full traceback:")
+
+    def update_docker_run_command(self):
+        """Update the docker run command based on the current data_dir."""
+        data_dir = self.data_dir or "./data"
+        tmp_dir = os.path.join(self.plugin_dir, 'tmp')
+        logs_dir = os.path.join(self.plugin_dir, 'logs')
+        cache_dir = os.path.expandvars("$HOME/.cache/easyearth/models")
+        self.docker_run_cmd = (
+            f"sudo docker pull {self.docker_hub_image_name} && "
+            f"sudo docker run -d --name easyearth-container -p 3781:3781 "
+            f"-v {data_dir}:/usr/src/app/data "
+            f"-v {tmp_dir}:/usr/src/app/tmp "
+            f"-v {logs_dir}:/usr/src/app/logs "
+            f"-v {cache_dir}:/usr/src/app/.cache/models "
+            f"{self.docker_hub_image_name}"
+        )
+
+    def select_data_folder(self):
+        folder = QFileDialog.getExistingDirectory(None, "Select Data Folder", self.data_folder_edit.text())
+        if folder:
+            self.data_folder_edit.setText(folder)
+            self.data_dir = folder
+            self.update_docker_run_command()
+        self.iface.messageBar().pushMessage(
+            "Info",
+            f"Data folder set to: {self.data_dir}",
+            level=Qgis.Info,
+            duration=5
+        )
+
+    def run_or_stop_container(self):
+        if not self.docker_running:
+            # Start container
+            self.data_folder_edit.setReadOnly(True)
+            self.data_folder_btn.setEnabled(False)
+            self.docker_run_btn.setText("Stop Docker")
+            self.start_docker_container()
+        else:
+            # Stop container
+            self.stop_docker_container()
+            self.data_folder_edit.setReadOnly(False)
+            self.data_folder_btn.setEnabled(True)
+            self.docker_run_btn.setText("Run Docker")
+
+    def start_docker_container(self):
+        self.update_docker_run_command()  # Ensure command is set
+        if not self.docker_run_cmd:
+            QMessageBox.critical(None, "Error", "Docker run command is not set.")
+            return
+        self.iface.messageBar().pushMessage(
+            "Info",
+            f"Starting Docker container...\nRunning command: {self.docker_run_cmd}",
+            level=Qgis.Info,
+            duration=5
+        )
+        # Store the process so it can be managed later
+        result = subprocess.run(self.docker_run_cmd.replace("sudo ", ""), capture_output=True, text=True, shell=True)
+        self.docker_running = True
+
+    def stop_docker_container(self):
+        result = subprocess.run("docker stop easyearth-container && docker rm easyearth-container",
+                                capture_output=True, text=True, shell=True)
+        self.iface.messageBar().pushMessage(
+            "Info",
+            f"Stopping Docker container...\nRunning command: {result}",
+            level=Qgis.Info,
+            duration=5
+        )
+
+        self.docker_hub_process = None
+        self.docker_running = False
 
     def on_project_crs_changed(self):
         """Update the cached project CRS when the project CRS changes."""
@@ -1793,14 +1889,21 @@ class EasyEarthPlugin:
                 self.docker_running = True
                 self.docker_status.setText("Running")
                 self.docker_button.setText("Stop Docker")
+
+                # TODO: need to first check which image is running, then when click stop docker, stop the right one...
+                self.docker_run_btn.setText("Stop Docker")
             else:
                 self.server_status.setText("Error")
                 self.server_status.setStyleSheet("color: red;")
                 self.server_running = False
+
+                # TODO: this would only run the docker run command, runing the docker image from the hub...
+                self.docker_run_btn.setText("Run Docker")
         except requests.exceptions.RequestException:
             self.server_status.setText("Not Running")
             self.server_status.setStyleSheet("color: red;")
             self.server_running = False
+            self.docker_run_btn.setText("Run Docker")
 
     def cleanup_docker(self):
         """Clean up Docker resources when unloading plugin"""
@@ -1971,7 +2074,7 @@ class EasyEarthPlugin:
         """Convert host path to container path if within data_dir."""
         if host_path and host_path.startswith(self.data_dir):
             relative_path = os.path.relpath(host_path, self.data_dir)
-            return os.path.join('/usr/src/app/user', relative_path)
+            return os.path.join('/usr/src/app/data', relative_path)
         return host_path
 
     def create_prediction_layers(self):
