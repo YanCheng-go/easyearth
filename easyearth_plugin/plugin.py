@@ -1466,34 +1466,44 @@ class EasyEarthPlugin:
         try:
             prompts = self.collect_all_prompts()  # Implement this to gather all drawn prompts
             # if there are boxes and points in the prompts, we need to run the prediction for both
-            if len(prompts) == 0:
-                self.iface.messageBar().pushMessage(
-                    "Info",
-                    "No prompts found. Please draw points or boxes.",
-                    level=Qgis.Info,
-                    duration=3
-                )
-                return
-            if len(prompts) > 0:
-                # Check if there are both points and boxes
-                has_points = any(p['type'] == 'Point' for p in prompts)
-                has_boxes = any(p['type'] == 'Box' for p in prompts)
-
-                if not (has_points and has_boxes):
-                    # Run prediction for all prompts if only one type is present
-                    self.get_prediction(prompts)
-                else:
-                    # Run prediction for points and boxes separately
+            if self.is_sam_model():
+                if len(prompts) == 0:
                     self.iface.messageBar().pushMessage(
                         "Info",
-                        f"Running prediction for box and point prompts separatly.",
+                        "No prompts found. Please draw points or boxes.",
                         level=Qgis.Info,
                         duration=3
                     )
-                    points = [p for p in prompts if p['type'] == 'Point']
-                    self.get_prediction(points)
-                    boxes = [p for p in prompts if p['type'] == 'Box']
-                    self.get_prediction(boxes)
+                    return
+                else:
+                    # Check if there are both points and boxes
+                    has_points = any(p['type'] == 'Point' for p in prompts)
+                    has_boxes = any(p['type'] == 'Box' for p in prompts)
+
+                    if not (has_points and has_boxes):
+                        # Run prediction for all prompts if only one type is present
+                        self.get_prediction(prompts)
+                    else:
+                        # Run prediction for points and boxes separately
+                        self.iface.messageBar().pushMessage(
+                            "Info",
+                            f"Running prediction for box and point prompts separatly.",
+                            level=Qgis.Info,
+                            duration=3
+                        )
+                        points = [p for p in prompts if p['type'] == 'Point']
+                        self.get_prediction(points)
+                        boxes = [p for p in prompts if p['type'] == 'Box']
+                        self.get_prediction(boxes)
+            else:
+                # For other models, run prediction without prompts
+                self.iface.messageBar().pushMessage(
+                    "Info",
+                    "Running prediction without prompts.",
+                    level=Qgis.Info,
+                    duration=3
+                )
+                self.get_prediction(prompts)
             self.last_pred_time = time.time()  # Update last prediction time
         except Exception as e:
             self.logger.error(f"Error running prediction: {str(e)}")
@@ -1529,7 +1539,7 @@ class EasyEarthPlugin:
             save_embeddings = False
 
             # Handle embedding settings
-            if self.load_embedding_radio.isChecked():
+            if self.load_embedding_radio.isChecked() and self.load_embedding_radio.isEnabled():
                 embedding_path = self.embedding_path_edit.text().strip()
                 if not embedding_path:
                     raise ValueError("Please select an embedding file to load")
