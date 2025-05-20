@@ -248,7 +248,7 @@ We welcome community contributions! If you'd like to contribute, check out:
 
 ## 🧑‍💻 Author
 
-Developed by: **Yan Cheng (chengyan2017@gmail.com), Ankit Kariryaa (ankit.ky@gmail.com)**
+Developed by: **Yan Cheng (chengyan2017@gmail.com), Ankit Kariryaa (ankit.ky@gmail.com), Lucia Gordon (luciagordon@g.harvard.edu)**
 
 [//]: # (🌐 [Website] • [GitHub] • [LinkedIn])
 
