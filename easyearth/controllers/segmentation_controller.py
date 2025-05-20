@@ -76,15 +76,14 @@ def predict():
                 image_array = np.array(image)
                 transform = None
                 source_crs = None
-            elif image_path.endswith('.tif'):
-                # Handle local GeoTIFF files
+            try:
                 with rasterio.open(image_path) as src:
                     transform = src.transform
-                    source_crs = src.crs.to_string()
+                    source_crs = src.crs.to_string() if src.crs else None
                     image_array = src.read()
                     image_array = np.transpose(image_array, (1, 2, 0))
-            else:
-                # Handle local regular images
+            except rasterio.errors.RasterioIOError:
+                # Not a rasterio-compatible file, handle as a regular image
                 logger.debug(f"Loading local image from: {image_path}")
                 image = Image.open(image_path).convert('RGB')
                 image_array = np.array(image)
