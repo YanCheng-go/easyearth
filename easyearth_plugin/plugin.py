@@ -510,7 +510,7 @@ class EasyEarthPlugin:
         self.draw_button.setEnabled(is_sam)
         self.draw_type_combo.setEnabled(is_sam)
         self.realtime_checkbox.setEnabled(is_sam)
-        if not is_sam and self.draw_button.isChecked():
+        if not is_sam:
             self.draw_button.setChecked(False)
             self.draw_button.setText("Start Drawing")
 
@@ -518,6 +518,7 @@ class EasyEarthPlugin:
         self.embedding_path_edit.setEnabled(is_sam and not self.no_embedding_radio.isChecked())
         self.embedding_browse_btn.setEnabled(is_sam and not self.no_embedding_radio.isChecked())
         self.embedding_path_edit.clear() if not is_sam else None
+        self.no_embedding_radio.setChecked(True)
         self.no_embedding_radio.setEnabled(is_sam)
         self.load_embedding_radio.setEnabled(is_sam)
         self.save_embedding_radio.setEnabled(is_sam)
