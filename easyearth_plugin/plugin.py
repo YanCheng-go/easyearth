@@ -311,16 +311,16 @@ class EasyEarthPlugin:
             file_layout.addWidget(self.download_button)
 
             # Move these lines here (right after the download button):
-            self.progress_bar = QProgressBar()
-            self.progress_bar.setMinimum(0)
-            self.progress_bar.setMaximum(100)
-            self.progress_bar.hide()
-            file_layout.addWidget(self.progress_bar)  # <-- Add to file_layout
+            self.image_download_progress_bar = QProgressBar()
+            self.image_download_progress_bar.setMinimum(0)
+            self.image_download_progress_bar.setMaximum(100)
+            self.image_download_progress_bar.hide()
+            file_layout.addWidget(self.image_download_progress_bar)  # <-- Add to file_layout
 
-            self.progress_status = QLabel()
-            self.progress_status.setWordWrap(True)
-            self.progress_status.hide()
-            file_layout.addWidget(self.progress_status)  # <-- Add to file_layout
+            self.downloading_progress_status = QLabel()
+            self.downloading_progress_status.setWordWrap(True)
+            self.downloading_progress_status.hide()
+            file_layout.addWidget(self.downloading_progress_status)  # <-- Add to file_layout
 
             # Layer selection
             self.layer_combo = QComboBox()
@@ -2075,11 +2075,11 @@ class EasyEarthPlugin:
                 QMessageBox.warning(None, "Error", "Please enter a valid image URL.")
                 return
 
-            self.progress_bar.setValue(0)
-            self.progress_bar.setMaximum(100)
-            self.progress_bar.show()
-            self.progress_status.setText("Downloading image...")
-            self.progress_status.show()
+            self.image_download_progress_bar.setValue(0)
+            self.image_download_progress_bar.setMaximum(100)
+            self.image_download_progress_bar.show()
+            self.downloading_progress_status.setText("Downloading image...")
+            self.downloading_progress_status.show()
 
             local_filename = os.path.basename(image_url.split("?")[0])
             save_path = os.path.join(self.data_dir, local_filename)
@@ -2093,10 +2093,10 @@ class EasyEarthPlugin:
                         downloaded += len(chunk)
                         if total > 0:
                             percent = int(downloaded * 100 / total)
-                            self.progress_bar.setValue(percent)
+                            self.image_download_progress_bar.setValue(percent)
                             QApplication.processEvents()
-            self.progress_bar.hide()
-            self.progress_status.hide()
+            self.image_download_progress_bar.hide()
+            self.downloading_progress_status.hide()
 
             # Switch to File mode and update path
             self.source_combo.setCurrentText("File")
