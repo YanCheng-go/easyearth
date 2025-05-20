@@ -14,7 +14,8 @@ EasyEarth enables seamless application of cutting-edge computer vision and visio
 2. **QGIS Plugin GUI** – User-friendly interface to apply models inside QGIS
 3. **Model Manager** *(in development)* – Upload, version, and deploy models with ease
 
-![Architecture Overview](https://github.com/user-attachments/assets/749cc195-a149-4ccd-9d3f-edb3a2040cf7)
+![Architecture](https://github.com/user-attachments/assets/91f2cad0-4cbb-4b9b-a7e4-2cd2d247cc42)
+
 
 📽️ **[Watch Demo](https://drive.google.com/file/d/1AShHsXkYoBj4zltAGkdnzEfKp2GSFFeS/view)**
 
