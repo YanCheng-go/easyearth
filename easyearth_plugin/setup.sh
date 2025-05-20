@@ -9,7 +9,7 @@ IMAGE_NAME="easyearth_plugin_easyearth-server"
 MODEL_DIR="~/.cache/easyearth/models"
 
 # Change the permissions of the script directory
-chmod -R 755 "$SCRIPT_DIR"
+sudo chmod -R 755 "$SCRIPT_DIR"
 
 # Function to ensure Docker Compose is installed
 check_docker_installation() {
