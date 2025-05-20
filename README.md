@@ -125,7 +125,7 @@ sudo docker exec -it <container_id_or_name> /usr/src/app
 
 ```bash
 cd ~/Downloads/easyearth_plugin  # go to the directory where easyearth_plugin is located
-cp -r ./easyearth_plugin ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/  # copy the easyearth_plugin folder to the plugins directory
+cp -r ./easyearth_plugin ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins  # copy the easyearth_plugin folder to the plugins directory
 ```
 
 ---
