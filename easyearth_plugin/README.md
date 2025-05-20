@@ -96,37 +96,18 @@ sudo docker-compose down  # stop the docker container
 ```bash
 
 # List containers
-
 docker ps -a
-
-
 # List images
-
 docker images
-
-
 # Remove all containers
-
 docker rm $(docker ps -a -q)
-
-
 # Remove all images
-
 docker rmi $(docker images -q)
-
-
 # Remove all volumes
-
 docker volume rm $(docker volume ls -q)
-
-
 # Inspect container
-
 sudo docker inspect <container_id>
-
-
 # Access container shell
-
 sudo docker exec -it <container_id_or_name> /usr/src/app
 
 ```
@@ -230,7 +211,7 @@ curl -X GET http://127.0.0.1:3781/v1/easyearth/ping
 ```
 
 ---
-## 📚 Documentation
+## 📚 Documentation (TO BE UPDATED)
 Check out our User Guide and Developer Guide for more.
 - [User Guide](docs/UserGuide.md)
 - [Developer Guide](docs/DeveloperGuide.md)
@@ -247,6 +228,7 @@ Check out our User Guide and Developer Guide for more.
 - [x] QGIS plugin for model application
 - [x] Dockerized server for scalable model inference
 - [x] Advanced prompt-guided segmentation
+- [ ] Compelet documentation
 - [ ] Editing tools for segmentation
 - [ ] Model Manager for uploading/updating/tracking models
 - [ ] Chatbot integration for model management and reporting
