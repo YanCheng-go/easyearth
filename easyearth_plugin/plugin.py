@@ -227,6 +227,8 @@ class EasyEarthPlugin:
 
             docker_group.setLayout(docker_layout)
             main_layout.addWidget(docker_group)
+            # Hide the old Docker Control group
+            docker_group.setVisible(False)
 
             # 2. Service Information Group
             service_group = QGroupBox("Service Information")
@@ -422,7 +424,7 @@ class EasyEarthPlugin:
 
             # initialize the data and tmp directory
             # TODO: move to after checking if docker image is running...and return mounted data folder using docker inspect
-            self.data_dir = self.initialize_data_directory()
+            # self.data_dir = self.initialize_data_directory()
 
             # Update the layer (raster) list in the combo box whenever a layer is added or removed
             QgsProject.instance().layersAdded.connect(self.on_layers_added)
