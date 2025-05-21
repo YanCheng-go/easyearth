@@ -254,5 +254,3 @@ Developed by: **Yan Cheng (chengyan2017@gmail.com), Ankit Kariryaa (ankit.ky@gma
 [//]: # (🌐 [Website] • [GitHub] • [LinkedIn])
 
 ---
-
-## 📜 License
