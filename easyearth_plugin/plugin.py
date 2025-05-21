@@ -26,6 +26,7 @@ import requests
 import subprocess
 import time
 import logging
+import shutil
 import tempfile
 import yaml
 import json
@@ -63,6 +64,7 @@ class EasyEarthPlugin:
         self.service_name = self.get_service_name()
         self.image_name = f"{self.project_name}_{self.service_name}"
         self.sudo_password = None  # Add this to store password temporarily
+        self.docker_path = 'docker' if shutil.which('docker') else '/Applications/Docker.app/Contents/Resources/bin/docker' # adds compatibility for macOS
 
         # For docker images from docker hub
         self.docker_hub_image_name = "maverickmiaow/easyearth"
@@ -476,12 +478,13 @@ class EasyEarthPlugin:
         logs_dir = os.path.join(self.plugin_dir, 'logs')
         cache_dir = os.path.expandvars("$HOME/.cache/easyearth/models")
         self.docker_run_cmd = (
-            f"sudo docker pull {self.docker_hub_image_name} && "
-            f"sudo docker run -d --name easyearth-container -p 3781:3781 "
-            f"-v {data_dir}:/usr/src/app/data "
-            f"-v {tmp_dir}:/usr/src/app/tmp "
-            f"-v {logs_dir}:/usr/src/app/logs "
-            f"-v {cache_dir}:/usr/src/app/.cache/models "
+            f"{self.docker_path} rm -f easyearth-container 2>/dev/null || true && " # removes the container if it already exists
+            f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
+            f"{self.docker_path} run -d --name easyearth-container -p 3781:3781 "
+            f"-v \"{data_dir}\":/usr/src/app/data "
+            f"-v \"{tmp_dir}\":/usr/src/app/tmp "
+            f"-v \"{logs_dir}\":/usr/src/app/logs "
+            f"-v \"{cache_dir}\":/usr/src/app/.cache/models "
             f"{self.docker_hub_image_name}"
         )
 
@@ -528,8 +531,7 @@ class EasyEarthPlugin:
         self.docker_running = True
 
     def stop_docker_container(self):
-        result = subprocess.run("docker stop easyearth-container && docker rm easyearth-container",
-                                capture_output=True, text=True, shell=True)
+        result = subprocess.run(f"{self.docker_path} stop easyearth-container && {self.docker_path} rm easyearth-container", capture_output=True, text=True, shell=True)
         self.iface.messageBar().pushMessage(
             "Info",
             f"Stopping Docker container...\nRunning command: {result}",
