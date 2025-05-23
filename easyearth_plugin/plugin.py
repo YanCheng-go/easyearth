@@ -57,7 +57,7 @@ class EasyEarthPlugin:
         self.toolbar.setObjectName(u'EasyEarth')
 
         # Initialize plugin directory
-        self.plugin_dir = os.path.dirname(__file__)
+        self.plugin_dir = os.path.dirname(__file__) # directory path where the current file is located
 
         # Docker configuration
         self.project_name = "easyearth_plugin"
@@ -108,8 +108,8 @@ class EasyEarthPlugin:
         self.predictions_layer = None
 
         # Initialize map tool
-        self.map_tool = QgsMapToolEmitPoint(self.canvas)
-        self.map_tool.canvasClicked.connect(self.handle_draw_click)
+        self.map_tool = QgsMapToolEmitPoint(self.canvas) # captures mouse clicks on the map canvas and gets the coordinates
+        self.map_tool.canvasClicked.connect(self.handle_draw_click) # sets the function to be called when the map is clicked
 
         # Initialize tool for drawing boxes
         self.box_tool = BoxMapTool(self.canvas, self.on_box_drawn)
@@ -144,9 +144,16 @@ class EasyEarthPlugin:
         self.project_crs = QgsProject.instance().crs()
         QgsProject.instance().crsChanged.connect(self.on_project_crs_changed)
 
-    def add_action(self, icon_path, text, callback, enabled_flag=True,
-                  add_to_menu=True, add_to_toolbar=True, status_tip=None,
-                  whats_this=None, parent=None):
+    def add_action(self,
+                   icon_path,
+                   text,
+                   callback,
+                   enabled_flag=True,
+                   add_to_menu=True,
+                   add_to_toolbar=True,
+                   status_tip=None,
+                   whats_this=None,
+                   parent=None):
         """Add a toolbar icon to the toolbar"""
 
         icon = QIcon(icon_path)
@@ -275,9 +282,9 @@ class EasyEarthPlugin:
             api_label = QLabel("API Endpoints:")
             api_label.setStyleSheet("font-weight: bold;")
             self.api_info = QLabel(f"Base URL: http://0.0.0.0:{self.server_port}/v1/easyearth\n"
-                                  f"Infer with point or box prompts: /sam-predict\n"
-                                  f"Infer with no prompts: /segment-predict\n"
-                                  f"Health check: /ping")
+                                   f"Infer with point or box prompts: /sam-predict\n"
+                                   f"Infer with no prompts: /segment-predict\n"
+                                   f"Health check: /ping")
             self.api_info.setWordWrap(True)
             api_layout.addWidget(api_label)
             api_layout.addWidget(self.api_info)
@@ -477,6 +484,7 @@ class EasyEarthPlugin:
         tmp_dir = os.path.join(self.plugin_dir, 'tmp')
         logs_dir = os.path.join(self.plugin_dir, 'logs')
         cache_dir = os.path.expandvars("$HOME/.cache/easyearth/models")
+
         self.docker_run_cmd = (
             f"{self.docker_path} rm -f easyearth-container 2>/dev/null || true && " # removes the container if it already exists
             f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
@@ -490,6 +498,7 @@ class EasyEarthPlugin:
 
     def select_data_folder(self):
         folder = QFileDialog.getExistingDirectory(None, "Select Data Folder", self.data_folder_edit.text())
+
         if folder:
             self.data_folder_edit.setText(folder)
             self.data_dir = folder
@@ -632,6 +641,7 @@ class EasyEarthPlugin:
         try:
             # Get the image path
             image_path = self.image_path.text()
+
             if not image_path:
                 return
 
@@ -1066,8 +1076,8 @@ class EasyEarthPlugin:
     def toggle_docker(self):
         """Toggle Docker container state"""
         try:
-
             self.check_container_running()
+
             if not self.docker_running:
                 # TODO: need to deal with the case where the docker container is initilized outside qgis, so the docker_running is actually true
                 # TODO: need to test the server status right after the docker container is finished starting
@@ -1077,6 +1087,7 @@ class EasyEarthPlugin:
 
                 # Set environment variables including DATA_DIR
                 env = QProcessEnvironment.systemEnvironment()
+
                 if self.data_dir and os.path.exists(self.data_dir):
                     env.insert("DATA_DIR", self.data_dir)
                 else:
@@ -1140,7 +1151,6 @@ class EasyEarthPlugin:
                     self.docker_process.errorOccurred.connect(self.on_docker_error)
                     self.docker_process.readyReadStandardError.connect(self.on_docker_stderr)
                     self.docker_process.readyReadStandardOutput.connect(self.on_docker_stdout)
-
                     self.docker_process.setWorkingDirectory(self.plugin_dir)
 
                     # Check if we need to build
@@ -1169,7 +1179,6 @@ class EasyEarthPlugin:
                 self.docker_process.finished.connect(self.on_docker_finished)
                 self.docker_process.errorOccurred.connect(self.on_docker_error)
                 self.docker_process.setWorkingDirectory(os.path.dirname(compose_path))
-
                 self.docker_process.start('bash', ['-c', cmd])
                 self.docker_status.setText("Stopping")
                 self.docker_button.setEnabled(False)
@@ -1273,7 +1282,7 @@ class EasyEarthPlugin:
                 self.draw_button.setText("Stop Drawing")
 
                 if self.draw_type_combo.currentText() == "Point":
-                        self.canvas.setMapTool(self.map_tool)
+                    self.canvas.setMapTool(self.map_tool)
                 elif self.draw_type_combo.currentText() == "Box":
                     self.canvas.setMapTool(self.box_tool)
                 else:
@@ -1370,11 +1379,13 @@ class EasyEarthPlugin:
         pixel_y = int((extent.yMaximum() - start_point.y()) * height / extent.height())
         pixel_width = int((end_point.x() - start_point.x()) * width / extent.width())
         pixel_height = int((start_point.y() - end_point.y()) * height / extent.height())
+
         # Ensure coordinates are within image bounds
         pixel_x = max(0, min(pixel_x, width - 1))
         pixel_y = max(0, min(pixel_y, height - 1))
         pixel_width = max(0, min(pixel_width, width - pixel_x))
         pixel_height = max(0, min(pixel_height, height - pixel_y))
+
         # Ensure pixel width and height are positive
         pixel_width = max(1, pixel_width)
         pixel_height = max(1, pixel_height)
@@ -1542,10 +1553,12 @@ class EasyEarthPlugin:
             for feature in self.prompts_layer.getFeatures():
                 # Check if the feature is new
                 timestamp = feature.attribute('timestamp')
+
                 if timestamp is None or timestamp < self.last_pred_time:
                     continue
 
                 prompt_type = feature['type']
+
                 if prompt_type == 'Point':
                     x = feature['pixel_x']
                     y = feature['pixel_y']
@@ -1668,6 +1681,7 @@ class EasyEarthPlugin:
 
             # Convert image path for container
             container_image_path = self.get_container_path(image_path)
+
             if not container_image_path:
                 raise ValueError("Image must be within the data directory")
 
@@ -1746,6 +1760,7 @@ class EasyEarthPlugin:
 
                         features = response_json['features']
                         feature_crs = response_json.get('crs', None)
+
                         if not features:
                             self.iface.messageBar().pushMessage(
                                 "Warning",
@@ -1792,7 +1807,6 @@ class EasyEarthPlugin:
                 return
 
             dockerfile_path = os.path.join(self.plugin_dir, 'Dockerfile')
-
             steps = 0
 
             # Count steps in Dockerfile
@@ -1857,6 +1871,7 @@ class EasyEarthPlugin:
         }
 
         lines = output.split('\n')
+
         for line in lines:
             line = line.strip()
             if line:
@@ -1883,11 +1898,11 @@ class EasyEarthPlugin:
         """Check if the server is running by pinging it"""
         try:
             response = requests.get(f"http://0.0.0.0:{self.server_port}/v1/easyearth/ping", timeout=2)
+
             if response.status_code == 200:
                 self.server_status.setText("Running")
                 self.server_status.setStyleSheet("color: green;")
                 self.server_running = True
-
                 self.docker_running = True
                 self.docker_status.setText("Running")
                 self.docker_button.setText("Stop Docker")
@@ -1942,12 +1957,8 @@ class EasyEarthPlugin:
         try:
             if self.load_embedding_radio.isChecked():
                 # Browse for existing file
-                file_path, _ = QFileDialog.getOpenFileName(
-                    None,
-                    "Select Embedding File",
-                    "",
-                    "Embedding Files (*.pt);;All Files (*.*)"
-                )
+                embeddings_dir = os.path.join(self.data_dir, 'embeddings') if os.path.exists(os.path.join(self.data_dir, 'embeddings')) else self.data_dir
+                file_path, _ = QFileDialog.getOpenFileName(None, "Select Embedding File", embeddings_dir, "Embedding Files (*.pt);;All Files (*.*)")
                 self.logger.debug(f"Selected existing embedding file: {file_path}")
             else:
                 # Browse for save location
