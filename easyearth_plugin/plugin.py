@@ -359,7 +359,7 @@ class EasyEarthPlugin:
             file_layout.addWidget(self.downloading_progress_status)  # <-- Add to file_layout
 
             # Layer selection
-            self.layer_combo = QComboBox()
+            self.layer_combo = QComboBox() # displays a list of available raster layers in the project
             self.layer_combo.hide()
             image_layout.addWidget(self.layer_combo)
             # Connect to layer selection change
@@ -2148,7 +2148,7 @@ class EasyEarthPlugin:
     def on_layer_selected(self, index):
         """Handle layer selection change and check for existing embeddings"""
         try:
-            if index > 0:  # Skip "Select a layer..." item
+            if index > 0: # 0th index is "Select a layer..."
                 layer_id = self.layer_combo.itemData(index)
                 selected_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
 
@@ -2171,7 +2171,7 @@ class EasyEarthPlugin:
                     duration=5
                 )
 
-                # Create prediction layers
+                self.image_path.setText(selected_layer.source())
                 self.create_prediction_layers()
 
                 # Check for existing embedding
