@@ -35,7 +35,6 @@ from datetime import datetime
 from .core.utils import setup_logger
 from .core.prompt_editor import BoxMapTool
 
-
 class EasyEarthPlugin:
     def __init__(self, iface):
         self.iface = iface
@@ -332,9 +331,9 @@ class EasyEarthPlugin:
             # File input
             file_layout = QHBoxLayout()
             self.image_path = QLineEdit()
-            self.image_path.setPlaceholderText("Enter image path or click Browse...")
+            self.image_path.setPlaceholderText("Enter image path or click Select...")
             self.image_path.returnPressed.connect(self.on_image_path_entered)
-            self.browse_button = QPushButton("Browse Image")
+            self.browse_button = QPushButton("Select Image")
             self.browse_button.clicked.connect(self.browse_image)
             file_layout.addWidget(self.image_path)
             file_layout.addWidget(self.browse_button)
@@ -2193,6 +2192,7 @@ class EasyEarthPlugin:
                 QMessageBox.warning(None, "Error", "Please enter a valid image URL.")
                 return
 
+            self.download_button.hide()
             self.image_download_progress_bar.setValue(0)
             self.image_download_progress_bar.setMaximum(100)
             self.image_download_progress_bar.show()
