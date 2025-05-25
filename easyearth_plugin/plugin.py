@@ -844,7 +844,8 @@ class EasyEarthPlugin:
             if checked:
                 self.logger.info("Starting new drawing session")
                 self.draw_button.setText("Stop Drawing")
-
+                self.undo_button.setEnabled(True)
+                
                 if self.draw_type_dropdown.currentText() == "Point":
                     self.canvas.setMapTool(self.point_tool)
                 elif self.draw_type_dropdown.currentText() == "Box":
@@ -855,10 +856,10 @@ class EasyEarthPlugin:
 
                 self.logger.info("Drawing session started successfully")
             else:
-                self.logger.info("Stopping drawing session")
                 self.canvas.unsetMapTool(self.point_tool)
                 self.draw_button.setText("Start Drawing")
-                self.logger.info("Drawing session stopped")
+                self.undo_button.setEnabled(False)
+                self.logger.info("Stopping drawing session")
 
         except Exception as e:
             self.logger.error(f"Failed to toggle drawing: {str(e)}")
@@ -947,7 +948,9 @@ class EasyEarthPlugin:
             return None
 
     def undo_last_point(self):
-        return None
+        self.prompts_geojson['features'] = self.prompts_geojson['features'][:-1] # removes the last point from the prompts geojson
+        self.prompt_count -= 1 # decrements the prompt counter
+        self.add_features_to_layer([], "prompts")
 
     def on_box_drawn(self, box_geom, start_point, end_point):
         """Handle box drawing completion
@@ -1049,9 +1052,6 @@ class EasyEarthPlugin:
             crs: coordinate reference system for the features
         """
         try:
-            if not features:
-                raise ValueError("No features to add")
-
             extent, width, height, raster_crs = self.raster_extent, self.raster_width, self.raster_height, self.raster_crs
 
             # Set up layer-specific variables
@@ -1179,11 +1179,6 @@ class EasyEarthPlugin:
             # Write GeoJSON file
             with open(temp_geojson, 'w') as f:
                 json.dump(geojson, f)
-            self.iface.messageBar().pushMessage("Warning",
-                                                f"Saved geojson to {temp_geojson}."
-                                                "Transforming prompts crs to match raster CRS.",
-                                                level=Qgis.Warning,
-                                                duration=5)
 
             # Create or update layer
             layer = getattr(self, layer_attr, None)
