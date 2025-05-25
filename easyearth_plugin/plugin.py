@@ -35,16 +35,13 @@ from datetime import datetime
 from .core.utils import setup_logger
 from .core.prompt_editor import BoxMapTool
 
-
 class EasyEarthPlugin:
     def __init__(self, iface):
-        self.iface = iface
+        self.iface = iface # QGIS interface instance
+        self.logger = setup_logger() # initializes the loger
 
-        # Initialize logger
-        self.logger = setup_logger()
-
+        # If global logger failed to initialize, create a basic logger
         if self.logger is None:
-            # If global logger failed to initialize, create a basic logger
             self.logger = logging.getLogger('EasyEarth')
             self.logger.addHandler(logging.StreamHandler())
             self.logger.setLevel(logging.DEBUG)
@@ -55,74 +52,54 @@ class EasyEarthPlugin:
         self.menu = 'EasyEarth'
         self.toolbar = self.iface.addToolBar(u'EasyEarth')
         self.toolbar.setObjectName(u'EasyEarth')
-
-        # Initialize plugin directory
-        self.plugin_dir = os.path.dirname(__file__)
+        self.plugin_dir = os.path.dirname(__file__) # directory path where the current file is located
 
         # Docker configuration
         self.project_name = "easyearth_plugin"
-        self.service_name = self.get_service_name()
+        self.service_name = self.get_service_name() # gets the service name from the config file
         self.image_name = f"{self.project_name}_{self.service_name}"
         self.sudo_password = None  # Add this to store password temporarily
         self.docker_path = 'docker' if shutil.which('docker') else '/Applications/Docker.app/Contents/Resources/bin/docker' # adds compatibility for macOS
-
-        # For docker images from docker hub
         self.docker_hub_image_name = "maverickmiaow/easyearth"
-        self.docker_run_cmd = None
 
         # Initialize map tools and data
-        self.canvas = iface.mapCanvas()
-        self.point_tool = None
-        self.points = []
+        self.canvas = iface.mapCanvas() # QGIS map canvas instance
+        self.point_tool = None # map tool for point selection
+        self.points = [] # list to store selected points
         self.rubber_bands = []
         self.docker_process = None
-        self.server_process = None
         self.server_port = 3781  # Default port
         self.server_url = f"http://0.0.0.0:{self.server_port}/v1/easyearth"
-        self.current_image_path = None
-        self.current_embedding_path = None
         self.docker_running = False
         self.server_running = False
         self.action = None
         self.dock_widget = None
         self.rubber_band = None
-        self.is_selecting_points = False
         self.point_counter = None
         self.point_layer = None
         self.total_steps = 0
         self.current_step = 0
-        self.is_drawing = False
-        self.draw_tool = None
         self.temp_rubber_band = None
         self.start_point = None
         self.drawn_features = []
         self.drawn_layer = None
         self.temp_geojson_path = os.path.join(tempfile.gettempdir(), 'drawn_features.geojson')
-        self.feature_count = 0  # For generating unique IDs
-        self.prompt_count = 0  # For generating unique IDs
+        self.feature_count = 0 # for generating unique IDs
+        self.prompt_count = 0 # for generating unique IDs
         self.temp_prompts_geojson = None
         self.temp_predictions_geojson = None
-        self.real_time_prediction = False
         self.last_pred_time = 0  # timestamp when the real-time prediction is unchecked. or the last batch prediction was done
         self.prompts_layer = None
         self.predictions_layer = None
-
-        # Initialize map tool
-        self.map_tool = QgsMapToolEmitPoint(self.canvas)
-        self.map_tool.canvasClicked.connect(self.handle_draw_click)
-
-        # Initialize tool for drawing boxes
-        self.box_tool = BoxMapTool(self.canvas, self.on_box_drawn)
-
-        # Initialize rubber bands
-        self.rubber_band = QgsRubberBand(self.canvas, QgsWkbTypes.PointGeometry)
-        self.rubber_band.setColor(QColor(255, 0, 0))
-        self.rubber_band.setWidth(2)
-
-        self.temp_rubber_band = QgsRubberBand(self.canvas, QgsWkbTypes.PolygonGeometry)
-        self.temp_rubber_band.setColor(QColor(255, 0, 0, 50))
-        self.temp_rubber_band.setWidth(2)
-
+        self.map_tool = QgsMapToolEmitPoint(self.canvas) # captures mouse clicks on the map canvas and gets the coordinates
+        self.map_tool.canvasClicked.connect(self.handle_draw_click) # sets the function to be called when the map is clicked
+        self.box_tool = BoxMapTool(self.canvas, self.on_box_drawn) # connects the box drawing tool to the function that handles the drawn box
+        self.rubber_band = QgsRubberBand(self.canvas, QgsWkbTypes.PointGeometry) # for drawing points
+        self.rubber_band.setColor(QColor(255, 0, 0)) # red color for points
+        self.rubber_band.setWidth(2) # width of the rubber band for points
+        self.temp_rubber_band = QgsRubberBand(self.canvas, QgsWkbTypes.PolygonGeometry) # for drawing temporary boxes
+        self.temp_rubber_band.setColor(QColor(255, 0, 0, 50)) # semi-transparent red color for temporary boxes
+        self.temp_rubber_band.setWidth(2) # width of the rubber band for temporary boxes
         self.start_point = None
         self.predictions_geojson = None
         self.predictions_layer = None
@@ -130,9 +107,8 @@ class EasyEarthPlugin:
         self.prompts_layer = None
 
         # Initialize data directory
-        self.data_dir = self.plugin_dir + '/user'
-        self.tmp_dir = os.path.join(self.plugin_dir, 'tmp')
-
+        self.data_dir = self.plugin_dir + '/user' # user data directory, where the data will be stored
+        self.tmp_dir = os.path.join(self.plugin_dir, 'tmp') # temporary directory for storing temporary files
         self.model_path = None
 
         # initialize image crs and extent...
@@ -140,34 +116,8 @@ class EasyEarthPlugin:
         self.raster_extent = None
         self.raster_width = None
         self.raster_height = None
-
         self.project_crs = QgsProject.instance().crs()
         QgsProject.instance().crsChanged.connect(self.on_project_crs_changed)
-
-    def add_action(self, icon_path, text, callback, enabled_flag=True,
-                  add_to_menu=True, add_to_toolbar=True, status_tip=None,
-                  whats_this=None, parent=None):
-        """Add a toolbar icon to the toolbar"""
-
-        icon = QIcon(icon_path)
-        action = QAction(icon, text, parent)
-        action.triggered.connect(callback)
-        action.setEnabled(enabled_flag)
-
-        if status_tip is not None:
-            action.setStatusTip(status_tip)
-
-        if whats_this is not None:
-            action.setWhatsThis(whats_this)
-
-        if add_to_toolbar:
-            self.toolbar.addAction(action)
-
-        if add_to_menu:
-            self.iface.addPluginToMenu(self.menu, action)
-
-        self.actions.append(action)
-        return action
 
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI"""
@@ -175,87 +125,48 @@ class EasyEarthPlugin:
             self.logger.debug("Starting initGui")
             self.logger.info(f"Plugin directory: {self.plugin_dir}")
 
-            self.logger.debug("Starting initGui")
-
-            # Set up the icon
-            icon_path = os.path.join(self.plugin_dir, 'resources/icons/easyearth.png')
-            if not os.path.exists(icon_path):
-                self.logger.warning(f"Icon not found at: {icon_path}")
-                icon = QIcon()
-            else:
-                icon = QIcon(icon_path)
+            icon = QIcon(os.path.join(self.plugin_dir, 'resources/icons/easyearth.png')) # loads the icon from the resources directory
 
             # Create action with the icon
-            self.action = QAction(icon, 'EasyEarth', self.iface.mainWindow())
-            self.action.triggered.connect(self.run)
-            self.action.setEnabled(True)
+            self.action = QAction(icon, 'EasyEarth', self.iface.mainWindow()) # creates a toolbar button with the icon and text
+            self.action.triggered.connect(self.run) # connects the button click to the run function
+            self.action.setEnabled(True) # enables the button
 
             # Add to QGIS interface
             self.iface.addPluginToMenu('EasyEarth', self.action)
             self.iface.addToolBarIcon(self.action)
 
             # Create dock widget
-            self.dock_widget = QDockWidget('EasyEarth Plugin', self.iface.mainWindow())
-            self.dock_widget.setObjectName('EasyEarthPluginDock')
+            self.dock_widget = QDockWidget('EasyEarth Plugin', self.iface.mainWindow()) # creates a dock widget with the title 'EasyEarth Plugin' within the main window
+            self.dock_widget.setObjectName('EasyEarthPluginDock') 
 
             # Create main widget and layout
             main_widget = QWidget()
             main_layout = QVBoxLayout()
 
-            # --- Docker Run (Manual) Group ---
+            # 1. Docker Run (Manual) Group
             docker_run_group = QGroupBox("Docker Run (Manual)")
             docker_run_layout = QVBoxLayout()
+
             # Data folder selection
             data_folder_layout = QHBoxLayout()
             self.data_folder_edit = QLineEdit(self.data_dir)
-            self.data_folder_edit.setReadOnly(False)
+            self.data_folder_edit.setReadOnly(True)
             self.data_folder_btn = QPushButton("Select Folder")
             self.data_folder_btn.clicked.connect(self.select_data_folder)
-            data_folder_layout.addWidget(QLabel("Data Folder:"))
+            data_folder_layout.addWidget(QLabel("Data folder:"))
             data_folder_layout.addWidget(self.data_folder_edit)
             data_folder_layout.addWidget(self.data_folder_btn)
             docker_run_layout.addLayout(data_folder_layout)
+
             # Run/Stop docker button
             self.docker_run_btn = QPushButton("Run Container")
             self.docker_run_btn.clicked.connect(self.run_or_stop_container)
             docker_run_layout.addWidget(self.docker_run_btn)
+
             # Add docker to layout
             docker_run_group.setLayout(docker_run_layout)
             main_layout.addWidget(docker_run_group)
-
-            # 1. Docker Control Group
-            docker_group = QGroupBox("Docker Control")
-            docker_layout = QVBoxLayout()
-
-            # Docker status and button layout
-            status_layout = QHBoxLayout()
-            docker_label = QLabel("Docker Status:")
-            self.docker_status = QLabel("Stopped")
-            self.docker_button = QPushButton("Start Docker")
-            self.docker_button.clicked.connect(self.toggle_docker)
-
-            status_layout.addWidget(docker_label)
-            status_layout.addWidget(self.docker_status)
-            status_layout.addWidget(self.docker_button)
-
-            # Add progress bar and progress status
-            self.progress_bar = QProgressBar()
-            self.progress_bar.setMinimum(0)
-            self.progress_bar.setMaximum(100)
-            self.progress_bar.hide()
-
-            self.progress_status = QLabel()
-            self.progress_status.setWordWrap(True)
-            self.progress_status.hide()
-
-            docker_layout.addLayout(status_layout)
-            docker_layout.addWidget(self.progress_bar)
-            docker_layout.addWidget(self.progress_status)
-
-            docker_group.setLayout(docker_layout)
-            main_layout.addWidget(docker_group)
-            # Hide the old Docker Control group
-            docker_group.setVisible(False)
 
             # 2. Service Information Group
             service_group = QGroupBox("Service Information")
@@ -275,9 +186,9 @@ class EasyEarthPlugin:
             api_label = QLabel("API Endpoints:")
             api_label.setStyleSheet("font-weight: bold;")
             self.api_info = QLabel(f"Base URL: http://0.0.0.0:{self.server_port}/v1/easyearth\n"
-                                  f"Infer with point or box prompts: /sam-predict\n"
-                                  f"Infer with no prompts: /segment-predict\n"
-                                  f"Health check: /ping")
+                                   f"Infer with point or box prompts: /sam-predict\n"
+                                   f"Infer with no prompts: /segment-predict\n"
+                                   f"Health check: /ping")
             self.api_info.setWordWrap(True)
             api_layout.addWidget(api_label)
             api_layout.addWidget(self.api_info)
@@ -286,7 +197,7 @@ class EasyEarthPlugin:
             service_group.setLayout(service_layout)
             main_layout.addWidget(service_group)
 
-            # Model Selection Group
+            # 3. Model Selection Group
             model_group = QGroupBox("Segmentation Model")
             model_layout = QHBoxLayout()
 
@@ -300,7 +211,7 @@ class EasyEarthPlugin:
                 "facebook/sam-vit-huge",
                 "restor/tcd-segformer-mit-b5",
             ])
-            self.model_combo.setEditText("facebook/sam-vit-base")  # Default
+            self.model_combo.setEditText("facebook/sam-vit-base") # default
             self.model_combo.currentTextChanged.connect(self.on_model_changed)
             self.model_path = self.model_combo.currentText().strip()
 
@@ -308,7 +219,7 @@ class EasyEarthPlugin:
             model_group.setLayout(model_layout)
             main_layout.addWidget(model_group)
 
-            # 3. Image Source Group
+            # 4. Image Source Group
             image_group = QGroupBox("Image Source")
             image_layout = QVBoxLayout()
 
@@ -324,11 +235,14 @@ class EasyEarthPlugin:
 
             # File input
             file_layout = QHBoxLayout()
-            self.image_path = QLineEdit()
-            self.image_path.setPlaceholderText("Enter image path or click Browse...")
-            self.image_path.returnPressed.connect(self.on_image_path_entered)
-            self.browse_button = QPushButton("Browse Image")
+            image_path_label = QLabel("Image path:")
+            self.image_path = QLineEdit("")
+            self.image_path.setReadOnly(True)
+            # self.image_path.setPlaceholderText("Image path:")
+            # self.image_path.returnPressed.connect(self.on_image_path_entered)
+            self.browse_button = QPushButton("Select image")
             self.browse_button.clicked.connect(self.browse_image)
+            file_layout.addWidget(image_path_label)
             file_layout.addWidget(self.image_path)
             file_layout.addWidget(self.browse_button)
             image_layout.addLayout(file_layout)
@@ -352,16 +266,16 @@ class EasyEarthPlugin:
             file_layout.addWidget(self.downloading_progress_status)  # <-- Add to file_layout
 
             # Layer selection
-            self.layer_combo = QComboBox()
-            self.layer_combo.hide()
-            image_layout.addWidget(self.layer_combo)
+            self.layer_dropdown = QComboBox() # displays a list of available raster layers in the project
+            self.layer_dropdown.hide()
+            image_layout.addWidget(self.layer_dropdown)
             # Connect to layer selection change
-            self.layer_combo.currentIndexChanged.connect(self.on_layer_selected)
+            self.layer_dropdown.currentIndexChanged.connect(self.on_layer_selected)
 
             image_group.setLayout(image_layout)
             main_layout.addWidget(image_group)
 
-            # 4. Embedding Settings Group
+            # 5. Embedding Settings Group
             embedding_group = QGroupBox("Embedding Settings")
             embedding_layout = QVBoxLayout()
 
@@ -401,7 +315,7 @@ class EasyEarthPlugin:
             embedding_group.setLayout(embedding_layout)
             main_layout.addWidget(embedding_group)
 
-            # 5. Drawing and Prediction Settings Group
+            # 6. Drawing and Prediction Settings Group
             settings_group = QGroupBox("Drawing and Prediction Settings")
             settings_layout = QVBoxLayout()
 
@@ -426,7 +340,7 @@ class EasyEarthPlugin:
             settings_group.setLayout(settings_layout)
             main_layout.addWidget(settings_group)
 
-            # 6. Prediction Button Group
+            # 7. Prediction Button Group
             predict_group = QGroupBox("Prediction")
             predict_layout = QVBoxLayout()
             self.predict_button = QPushButton("Get Inference")
@@ -454,8 +368,8 @@ class EasyEarthPlugin:
             # self.data_dir = self.initialize_data_directory()
 
             # Update the layer (raster) list in the combo box whenever a layer is added or removed
-            QgsProject.instance().layersAdded.connect(self.on_layers_added)
-            QgsProject.instance().layersRemoved.connect(self.update_layer_combo)
+            QgsProject.instance().layersAdded.connect(self.update_layer_dropdown)
+            QgsProject.instance().layersRemoved.connect(self.update_layer_dropdown)
 
             # Connect to QGIS quit signal
             QgsApplication.instance().aboutToQuit.connect(self.cleanup_docker)
@@ -471,125 +385,101 @@ class EasyEarthPlugin:
             self.logger.error(f"Error in initGui: {str(e)}")
             self.logger.exception("Full traceback:")
 
-    def update_docker_run_command(self):
-        """Update the docker run command based on the current data_dir."""
-        data_dir = self.data_dir or "./data"
+    def select_data_folder(self):
+        folder = QFileDialog.getExistingDirectory(None, "Select Data Folder", self.data_folder_edit.text()) # opens a dialog to select a folder
+
+        if folder: # if a folder is selected
+            self.data_folder_edit.setText(folder)
+            self.data_dir = folder
+        
+        self.iface.messageBar().pushMessage("Info", f"Data folder set to: {self.data_dir}", level=Qgis.Info, duration=5)
+
+    def start_docker_container(self):
+        data_dir = self.data_dir
         tmp_dir = os.path.join(self.plugin_dir, 'tmp')
         logs_dir = os.path.join(self.plugin_dir, 'logs')
         cache_dir = os.path.expandvars("$HOME/.cache/easyearth/models")
-        self.docker_run_cmd = (
+        docker_run_cmd = (
             f"{self.docker_path} rm -f easyearth-container 2>/dev/null || true && " # removes the container if it already exists
             f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
             f"{self.docker_path} run -d --name easyearth-container -p 3781:3781 "
-            f"-v \"{data_dir}\":/usr/src/app/data "
-            f"-v \"{tmp_dir}\":/usr/src/app/tmp "
-            f"-v \"{logs_dir}\":/usr/src/app/logs "
-            f"-v \"{cache_dir}\":/usr/src/app/.cache/models "
+            f"-v \"{data_dir}\":/usr/src/app/data " # mounts the data directory in the container
+            f"-v \"{tmp_dir}\":/usr/src/app/tmp " # mounts the tmp directory in the container
+            f"-v \"{logs_dir}\":/usr/src/app/logs " # mounts the logs directory in the container
+            f"-v \"{cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
             f"{self.docker_hub_image_name}"
         )
+        result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
+        self.iface.messageBar().pushMessage("Info",
+                                            f"Starting Docker container...\nRunning command: {result}",
+                                            level=Qgis.Info,
+                                            duration=5)
+        self.docker_running = True
 
-    def select_data_folder(self):
-        folder = QFileDialog.getExistingDirectory(None, "Select Data Folder", self.data_folder_edit.text())
-        if folder:
-            self.data_folder_edit.setText(folder)
-            self.data_dir = folder
-            self.update_docker_run_command()
-        self.iface.messageBar().pushMessage(
-            "Info",
-            f"Data folder set to: {self.data_dir}",
-            level=Qgis.Info,
-            duration=5
-        )
+    def stop_docker_container(self):
+        result = subprocess.run(f"{self.docker_path} stop easyearth-container && {self.docker_path} rm easyearth-container", capture_output=True, text=True, shell=True)
+        self.iface.messageBar().pushMessage("Info",
+                                            f"Stopping Docker container...\nRunning command: {result}",
+                                            level=Qgis.Info,
+                                            duration=5)
+        self.docker_hub_process = None
+        self.docker_running = False
 
     def run_or_stop_container(self):
-        if not self.docker_running:
-            # Start container
+        if not self.docker_running: # if the docker container is not running, start it
             self.data_folder_edit.setReadOnly(True)
             self.data_folder_btn.setEnabled(False)
             self.docker_run_btn.setText("Stop Docker")
             self.start_docker_container()
-        else:
-            # Stop container
+        else: # if the container is running, stop it
             self.stop_docker_container()
             self.data_folder_edit.setReadOnly(False)
             self.data_folder_btn.setEnabled(True)
             self.docker_run_btn.setText("Run Docker")
 
-    def start_docker_container(self):
-        self.update_docker_run_command()  # Ensure command is set
-        if not self.docker_run_cmd:
-            QMessageBox.critical(None, "Error", "Docker run command is not set.")
-            return
-        self.iface.messageBar().pushMessage(
-            "Info",
-            f"Starting Docker container...\nRunning command: {self.docker_run_cmd}",
-            level=Qgis.Info,
-            duration=5
-        )
-        # Store the process so it can be managed later
-        result = subprocess.run(self.docker_run_cmd.replace("sudo ", ""), capture_output=True, text=True, shell=True)
-        self.docker_running = True
-
-    def stop_docker_container(self):
-        result = subprocess.run(f"{self.docker_path} stop easyearth-container && {self.docker_path} rm easyearth-container", capture_output=True, text=True, shell=True)
-        self.iface.messageBar().pushMessage(
-            "Info",
-            f"Stopping Docker container...\nRunning command: {result}",
-            level=Qgis.Info,
-            duration=5
-        )
-
-        self.docker_hub_process = None
-        self.docker_running = False
-
     def on_project_crs_changed(self):
         """Update the cached project CRS when the project CRS changes."""
+
         self.project_crs = QgsProject.instance().crs()
-        self.iface.messageBar().pushMessage(
-            "Info",
-            f"Project CRS changed to: {self.project_crs.authid()}",
-            level=Qgis.Info,
-            duration=5
-        )
+        self.iface.messageBar().pushMessage("Info", f"Project CRS changed to: {self.project_crs.authid()}", level=Qgis.Info, duration=5)
 
     def on_realtime_checkbox_changed(self):
-        """
-        Enable or disable the prediction button based on real-time mode.
-        """
-        # If real-time mode is checked, disable the prediction button, vice versa
-        self.predict_button.setEnabled(not self.realtime_checkbox.isChecked())
+        """Enable or disable the prediction button based on real-time mode."""
+        self.predict_button.setEnabled(not self.realtime_checkbox.isChecked()) # if real-time mode is checked, disable the prediction button, vice versa
 
         # If real-time mode is unchecked, reset the last prediction time
         if not self.realtime_checkbox.isChecked():
             self.last_pred_time = time.time()
 
-    def update_layer_combo(self):
-        """Update the layers combo box with current raster layers in the project"""
+    def update_layer_dropdown(self):
+        """Update the layers dropdown with the current raster layers in the project"""
+
         try:
-            current_layer_id = self.layer_combo.currentData()
-            self.layer_combo.blockSignals(True)
-            self.layer_combo.clear()
-            self.layer_combo.addItem("Select a layer...", None)
+            current_layer_id = self.layer_dropdown.currentData()
+            self.layer_dropdown.blockSignals(True)
+            self.layer_dropdown.clear()
+            self.layer_dropdown.addItem("Select a layer...", None)
 
             # Add all raster layers to combo
             for layer in QgsProject.instance().mapLayers().values():
                 if isinstance(layer, QgsRasterLayer):
-                    self.layer_combo.addItem(layer.name(), layer.id())
+                    self.layer_dropdown.addItem(layer.name(), layer.id())
 
             # Restore previous selection if possible
             if current_layer_id:
-                index = self.layer_combo.findData(current_layer_id)
+                index = self.layer_dropdown.findData(current_layer_id)
+
                 if index != -1:
-                    self.layer_combo.setCurrentIndex(index)
-            self.layer_combo.blockSignals(False)
+                    self.layer_dropdown.setCurrentIndex(index)
+            self.layer_dropdown.blockSignals(False)
 
         except Exception as e:
             self.logger.error(f"Error updating layer combo: {str(e)}")
 
-    def on_layers_added(self, layers):
-        # Only update if any added layer is a QgsRasterLayer
-        if any(isinstance(layer, QgsRasterLayer) for layer in layers):
-            self.update_layer_combo()
+    # def on_layers_added(self, layers):
+    #     # Only update if any added layer is a QgsRasterLayer
+    #     if any(isinstance(layer, QgsRasterLayer) for layer in layers):
+    #         self.update_layer_dropdown()
 
     def is_sam_model(self):
         is_sam = self.model_path.startswith("facebook/sam-")
@@ -632,6 +522,7 @@ class EasyEarthPlugin:
         try:
             # Get the image path
             image_path = self.image_path.text()
+
             if not image_path:
                 return
 
@@ -699,8 +590,9 @@ class EasyEarthPlugin:
 
     def initialize_image_path(self):
         """Reinitialize the image path input field"""
+
         self.image_path.clear()
-        self.image_path.setPlaceholderText("Enter image path or click Browse...")
+        self.image_path.setPlaceholderText("Enter image path or click Select...")
         self.image_path.setEnabled(True)
         self.browse_button.setEnabled(True)
 
@@ -727,7 +619,7 @@ class EasyEarthPlugin:
             if text == "File":
                 self.image_path.show()
                 self.browse_button.show()
-                self.layer_combo.hide()
+                self.layer_dropdown.hide()
                 self.download_button.hide()
                 self.initialize_image_path()
                 self.initialize_embedding_path()
@@ -737,13 +629,13 @@ class EasyEarthPlugin:
                 self.image_path.hide()
                 self.browse_button.hide()
                 self.download_button.hide()
-                self.layer_combo.show()
-                self.update_layer_combo()
+                self.layer_dropdown.show()
+                self.update_layer_dropdown()
             elif text == "Link":
                 self.image_path.show()
                 self.browse_button.hide()
                 self.download_button.show()
-                self.layer_combo.hide()
+                self.layer_dropdown.hide()
                 self.image_path.setPlaceholderText("Enter image URL (http/https)...")
                 self.image_path.clear()
                 self.initialize_embedding_path()
@@ -1052,8 +944,8 @@ class EasyEarthPlugin:
                 self.logger.info(f"Container is running with status: {container_status}")
                 # Update UI and state
                 self.docker_running = True
-                self.docker_status.setText("Running")
-                self.docker_button.setText("Stop Docker")
+                # self.docker_status.setText("Running")
+                # self.docker_button.setText("Stop Docker")
             else:
                 self.logger.info(f"Container is not running. Status: {container_status}")
                 self.docker_running = False
@@ -1066,8 +958,8 @@ class EasyEarthPlugin:
     def toggle_docker(self):
         """Toggle Docker container state"""
         try:
-
             self.check_container_running()
+
             if not self.docker_running:
                 # TODO: need to deal with the case where the docker container is initilized outside qgis, so the docker_running is actually true
                 # TODO: need to test the server status right after the docker container is finished starting
@@ -1077,6 +969,7 @@ class EasyEarthPlugin:
 
                 # Set environment variables including DATA_DIR
                 env = QProcessEnvironment.systemEnvironment()
+
                 if self.data_dir and os.path.exists(self.data_dir):
                     env.insert("DATA_DIR", self.data_dir)
                 else:
@@ -1121,9 +1014,9 @@ class EasyEarthPlugin:
                         duration=3
                     )
                     self.docker_running = True
-                    self.docker_status.setText("Running")
-                    self.docker_button.setText("Stop Docker")
-                    self.progress_status.setText("Docker started successfully")
+                    # self.docker_status.setText("Running")
+                    # self.docker_button.setText("Stop Docker")
+                    # self.progress_status.setText("Docker started successfully")
 
                 else:
                     compose_path = os.path.join(self.plugin_dir, 'docker-compose.yml')
@@ -1131,29 +1024,28 @@ class EasyEarthPlugin:
                     # Initialize progress tracking
                     self.current_step = 0
                     self.count_docker_steps()
-                    self.progress_bar.setValue(0)
-                    self.progress_bar.show()
-                    self.progress_status.show()
+                    # self.progress_bar.setValue(0)
+                    # self.progress_bar.show()
+                    # self.progress_status.show()
 
                     self.docker_process = QProcess()
                     self.docker_process.finished.connect(self.on_docker_finished)
                     self.docker_process.errorOccurred.connect(self.on_docker_error)
                     self.docker_process.readyReadStandardError.connect(self.on_docker_stderr)
                     self.docker_process.readyReadStandardOutput.connect(self.on_docker_stdout)
-
                     self.docker_process.setWorkingDirectory(self.plugin_dir)
 
                     # Check if we need to build
                     if not self.check_docker_image():
                         cmd = f'echo "{self.sudo_password}" | sudo -S TEMP_DIR={self.tmp_dir} DATA_DIR={self.data_dir} docker-compose -p {self.project_name} -f "{compose_path}" up -d --build'
-                        self.progress_status.setText("Building Docker image (this may take a while)...")
+                        # self.progress_status.setText("Building Docker image (this may take a while)...")
                     else:
                         cmd = f'echo "{self.sudo_password}" | sudo -S TEMP_DIR={self.tmp_dir} DATA_DIR={self.data_dir} docker-compose -p {self.project_name} -f "{compose_path}" up -d'
-                        self.progress_status.setText("Starting existing Docker container...")
+                        # self.progress_status.setText("Starting existing Docker container...")
 
                     self.docker_process.start('bash', ['-c', cmd])
-                    self.docker_status.setText("Starting")
-                    self.docker_button.setEnabled(False)
+                    # self.docker_status.setText("Starting")
+                    # self.docker_button.setEnabled(False)
 
                 self.check_server_status()
 
@@ -1169,12 +1061,11 @@ class EasyEarthPlugin:
                 self.docker_process.finished.connect(self.on_docker_finished)
                 self.docker_process.errorOccurred.connect(self.on_docker_error)
                 self.docker_process.setWorkingDirectory(os.path.dirname(compose_path))
-
                 self.docker_process.start('bash', ['-c', cmd])
-                self.docker_status.setText("Stopping")
-                self.docker_button.setEnabled(False)
-                self.progress_status.setText("Stopping Docker container...")
-                self.progress_bar.show()
+                # self.docker_status.setText("Stopping")
+                # self.docker_button.setEnabled(False)
+                # self.progress_status.setText("Stopping Docker container...")
+                # self.progress_bar.show()
 
         except Exception as e:
             self.logger.error(f"Error controlling Docker: {str(e)}")
@@ -1194,32 +1085,32 @@ class EasyEarthPlugin:
 
     def on_docker_finished(self, exit_code):
         """Handle Docker process completion"""
-        try:
-            if exit_code == 0:
-                self.progress_bar.setValue(self.total_steps)  # Set to 100%
-                if not self.docker_running:
-                    self.docker_running = True
-                    self.docker_status.setText("Running")
-                    self.docker_button.setText("Stop Docker")
-                    self.progress_status.setText("Docker started successfully")
-                else:
-                    self.docker_running = False
-                    self.docker_status.setText("Stopped")
-                    self.docker_button.setText("Start Docker")
-                    self.progress_status.setText("Docker stopped successfully")
-                    self.server_status.setText("Not Running")
-                    self.server_status.setStyleSheet("color: red;")
+        # try:
+        if exit_code == 0:
+            # self.progress_bar.setValue(self.total_steps)  # Set to 100%
+            if not self.docker_running:
+                self.docker_running = True
+                # self.docker_status.setText("Running")
+                # self.docker_button.setText("Stop Docker")
+                # self.progress_status.setText("Docker started successfully")
             else:
-                error_output = self.docker_process.readAllStandardError().data().decode()
-                self.logger.error(f"Docker command failed with exit code {exit_code}. Error: {error_output}")
-                QMessageBox.critical(None, "Error",
-                    f"Docker command failed with exit code {exit_code}")
-                self.docker_status.setText("Error")
-                self.progress_status.setText(f"Error: Docker command failed with exit code {exit_code}")
-        finally:
-            self.docker_button.setEnabled(True)
-            QTimer.singleShot(2000, lambda: self.progress_bar.hide())
-            QTimer.singleShot(2000, lambda: self.progress_status.hide())
+                self.docker_running = False
+                # self.docker_status.setText("Stopped")
+                # self.docker_button.setText("Start Docker")
+                # self.progress_status.setText("Docker stopped successfully")
+                self.server_status.setText("Not Running")
+                self.server_status.setStyleSheet("color: red;")
+        else:
+            error_output = self.docker_process.readAllStandardError().data().decode()
+            self.logger.error(f"Docker command failed with exit code {exit_code}. Error: {error_output}")
+            QMessageBox.critical(None, "Error",
+                f"Docker command failed with exit code {exit_code}")
+            # self.docker_status.setText("Error")
+            # self.progress_status.setText(f"Error: Docker command failed with exit code {exit_code}")
+        # finally:
+        #     self.docker_button.setEnabled(True)
+            # QTimer.singleShot(2000, lambda: self.progress_bar.hide())
+            # QTimer.singleShot(2000, lambda: self.progress_status.hide())
 
     def on_docker_error(self, error):
         """Handle Docker process errors"""
@@ -1234,8 +1125,8 @@ class EasyEarthPlugin:
 
         self.logger.error(f"Docker error: {error_msg}")
         QMessageBox.critical(None, "Error", f"Docker error: {error_msg}")
-        self.docker_status.setText("Error")
-        self.docker_button.setEnabled(True)
+        # self.docker_status.setText("Error")
+        # self.docker_button.setEnabled(True)
 
     def toggle_drawing(self, checked):
         """Toggle drawing mode"""
@@ -1273,7 +1164,7 @@ class EasyEarthPlugin:
                 self.draw_button.setText("Stop Drawing")
 
                 if self.draw_type_combo.currentText() == "Point":
-                        self.canvas.setMapTool(self.map_tool)
+                    self.canvas.setMapTool(self.map_tool)
                 elif self.draw_type_combo.currentText() == "Box":
                     self.canvas.setMapTool(self.box_tool)
                 else:
@@ -1370,11 +1261,13 @@ class EasyEarthPlugin:
         pixel_y = int((extent.yMaximum() - start_point.y()) * height / extent.height())
         pixel_width = int((end_point.x() - start_point.x()) * width / extent.width())
         pixel_height = int((start_point.y() - end_point.y()) * height / extent.height())
+
         # Ensure coordinates are within image bounds
         pixel_x = max(0, min(pixel_x, width - 1))
         pixel_y = max(0, min(pixel_y, height - 1))
         pixel_width = max(0, min(pixel_width, width - pixel_x))
         pixel_height = max(0, min(pixel_height, height - pixel_y))
+
         # Ensure pixel width and height are positive
         pixel_width = max(1, pixel_width)
         pixel_height = max(1, pixel_height)
@@ -1542,10 +1435,12 @@ class EasyEarthPlugin:
             for feature in self.prompts_layer.getFeatures():
                 # Check if the feature is new
                 timestamp = feature.attribute('timestamp')
+
                 if timestamp is None or timestamp < self.last_pred_time:
                     continue
 
                 prompt_type = feature['type']
+
                 if prompt_type == 'Point':
                     x = feature['pixel_x']
                     y = feature['pixel_y']
@@ -1668,6 +1563,7 @@ class EasyEarthPlugin:
 
             # Convert image path for container
             container_image_path = self.get_container_path(image_path)
+
             if not container_image_path:
                 raise ValueError("Image must be within the data directory")
 
@@ -1746,6 +1642,7 @@ class EasyEarthPlugin:
 
                         features = response_json['features']
                         feature_crs = response_json.get('crs', None)
+
                         if not features:
                             self.iface.messageBar().pushMessage(
                                 "Warning",
@@ -1789,10 +1686,9 @@ class EasyEarthPlugin:
                 # Fewer steps if just starting existing container
                 self.total_steps = 3  # pull if needed, create container, start container
                 self.progress_bar.setMaximum(self.total_steps)
-                return
+                # return
 
             dockerfile_path = os.path.join(self.plugin_dir, 'Dockerfile')
-
             steps = 0
 
             # Count steps in Dockerfile
@@ -1827,7 +1723,7 @@ class EasyEarthPlugin:
             steps += 5  # network creation, volume creation, image build, container creation, container start
 
             self.total_steps = max(steps, 1)  # Ensure at least 1 step
-            self.progress_bar.setMaximum(self.total_steps)
+            # self.progress_bar.setMaximum(self.total_steps)
             self.logger.debug(f"Total build steps: {self.total_steps}")
 
         except Exception as e:
@@ -1857,25 +1753,26 @@ class EasyEarthPlugin:
         }
 
         lines = output.split('\n')
+
         for line in lines:
             line = line.strip()
             if line:
                 # Special handling for pip install progress
-                if 'pip install' in line:
-                    self.progress_status.setText("Installing dependencies...")
-                    self.progress_status.show()
-                elif 'Successfully built' in line:
-                    self.progress_bar.setValue(self.total_steps)
-                    self.progress_status.setText("Build completed successfully")
-                    return
+                # if 'pip install' in line:
+                    # self.progress_status.setText("Installing dependencies...")
+                    # self.progress_status.show()
+                # if 'Successfully built' in line:
+                    # self.progress_bar.setValue(self.total_steps)
+                    # self.progress_status.setText("Build completed successfully")
+                    # return
 
                 for indicator in progress_indicators:
                     if indicator in line:
                         self.current_step += 1
                         progress = min(self.current_step, self.total_steps)
-                        self.progress_bar.setValue(progress)
-                        self.progress_status.setText(line)
-                        self.progress_status.show()
+                        # self.progress_bar.setValue(progress)
+                        # self.progress_status.setText(line)
+                        # self.progress_status.show()
                         self.logger.debug(f"Docker progress: {line}")
                         break
 
@@ -1883,14 +1780,14 @@ class EasyEarthPlugin:
         """Check if the server is running by pinging it"""
         try:
             response = requests.get(f"http://0.0.0.0:{self.server_port}/v1/easyearth/ping", timeout=2)
+
             if response.status_code == 200:
                 self.server_status.setText("Running")
                 self.server_status.setStyleSheet("color: green;")
                 self.server_running = True
-
                 self.docker_running = True
-                self.docker_status.setText("Running")
-                self.docker_button.setText("Stop Docker")
+                # self.docker_status.setText("Running")
+                # self.docker_button.setText("Stop Docker")
 
                 # TODO: need to first check which image is running, then when click stop docker, stop the right one...
                 self.docker_run_btn.setText("Stop Docker")
@@ -1942,12 +1839,8 @@ class EasyEarthPlugin:
         try:
             if self.load_embedding_radio.isChecked():
                 # Browse for existing file
-                file_path, _ = QFileDialog.getOpenFileName(
-                    None,
-                    "Select Embedding File",
-                    "",
-                    "Embedding Files (*.pt);;All Files (*.*)"
-                )
+                embeddings_dir = os.path.join(self.data_dir, 'embeddings') if os.path.exists(os.path.join(self.data_dir, 'embeddings')) else self.data_dir
+                file_path, _ = QFileDialog.getOpenFileName(None, "Select Embedding File", embeddings_dir, "Embedding Files (*.pt);;All Files (*.*)")
                 self.logger.debug(f"Selected existing embedding file: {file_path}")
             else:
                 # Browse for save location
@@ -2137,8 +2030,8 @@ class EasyEarthPlugin:
     def on_layer_selected(self, index):
         """Handle layer selection change and check for existing embeddings"""
         try:
-            if index > 0:  # Skip "Select a layer..." item
-                layer_id = self.layer_combo.itemData(index)
+            if index > 0: # 0th index is "Select a layer..."
+                layer_id = self.layer_dropdown.itemData(index)
                 selected_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
 
                 if not selected_layer:
@@ -2160,7 +2053,7 @@ class EasyEarthPlugin:
                     duration=5
                 )
 
-                # Create prediction layers
+                self.image_path.setText(selected_layer.source())
                 self.create_prediction_layers()
 
                 # Check for existing embedding
@@ -2182,6 +2075,7 @@ class EasyEarthPlugin:
                 QMessageBox.warning(None, "Error", "Please enter a valid image URL.")
                 return
 
+            self.download_button.hide()
             self.image_download_progress_bar.setValue(0)
             self.image_download_progress_bar.setMaximum(100)
             self.image_download_progress_bar.show()

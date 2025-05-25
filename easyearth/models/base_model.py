@@ -11,6 +11,7 @@ from pathlib import Path
 import os 
 from datetime import datetime
 import warnings
+import torch.backends.mps
 
 class BaseModel:
     def __init__(self, model_path: str, log_dir: Optional[str] = None):
@@ -48,6 +49,14 @@ class BaseModel:
     def _get_device(self) -> torch.device:
         """Get the device to run the model on, with proper error handling"""
         try:
+            # Check for MPS (Apple silicon GPU)
+            if torch.backends.mps.is_available():
+                mps_device = torch.device("mps")
+                self.logger.info("Using MPS device")
+                return mps_device
+            else:
+                self.logger.info("MPS device not available")
+
             # Suppress the specific CUDA warning
             with warnings.catch_warnings():
                 warnings.filterwarnings(
