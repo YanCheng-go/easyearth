@@ -58,7 +58,8 @@ class EasyEarthPlugin:
         self.project_name = "easyearth_plugin"
         self.sudo_password = None  # Add this to store password temporarily
         self.docker_path = 'docker' if shutil.which('docker') else '/Applications/Docker.app/Contents/Resources/bin/docker' # adds compatibility for macOS
-        self.docker_hub_image_name = "maverickmiaow/easyearth"
+        # self.docker_hub_image_name = "maverickmiaow/easyearth"
+        self.docker_hub_image_name = "lgordon99/easyearth"
 
         # Initialize map tools and data
         self.canvas = iface.mapCanvas() # QGIS map canvas instance
@@ -105,14 +106,13 @@ class EasyEarthPlugin:
         self.prompts_geojson = None
         self.prompts_layer = None
 
-        # Initialize data directory
-
         # initialize image crs and extent...
         self.raster_crs = None
         self.raster_extent = None
         self.raster_width = None
         self.raster_height = None
         self.project_crs = QgsProject.instance().crs()
+
         QgsProject.instance().crsChanged.connect(self.on_project_crs_changed)
 
     def initGui(self):
@@ -295,7 +295,6 @@ class EasyEarthPlugin:
             self.embedding_browse_btn = QPushButton("Browse")
             self.embedding_browse_btn.setEnabled(False)
             self.embedding_browse_btn.clicked.connect(self.browse_embedding)
-
             self.embedding_path_layout.addWidget(self.embedding_path_edit)
             self.embedding_path_layout.addWidget(self.embedding_browse_btn)
 
@@ -334,8 +333,8 @@ class EasyEarthPlugin:
             self.draw_button.setEnabled(False) # enabled after image is loaded
             button_layout.addWidget(self.draw_button)
             
-            self.undo_button = QPushButton("Undo last point")
-            self.undo_button.clicked.connect(self.undo_last_point)
+            self.undo_button = QPushButton("Undo last drawing")
+            self.undo_button.clicked.connect(self.undo_last_drawing)
             self.undo_button.setEnabled(False) # enable after drawing starts
             button_layout.addWidget(self.undo_button)
             settings_layout.addLayout(button_layout)
@@ -947,7 +946,7 @@ class EasyEarthPlugin:
             QMessageBox.critical(None, "Error", f"Failed to handle drawing: {str(e)}")
             return None
 
-    def undo_last_point(self):
+    def undo_last_drawing(self):
         self.prompts_geojson['features'] = self.prompts_geojson['features'][:-1] # removes the last point from the prompts geojson
         self.prompt_count -= 1 # decrements the prompt counter
         self.add_features_to_layer([], "prompts")
