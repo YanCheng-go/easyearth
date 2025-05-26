@@ -1,14 +1,3 @@
-# TODO: split into multiple files, plugin.py, docker_manager.py, ui.py, layer_manager.py, prediction.py, utils.py
-# TODO: allow scrapping from wms file...
-# TODO: add function for converting local models to hugging face models
-# TODO: allow loading multiple images, create a prompt layer and a prediction layer for each image... zoom to layers to draw on and run prediction on...good for multiple images over the same location - timeseries
-
-# TODO: handle situations when regretting the drawing, and refine the predictions, editing
-# TODO: incorporate SAM2, text prompt
-# TODO: models with no prompts
-# TODO: test for windows and macbook
-# TODO: ease the incorporation of more models
-
 """Entry point for the QGIS plugin. Handles plugin registration, menu/toolbar actions, and high-level coordination."""
 
 from qgis.PyQt.QtWidgets import (QAction, QDockWidget, QPushButton, QVBoxLayout,
@@ -80,8 +69,10 @@ class EasyEarthPlugin:
         self.start_point = None
         self.drawn_features = []
         self.drawn_layer = None
-        self.data_dir = self.plugin_dir + '/user' # user data directory, where the data will be stored
+        self.data_dir = os.path.join(self.plugin_dir, 'data') # data directory for storing images and embeddings
         self.tmp_dir = os.path.join(self.plugin_dir, 'tmp') # temporary directory for storing temporary files
+        self.logs_dir = os.path.join(self.plugin_dir, 'logs') # logs directory for storing logs
+        self.cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "easyearth", "models") # cache directory for storing models
         self.model_path = None
         self.feature_count = 0 # for generating unique IDs
         self.prompt_count = 0 # for generating unique IDs
@@ -377,11 +368,13 @@ class EasyEarthPlugin:
             # Connect to QGIS quit signal
             QgsApplication.instance().aboutToQuit.connect(self.cleanup_docker)
 
-            # TODO: add check at the start and disable docker button
             # Start periodic server status check
             self.status_timer = QTimer()
             self.status_timer.timeout.connect(self.check_server_status)
             self.status_timer.start(5000)  # Check every 5 seconds
+
+            # Check if the container is running on startup
+            self.inspect_running_container()
 
             self.logger.debug("Finished initGui setup")
         except Exception as e:
@@ -405,43 +398,131 @@ class EasyEarthPlugin:
                 self.server_status.setText("Running")
                 self.server_status.setStyleSheet("color: green;")
                 self.server_running = True
-                self.docker_running = True
-                # TODO: need to first check which image is running, then when click stop docker, stop the right one...
-                self.docker_run_btn.setText("Stop Docker")
             else:
                 self.server_status.setText("Error")
                 self.server_status.setStyleSheet("color: red;")
                 self.server_running = False
-                # TODO: this would only run the docker run command, running the docker image from the hub...
-                self.docker_run_btn.setText("Run Docker")
         except requests.exceptions.RequestException:
             self.server_status.setText("Not Running")
             self.server_status.setStyleSheet("color: red;")
             self.server_running = False
+
+    def inspect_running_container(self):
+        """Inspect the running Docker container to get the mounted data directory"""
+        result = subprocess.run(f"{self.docker_path} inspect easyearth-container", capture_output=True, text=True, shell=True)
+        if result.returncode != 0:
+            self.logger.error(f"Failed to inspect Docker container: {result.stderr}")
+            return None
+
+        # check if docker container is running
+        if not result.stdout:
+            self.docker_running = False
             self.docker_run_btn.setText("Run Docker")
+            self.iface.messageBar().pushMessage("Info", "Docker container is not running", level=Qgis.Info, duration=5)
+            return None
+        else:
+            self.docker_running = True
+            self.docker_run_btn.setText("Stop Docker")
+            self.iface.messageBar().pushMessage("Info", "Docker container is running", level=Qgis.Info, duration=5)
+
+        # Parse the JSON output
+        container_info = json.loads(result.stdout)
+        mounts = container_info[0].get('Mounts', [])
+        for mount in mounts:
+            if mount['Destination'] == '/usr/src/app/data':
+                self.data_dir = mount['Source']  # Get the host directory mounted to /usr/src/app/data
+                # update the data folder edit line
+                self.data_folder_edit.setText(self.data_dir)
+                self.iface.messageBar().pushMessage("Info", f"Data folder set to: {self.data_dir}", level=Qgis.Info, duration=5)
+            if mount['Destination'] == '/usr/src/app/tmp':
+                self.tmp_dir = mount['Source']
+                self.iface.messageBar().pushMessage("Info", f"Temporary directory set to: {self.tmp_dir}", level=Qgis.Info, duration=5)
+            if mount['Destination'] == '/usr/src/app/logs':
+                self.logs_dir = mount['Source']
+                self.iface.messageBar().pushMessage("Info", f"Logs directory set to: {self.logs_dir}", level=Qgis.Info, duration=5)
+            if mount['Destination'] == '/usr/src/app/.cache/models':
+                self.cache_dir = mount['Source']
+                self.iface.messageBar().pushMessage("Info", f"Cache directory set to: {self.cache_dir}", level=Qgis.Info, duration=5)
+
+    def initialize_directories(self):
+        """Initialize the data and temporary directories"""
+        # Prepare user-writable fallback directory
+        editable_user_dir = os.path.join(os.path.expanduser("~"), ".easyearth")
+        os.makedirs(editable_user_dir, exist_ok=True)
+        os.chmod(editable_user_dir, 0o777)
+
+        # Create tmp directory
+        self.tmp_dir = os.path.join(editable_user_dir, 'tmp')
+        os.makedirs(self.tmp_dir, exist_ok=True)
+        os.chmod(self.tmp_dir, 0o777)
+
+        # Create logs directory
+        self.logs_dir = os.path.join(editable_user_dir, 'logs')
+        os.makedirs(self.logs_dir, exist_ok=True)
+        os.chmod(self.logs_dir, 0o777)
+
+        # Create model cache directory
+        self.cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "easyearth", "models")
+        os.makedirs(self.cache_dir, exist_ok=True)
+        os.chmod(self.cache_dir, 0o777)
 
     def start_docker_container(self):
-        logs_dir = os.path.join(self.plugin_dir, 'logs')
-        cache_dir = os.path.expandvars("$HOME/.cache/easyearth/models")
+        """Start the Docker container with the specified image and mount points"""
+
+        # Initialize directories to be mounted in the container
+        self.initialize_directories()
+
         docker_run_cmd = (f"{self.docker_path} rm -f easyearth-container 2>/dev/null || true && " # removes the container if it already exists
                          f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
                          f"{self.docker_path} run -d --name easyearth-container -p 3781:3781 "
                          f"-v \"{self.data_dir}\":/usr/src/app/data " # mounts the data directory in the container
                          f"-v \"{self.tmp_dir}\":/usr/src/app/tmp " # mounts the tmp directory in the container
-                         f"-v \"{logs_dir}\":/usr/src/app/logs " # mounts the logs directory in the container
-                         f"-v \"{cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
+                         f"-v \"{self.logs_dir}\":/usr/src/app/logs " # mounts the logs directory in the container
+                         f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
                          f"{self.docker_hub_image_name}")
+
         result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
         self.iface.messageBar().pushMessage("Info",
                                             f"Starting Docker container...\nRunning command: {result}",
                                             level=Qgis.Info,
                                             duration=5)
+        if result.returncode != 0:
+            self.iface.messageBar().pushMessage("Error",
+                                                f"Failed to start Docker container:\n{result.stderr}",
+                                                level=Qgis.Critical,
+                                                duration=5)
+            self.logger.error(f"Failed to start Docker container: {result.stderr}")
+            self.docker_running = False
+            return
+
+        self.logger.info(f"Docker container started successfully: {result.stdout}")
+        self.iface.messageBar().pushMessage("Info",
+                                            "Docker container started successfully.",
+                                            level=Qgis.Info,
+                                            duration=5)
         self.docker_running = True
+
+        # Inspect the running container to get the mounted data directory
+        self.inspect_running_container()
+
+        # Check the server status after starting the container
+        self.check_server_status()  # Update server status after starting the container
 
     def stop_docker_container(self):
         result = subprocess.run(f"{self.docker_path} stop easyearth-container && {self.docker_path} rm easyearth-container", capture_output=True, text=True, shell=True)
         self.iface.messageBar().pushMessage("Info",
                                             f"Stopping Docker container...\nRunning command: {result}",
+                                            level=Qgis.Info,
+                                            duration=5)
+        if result.returncode != 0:
+            self.iface.messageBar().pushMessage("Error",
+                                                f"Failed to stop Docker container:\n{result.stderr}",
+                                                level=Qgis.Critical,
+                                                duration=5)
+            self.logger.error(f"Failed to stop Docker container: {result.stderr}")
+            return
+        self.iface.messageBar().pushMessage("Info",
+                                            "Docker container stopped successfully.",
                                             level=Qgis.Info,
                                             duration=5)
         self.docker_hub_process = None
@@ -465,6 +546,10 @@ class EasyEarthPlugin:
         if folder: # if a folder is selected
             self.data_folder_edit.setText(folder)
             self.data_dir = folder
+
+        if not os.path.exists(self.data_dir):
+            QMessageBox.warning(None, "Error", f"Data directory does not exist: {self.data_dir}")
+            return
         
         self.iface.messageBar().pushMessage("Info", f"Data folder set to: {self.data_dir}", level=Qgis.Info, duration=5)
 
@@ -1742,89 +1827,3 @@ class EasyEarthPlugin:
         except Exception as e:
             self.logger.error(f"Error during plugin unload: {str(e)}")
             self.logger.exception("Full traceback:")
-
-    # def initialize_data_directory(self):
-    #     """Initialize or load data directory configuration"""
-    #     try:
-    #         settings = QSettings()
-    #         default_data_dir = os.path.join(self.plugin_dir, 'user')
-
-    #         # Create custom dialog for directory choice
-    #         msg = QMessageBox()
-    #         msg.setIcon(QMessageBox.Question)
-    #         msg.setText("Data Directory Configuration")
-    #         msg.setInformativeText(
-    #             "Would you like to:\n\n"
-    #             "1. Use a custom directory for your data\n"
-    #             "2. Use the default directory\n\n"
-    #             f"Default directory: {default_data_dir}"
-    #         )
-    #         custom_button = msg.addButton("Select Custom Directory", QMessageBox.ActionRole)
-    #         default_button = msg.addButton("Use Default Directory", QMessageBox.ActionRole)
-    #         msg.setDefaultButton(custom_button)
-
-    #         msg.exec_()
-    #         clicked_button = msg.clickedButton()
-
-    #         if clicked_button == custom_button:
-    #             # User wants to select custom directory
-    #             data_dir = QFileDialog.getExistingDirectory(
-    #                 self.iface.mainWindow(),
-    #                 "Select Data Directory",
-    #                 os.path.expanduser("~"),
-    #                 QFileDialog.ShowDirsOnly
-    #             )
-
-    #             if not data_dir:  # User cancelled selection
-    #                 self.logger.info("User cancelled custom directory selection, using default")
-    #                 data_dir = default_data_dir
-    #         else:
-    #             # User chose default directory
-    #             data_dir = default_data_dir
-
-    #         # Create the directory and subdirectories
-    #         try:
-    #             os.makedirs(data_dir, exist_ok=True)
-    #             os.makedirs(os.path.join(data_dir, 'embeddings'), exist_ok=True)
-
-    #             # Save the setting
-    #             settings.setValue("easyearth/data_dir", data_dir)
-    #             self.data_dir = data_dir
-
-    #             # create a tmp directory
-    #             self.tmp_dir = os.path.join(data_dir, 'tmp')
-    #             os.makedirs(self.tmp_dir, exist_ok=True)
-    #             self.logger.info(f"Tmp data directory: {data_dir}")
-
-    #             # Show confirmation
-    #             QMessageBox.information(
-    #                 None,
-    #                 "Data Directory Set",
-    #                 f"Data directory has been set to:\n{data_dir}\n\n"
-    #                 f"Temporary directory has been set to:\n{self.tmp_dir}\n\n"
-    #                 "Please make sure to:\n"
-    #                 "1. Place your input images in this directory\n"
-    #                 "2. Ensure Docker has access to this location\n"
-    #                 "3. Check the temporary directory for any temporary outputs\n"
-    #             )
-
-    #             self.logger.info(f"Data directory set to: {data_dir}")
-
-    #         except Exception as e:
-    #             self.logger.error(f"Error creating directories: {str(e)}")
-    #             QMessageBox.critical(
-    #                 None,
-    #                 "Error",
-    #                 f"Failed to create data directory structure: {str(e)}\n"
-    #                 "Please check permissions and try again."
-    #             )
-    #             return None
-
-    #         return data_dir
-
-    #     except Exception as e:
-    #         self.logger.error(f"Error initializing data directory: {str(e)}")
-    #         self.logger.exception("Full traceback:")
-    #         QMessageBox.critical(None, "Error",
-    #             f"Failed to initialize data directory: {str(e)}")
-    #         return None
