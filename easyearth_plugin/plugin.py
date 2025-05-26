@@ -514,6 +514,17 @@ class EasyEarthPlugin:
                                             f"Stopping Docker container...\nRunning command: {result}",
                                             level=Qgis.Info,
                                             duration=5)
+        if result.returncode != 0:
+            self.iface.messageBar().pushMessage("Error",
+                                                f"Failed to stop Docker container:\n{result.stderr}",
+                                                level=Qgis.Critical,
+                                                duration=5)
+            self.logger.error(f"Failed to stop Docker container: {result.stderr}")
+            return
+        self.iface.messageBar().pushMessage("Info",
+                                            "Docker container stopped successfully.",
+                                            level=Qgis.Info,
+                                            duration=5)
         self.docker_hub_process = None
         self.docker_running = False
 
@@ -535,6 +546,10 @@ class EasyEarthPlugin:
         if folder: # if a folder is selected
             self.data_folder_edit.setText(folder)
             self.data_dir = folder
+
+        if not os.path.exists(self.data_dir):
+            QMessageBox.warning(None, "Error", f"Data directory does not exist: {self.data_dir}")
+            return
         
         self.iface.messageBar().pushMessage("Info", f"Data folder set to: {self.data_dir}", level=Qgis.Info, duration=5)
 
