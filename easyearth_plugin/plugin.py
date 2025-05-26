@@ -69,8 +69,10 @@ class EasyEarthPlugin:
         self.start_point = None
         self.drawn_features = []
         self.drawn_layer = None
-        self.data_dir = self.plugin_dir + '/user' # user data directory, where the data will be stored
+        self.data_dir = os.path.join(self.plugin_dir, 'data') # data directory for storing images and embeddings
         self.tmp_dir = os.path.join(self.plugin_dir, 'tmp') # temporary directory for storing temporary files
+        self.logs_dir = os.path.join(self.plugin_dir, 'logs') # logs directory for storing logs
+        self.cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "easyearth", "models") # cache directory for storing models
         self.model_path = None
         self.feature_count = 0 # for generating unique IDs
         self.prompt_count = 0 # for generating unique IDs
@@ -408,21 +410,60 @@ class EasyEarthPlugin:
             self.server_status.setStyleSheet("color: red;")
             self.server_running = False
             self.docker_run_btn.setText("Run Docker")
+    def initialize_directories(self):
+        """Initialize the data and temporary directories"""
+        # Prepare user-writable fallback directory
+        editable_user_dir = os.path.join(os.path.expanduser("~"), ".easyearth")
+        os.makedirs(editable_user_dir, exist_ok=True)
+        os.chmod(editable_user_dir, 0o777)
+
+        # Create tmp directory
+        self.tmp_dir = os.path.join(editable_user_dir, 'tmp')
+        os.makedirs(self.tmp_dir, exist_ok=True)
+        os.chmod(self.tmp_dir, 0o777)
+
+        # Create logs directory
+        self.logs_dir = os.path.join(editable_user_dir, 'logs')
+        os.makedirs(self.logs_dir, exist_ok=True)
+        os.chmod(self.logs_dir, 0o777)
+
+        # Create model cache directory
+        self.cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "easyearth", "models")
+        os.makedirs(self.cache_dir, exist_ok=True)
+        os.chmod(self.cache_dir, 0o777)
 
     def start_docker_container(self):
-        logs_dir = os.path.join(self.plugin_dir, 'logs')
-        cache_dir = os.path.expandvars("$HOME/.cache/easyearth/models")
+        """Start the Docker container with the specified image and mount points"""
+
+        # Initialize directories to be mounted in the container
+        self.initialize_directories()
+
         docker_run_cmd = (f"{self.docker_path} rm -f easyearth-container 2>/dev/null || true && " # removes the container if it already exists
                          f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
                          f"{self.docker_path} run -d --name easyearth-container -p 3781:3781 "
                          f"-v \"{self.data_dir}\":/usr/src/app/data " # mounts the data directory in the container
                          f"-v \"{self.tmp_dir}\":/usr/src/app/tmp " # mounts the tmp directory in the container
-                         f"-v \"{logs_dir}\":/usr/src/app/logs " # mounts the logs directory in the container
-                         f"-v \"{cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
+                         f"-v \"{self.logs_dir}\":/usr/src/app/logs " # mounts the logs directory in the container
+                         f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
                          f"{self.docker_hub_image_name}")
+
         result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
         self.iface.messageBar().pushMessage("Info",
                                             f"Starting Docker container...\nRunning command: {result}",
+                                            level=Qgis.Info,
+                                            duration=5)
+        if result.returncode != 0:
+            self.iface.messageBar().pushMessage("Error",
+                                                f"Failed to start Docker container:\n{result.stderr}",
+                                                level=Qgis.Critical,
+                                                duration=5)
+            self.logger.error(f"Failed to start Docker container: {result.stderr}")
+            self.docker_running = False
+            return
+
+        self.logger.info(f"Docker container started successfully: {result.stdout}")
+        self.iface.messageBar().pushMessage("Info",
+                                            "Docker container started successfully.",
                                             level=Qgis.Info,
                                             duration=5)
         self.docker_running = True
