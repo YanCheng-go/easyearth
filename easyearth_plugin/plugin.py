@@ -368,11 +368,13 @@ class EasyEarthPlugin:
             # Connect to QGIS quit signal
             QgsApplication.instance().aboutToQuit.connect(self.cleanup_docker)
 
-            # TODO: add check at the start and disable docker button
             # Start periodic server status check
             self.status_timer = QTimer()
             self.status_timer.timeout.connect(self.check_server_status)
             self.status_timer.start(5000)  # Check every 5 seconds
+
+            # Check if the container is running on startup
+            self.inspect_running_container()
 
             self.logger.debug("Finished initGui setup")
         except Exception as e:
@@ -396,20 +398,52 @@ class EasyEarthPlugin:
                 self.server_status.setText("Running")
                 self.server_status.setStyleSheet("color: green;")
                 self.server_running = True
-                self.docker_running = True
-                # TODO: need to first check which image is running, then when click stop docker, stop the right one...
-                self.docker_run_btn.setText("Stop Docker")
             else:
                 self.server_status.setText("Error")
                 self.server_status.setStyleSheet("color: red;")
                 self.server_running = False
-                # TODO: this would only run the docker run command, running the docker image from the hub...
-                self.docker_run_btn.setText("Run Docker")
         except requests.exceptions.RequestException:
             self.server_status.setText("Not Running")
             self.server_status.setStyleSheet("color: red;")
             self.server_running = False
+
+    def inspect_running_container(self):
+        """Inspect the running Docker container to get the mounted data directory"""
+        result = subprocess.run(f"{self.docker_path} inspect easyearth-container", capture_output=True, text=True, shell=True)
+        if result.returncode != 0:
+            self.logger.error(f"Failed to inspect Docker container: {result.stderr}")
+            return None
+
+        # check if docker container is running
+        if not result.stdout:
+            self.docker_running = False
             self.docker_run_btn.setText("Run Docker")
+            self.iface.messageBar().pushMessage("Info", "Docker container is not running", level=Qgis.Info, duration=5)
+            return None
+        else:
+            self.docker_running = True
+            self.docker_run_btn.setText("Stop Docker")
+            self.iface.messageBar().pushMessage("Info", "Docker container is running", level=Qgis.Info, duration=5)
+
+        # Parse the JSON output
+        container_info = json.loads(result.stdout)
+        mounts = container_info[0].get('Mounts', [])
+        for mount in mounts:
+            if mount['Destination'] == '/usr/src/app/data':
+                self.data_dir = mount['Source']  # Get the host directory mounted to /usr/src/app/data
+                # update the data folder edit line
+                self.data_folder_edit.setText(self.data_dir)
+                self.iface.messageBar().pushMessage("Info", f"Data folder set to: {self.data_dir}", level=Qgis.Info, duration=5)
+            if mount['Destination'] == '/usr/src/app/tmp':
+                self.tmp_dir = mount['Source']
+                self.iface.messageBar().pushMessage("Info", f"Temporary directory set to: {self.tmp_dir}", level=Qgis.Info, duration=5)
+            if mount['Destination'] == '/usr/src/app/logs':
+                self.logs_dir = mount['Source']
+                self.iface.messageBar().pushMessage("Info", f"Logs directory set to: {self.logs_dir}", level=Qgis.Info, duration=5)
+            if mount['Destination'] == '/usr/src/app/.cache/models':
+                self.cache_dir = mount['Source']
+                self.iface.messageBar().pushMessage("Info", f"Cache directory set to: {self.cache_dir}", level=Qgis.Info, duration=5)
+
     def initialize_directories(self):
         """Initialize the data and temporary directories"""
         # Prepare user-writable fallback directory
@@ -467,6 +501,12 @@ class EasyEarthPlugin:
                                             level=Qgis.Info,
                                             duration=5)
         self.docker_running = True
+
+        # Inspect the running container to get the mounted data directory
+        self.inspect_running_container()
+
+        # Check the server status after starting the container
+        self.check_server_status()  # Update server status after starting the container
 
     def stop_docker_container(self):
         result = subprocess.run(f"{self.docker_path} stop easyearth-container && {self.docker_path} rm easyearth-container", capture_output=True, text=True, shell=True)
