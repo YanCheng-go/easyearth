@@ -1,9 +1,8 @@
 """Entry point for the QGIS plugin. Handles plugin registration, menu/toolbar actions, and high-level coordination."""
 
-from threading import Thread
 from qgis.PyQt.QtWidgets import (QAction, QDockWidget, QPushButton, QVBoxLayout,
                                 QWidget, QMessageBox, QLabel, QHBoxLayout,
-                                QLineEdit, QFileDialog, QComboBox, QGroupBox, QGridLayout, QInputDialog, QProgressBar, QCheckBox, QButtonGroup, QRadioButton, QDialog, QApplication, QScrollArea)
+                                QLineEdit, QFileDialog, QComboBox, QGroupBox, QSizePolicy, QInputDialog, QProgressBar, QCheckBox, QButtonGroup, QRadioButton, QDialog, QApplication, QScrollArea)
 from qgis.PyQt.QtCore import Qt, QByteArray, QBuffer, QIODevice, QProcess, QTimer, QProcessEnvironment, QVariant, QSettings
 from qgis.PyQt.QtGui import QIcon, QMovie, QColor
 from qgis.core import (QgsVectorLayer, QgsFeature, QgsGeometry, QgsPolygon,
@@ -109,6 +108,7 @@ class EasyEarthPlugin:
         self.project_crs = QgsProject.instance().crs()
 
         QgsProject.instance().crsChanged.connect(self.on_project_crs_changed)
+        os.environ['LOGS_DIR'] = self.logs_dir
 
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI"""
@@ -137,6 +137,7 @@ class EasyEarthPlugin:
 
             # 1. Data folder
             data_folder_group = QGroupBox("Data Folder")
+            # data_folder_group.setMaximumHeight(100)  # Limit height to avoid excessive space
             data_folder_layout = QHBoxLayout()
             self.data_folder_edit = QLineEdit(self.data_dir)
             self.data_folder_edit.setReadOnly(True)
@@ -149,9 +150,12 @@ class EasyEarthPlugin:
 
             # 2. Run mode
             run_mode_group = QGroupBox("Run Mode")
+            # run_mode_group.setMaximumHeight(150)
             run_mode_layout = QVBoxLayout()
-            run_mode_info_label = QLabel("You can launch the plugin server either by using Docker if you have it installed or running the server locally outside QGIS.  Local mode is required for making use of Mac OS GPUs.")
+            run_mode_info_label = QLabel('You can launch the plugin server either by using Docker if you have it installed or <a href="https://github.com/YanCheng-go/easyearth?tab=readme-ov-file#local-mode">running the server locally outside QGIS</a>.   Local mode is required for making use of Mac OS GPUs.')
             run_mode_info_label.setWordWrap(True)
+            run_mode_info_label.setOpenExternalLinks(True)  # allows the link to be clickable
+            run_mode_info_label.setTextFormat(Qt.RichText)  # enables rich text formatting
             run_mode_layout.addWidget(run_mode_info_label)
 
             run_mode_button_layout = QHBoxLayout()
@@ -168,8 +172,9 @@ class EasyEarthPlugin:
             run_mode_group.setLayout(run_mode_layout)
             main_layout.addWidget(run_mode_group)
 
-            # 2. Service Information Group
-            service_group = QGroupBox("Server")
+            # 3. Server
+            self.server_group = QGroupBox("Server")
+            self.server_group.hide()  # Hide by default, will show when run mode is selected
             service_layout = QVBoxLayout()
 
             # Server status
@@ -197,11 +202,12 @@ class EasyEarthPlugin:
             api_layout.addWidget(self.api_info)
             service_layout.addLayout(api_layout)
 
-            service_group.setLayout(service_layout)
-            main_layout.addWidget(service_group)
+            self.server_group.setLayout(service_layout)
+            main_layout.addWidget(self.server_group)
 
-            # 3. Model Selection Group
-            model_group = QGroupBox("Segmentation Model")
+            # 4. Model Selection Group
+            self.model_group = QGroupBox("Segmentation Model")
+            self.model_group.hide() # Hide by default, will show when server is online
             model_layout = QHBoxLayout()
 
             self.model_combo = QComboBox()
@@ -218,11 +224,12 @@ class EasyEarthPlugin:
             self.model_path = self.model_combo.currentText().strip()
 
             model_layout.addWidget(self.model_combo)
-            model_group.setLayout(model_layout)
-            main_layout.addWidget(model_group)
+            self.model_group.setLayout(model_layout)
+            main_layout.addWidget(self.model_group)
 
-            # 4. Image Source Group
-            image_group = QGroupBox("Image Source")
+            # 5. Image Source Group
+            self.image_group = QGroupBox("Image Source")
+            self.image_group.hide()  # Hide by default, will show when model is selected
             image_layout = QVBoxLayout()
 
             # Image source selection
@@ -272,11 +279,12 @@ class EasyEarthPlugin:
             self.layer_dropdown.currentIndexChanged.connect(self.on_layer_selected)
 
             image_layout.addLayout(file_layout)
-            image_group.setLayout(image_layout)
-            main_layout.addWidget(image_group)
+            self.image_group.setLayout(image_layout)
+            main_layout.addWidget(self.image_group)
 
-            # 5. Embedding Settings Group
+            # 6. Embedding Settings Group
             self.embedding_group = QGroupBox("Embedding Settings")
+            self.embedding_group.hide()  # Hide by default, will show when image is selected and SAM model is chosen
             embedding_layout = QVBoxLayout()
 
             # Radio buttons for embedding options
@@ -314,8 +322,9 @@ class EasyEarthPlugin:
             self.embedding_group.setLayout(embedding_layout)
             main_layout.addWidget(self.embedding_group)
 
-            # 6. Drawing and Prediction Settings Group
-            settings_group = QGroupBox("Drawing and Prediction Settings")
+            # 7. Drawing and Prediction Settings Group
+            self.drawing_group = QGroupBox("Drawing and Prediction Settings")
+            self.drawing_group.hide()  # Hide by default, will show when image is loaded
             settings_layout = QVBoxLayout()
 
             # Drawing type selection
@@ -343,18 +352,19 @@ class EasyEarthPlugin:
             button_layout.addWidget(self.undo_button)
             settings_layout.addLayout(button_layout)
 
-            settings_group.setLayout(settings_layout)
-            main_layout.addWidget(settings_group)
+            self.drawing_group.setLayout(settings_layout)
+            main_layout.addWidget(self.drawing_group)
 
-            # 7. Prediction Button Group
-            predict_group = QGroupBox("Prediction")
+            # 8. Prediction Button Group
+            self.predict_group = QGroupBox("Prediction")
+            self.predict_group.hide()  # Hide by default, will show when image is loaded
             predict_layout = QVBoxLayout()
             self.predict_button = QPushButton("Run inference")
             self.predict_button.clicked.connect(self.on_predict_button_clicked)
             self.predict_button.setEnabled(False)  # Enable after image is loaded
             predict_layout.addWidget(self.predict_button)
-            predict_group.setLayout(predict_layout)
-            main_layout.addWidget(predict_group)
+            self.predict_group.setLayout(predict_layout)
+            main_layout.addWidget(self.predict_group)
 
             # Real-time vs Batch Prediction Option
             self.realtime_checkbox = QCheckBox("Get inference in real time while drawing")
@@ -363,6 +373,8 @@ class EasyEarthPlugin:
             self.realtime_checkbox.stateChanged.connect(self.on_realtime_checkbox_changed)
 
             # Set the main layout
+            main_layout.addStretch()
+            # main_layout.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
             main_widget.setLayout(main_layout)
             scroll_area = QScrollArea()
             scroll_area.setWidgetResizable(True)
@@ -382,11 +394,6 @@ class EasyEarthPlugin:
 
             # Connect to QGIS quit signal
             QgsApplication.instance().aboutToQuit.connect(self.cleanup_docker)
-
-            # Start periodic server status check
-            self.status_timer = QTimer()
-            self.status_timer.timeout.connect(self.check_server_status)
-            self.status_timer.start(5000)  # Check every 5 seconds
 
             # Check if the container is running on startup
             self.inspect_running_container()
@@ -416,6 +423,8 @@ class EasyEarthPlugin:
                 self.docker_running = True
                 self.docker_run_btn.show()
                 self.docker_run_btn.setText("Stop server")
+                self.model_group.show()  # Show model selection group when server is online
+                self.image_group.show()  # Show image source group when server is online
             else:
                 self.server_status.setText("Error")
                 self.server_status.setStyleSheet("color: red;")
@@ -429,14 +438,14 @@ class EasyEarthPlugin:
             self.docker_running = False
             self.docker_run_btn.setText("Start docker")
 
-            # if self.local_mode_button.isChecked():
-            #     self.docker_run_btn.hide() # hides the button if in local mode
-            # else:
-            #     self.docker_run_btn.show()
-
     def run_mode_selected(self, mode):
         """Handle run mode selection (Docker or Local)"""
-        
+        self.server_group.show()  # Show server group when a mode is selected
+        # Start periodic server status check
+        self.status_timer = QTimer()
+        self.status_timer.timeout.connect(self.check_server_status)
+        self.status_timer.start(5000)  # Check every 5 seconds
+
         if mode == 'docker':
             self.local_mode_button.setChecked(False)
             self.docker_mode = True
@@ -492,7 +501,10 @@ class EasyEarthPlugin:
             self.stop_server()
             self.data_folder_edit.setReadOnly(False)
             self.data_folder_btn.setEnabled(True)
-            self.docker_run_btn.setText("Run server")
+            self.docker_run_btn.setText("Start docker")
+
+            if self.local_mode_button.isChecked():
+                self.docker_run_btn.hide()
 
     def select_data_folder(self):
         folder = QFileDialog.getExistingDirectory(None, "Select Data Folder", self.data_folder_edit.text()) # opens a dialog to select a folder
@@ -519,7 +531,6 @@ class EasyEarthPlugin:
                 self.download_button.hide()
                 self.initialize_image_path()
                 self.initialize_embedding_path()
-                # Deactivate embedding section if SAM model is not selected
                 self.deactivate_embedding_section() if not self.is_sam_model() else None
             elif text == "Layer":
                 self.image_path.hide()
@@ -548,6 +559,7 @@ class EasyEarthPlugin:
         """Download image from URL and switch to File mode."""
         try:
             image_url = self.image_path.text().strip()
+
             if not (image_url.startswith("http://") or image_url.startswith("https://")):
                 QMessageBox.warning(None, "Error", "Please enter a valid image URL.")
                 return
@@ -564,6 +576,7 @@ class EasyEarthPlugin:
             response = requests.get(image_url, stream=True)
             total = int(response.headers.get('content-length', 0))
             downloaded = 0
+
             with open(save_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
@@ -573,6 +586,7 @@ class EasyEarthPlugin:
                             percent = int(downloaded * 100 / total)
                             self.image_download_progress_bar.setValue(percent)
                             QApplication.processEvents()
+
             self.image_download_progress_bar.hide()
             self.downloading_progress_status.hide()
 
@@ -739,24 +753,6 @@ class EasyEarthPlugin:
         self.image_path.setEnabled(True)
         self.browse_button.setEnabled(True)
 
-    def deactivate_embedding_section(self):
-        """Deactivate the embedding section if SAM model is not selected"""
-        self.embedding_group.setVisible(False)
-        # self.no_embedding_radio.setEnabled(False)
-        # self.load_embedding_radio.setEnabled(False)
-        # self.save_embedding_radio.setEnabled(False)
-        # self.embedding_path_edit.setEnabled(False)
-        # self.embedding_browse_btn.setEnabled(False)
-
-    def initialize_embedding_path(self):
-        """Reinitialize the embedding path input field"""
-        self.embedding_path_edit.clear()
-        self.embedding_path_edit.setEnabled(False)
-        self.embedding_browse_btn.setEnabled(False)
-        self.no_embedding_radio.setChecked(True)
-        self.load_embedding_radio.setChecked(False)
-        self.save_embedding_radio.setChecked(False)
-
     def browse_image(self):
         """Open file dialog for image selection"""
         try:
@@ -812,10 +808,27 @@ class EasyEarthPlugin:
             if self.is_sam_model():
                 self.update_embeddings()
 
+            self.embedding_group.setVisible(self.is_sam_model())  # Show embedding section if SAM model is selected
+            self.drawing_group.setVisible(True)  # Show drawing section when image is loaded
+            self.predict_group.setVisible(True)  # Show prediction section when image is loaded
         except Exception as e:
             self.logger.error(f"Error loading image: {str(e)}")
             self.logger.exception("Full traceback:")
             QMessageBox.critical(None, "Error", f"Failed to load image: {str(e)}")
+
+    def deactivate_embedding_section(self):
+        """Deactivate the embedding section if SAM model is not selected"""
+
+        self.embedding_group.setVisible(False)
+
+    def initialize_embedding_path(self):
+        """Reinitialize the embedding path input field"""
+        self.embedding_path_edit.clear()
+        self.embedding_path_edit.setEnabled(False)
+        self.embedding_browse_btn.setEnabled(False)
+        self.no_embedding_radio.setChecked(True)
+        self.load_embedding_radio.setChecked(False)
+        self.save_embedding_radio.setChecked(False)
 
     def style_prompts_layer(self, layer):
         """Style the prompts layer with different symbols for points and boxes"""
@@ -1353,21 +1366,13 @@ class EasyEarthPlugin:
             prompts: list of dicts with prompt data"""
 
         try:
-            # if not self.verify_data_directory():
-            #     return
-
-            # First check if server is running
-            if not self.server_running:
-                raise ConnectionError("Server is not running. Please ensure Docker is started and the server is running.")
-
             # Show loading indicator
             self.iface.messageBar().pushMessage("Info", "Getting prediction...", level=Qgis.Info)
             QApplication.setOverrideCursor(Qt.WaitCursor)
 
             # Get the image path and convert for container
             image_path = self.image_path.text()
-            if not image_path:
-                raise ValueError("No image selected")
+
             if not os.path.exists(image_path):
                 raise ValueError(f"Image file not found: {image_path}")
 
@@ -1379,38 +1384,30 @@ class EasyEarthPlugin:
             # Handle embedding settings
             if self.load_embedding_radio.isChecked() and self.load_embedding_radio.isEnabled():
                 embedding_path = self.embedding_path_edit.text().strip()
+
                 if not embedding_path:
                     raise ValueError("Please select an embedding file to load")
                 if not os.path.exists(embedding_path):
                     raise ValueError(f"Embedding file not found: {embedding_path}")
 
-                # Convert embedding path for container
                 container_embedding_path = self.get_container_path(embedding_path)
-                save_embeddings = False
-                # logger.debug(f"Loading embeddings from: {embedding_path} -> {container_embedding_path}")
-
             elif self.save_embedding_radio.isChecked():
                 embedding_path = self.embedding_path_edit.text().strip()
+
                 if not embedding_path:
                     raise ValueError("Please specify a path to save the embedding")
 
                 # Ensure the directory exists
                 embedding_dir = os.path.dirname(embedding_path)
+
                 if not os.path.exists(embedding_dir):
                     os.makedirs(embedding_dir, exist_ok=True)
 
-                # Convert embedding path for container
                 container_embedding_path = self.get_container_path(embedding_path)
                 save_embeddings = True
-                # logger.debug(f"Will save embeddings to: {embedding_path} -> {container_embedding_path}")
 
-            # Convert image path for container
             container_image_path = self.get_container_path(image_path)
-
-            if not container_image_path:
-                raise ValueError("Image must be within the data directory")
-
-            # Prepare request payload
+            self.iface.messageBar().pushMessage('Info', f"Using image path: {container_image_path}", level=Qgis.Info, duration=5)
             payload = {
                 "image_path": container_image_path,
                 "embedding_path": container_embedding_path,
@@ -1418,15 +1415,13 @@ class EasyEarthPlugin:
                 "save_embeddings": save_embeddings
             }
 
-            # TODO: add addtional check on qgis for image path, model path and so on... not just in the controller.py
             # add the model path to the payload if not empty
             self.model_path = self.model_combo.currentText().strip()
-            # add model_path to payload if not empty
+
             if self.model_path:
                 payload["model_path"] = self.model_path
 
             # Show payload in message bar
-            # Use:
             if prompts is None or len(prompts) == 0:
                 formatted_payload = "No prompts: running full image prediction\n"
             else:
@@ -1456,11 +1451,7 @@ class EasyEarthPlugin:
                     # With prompts, run prompt-based prediction
                     predict_url = f"{self.server_url}/sam-predict"
 
-                response = requests.post(
-                    predict_url,
-                    json=payload,
-                    timeout=6000000
-                )
+                response = requests.post(predict_url, json=payload, timeout=6000000)
 
                 self.logger.debug(f"Server response status: {response.status_code}")
                 self.logger.debug(f"Server response text: {response.text}")
@@ -1475,7 +1466,6 @@ class EasyEarthPlugin:
                             self.update_embeddings()
 
                         response_json = response.json()
-                        # self.logger.debug(f"Parsed response JSON: {json.dumps(response_json, indent=2)}")
 
                         if not response_json:
                             raise ValueError("Empty response from server")
@@ -1487,24 +1477,19 @@ class EasyEarthPlugin:
                         feature_crs = response_json.get('crs', None)
 
                         if not features:
-                            self.iface.messageBar().pushMessage(
-                                "Warning",
-                                "No predictions returned from server",
-                                level=Qgis.Warning,
-                                duration=3
-                            )
+                            self.iface.messageBar().pushMessage("Warning", "No predictions returned from server", level=Qgis.Warning, duration=3)
                             return
 
-                        # Add the predictions to our layer
-                        self.add_features_to_layer(features, "predictions", crs=feature_crs)
+                        self.add_features_to_layer(features, "predictions", crs=feature_crs) # adds the predictions as a layer
 
                     except json.JSONDecodeError as e:
                         raise ValueError(f"Invalid JSON response: {str(e)}")
-
                 else:
                     error_msg = f"Server returned status code {response.status_code}"
+
                     try:
                         error_json = response.json()
+
                         if 'message' in error_json:
                             error_msg = error_json['message']
                     except:

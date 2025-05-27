@@ -36,6 +36,7 @@ def reorganize_prompts(prompts):
     for prompt in prompts:
         prompt_type = prompt.get('type')
         prompt_data = prompt.get('data', {})
+        
         if prompt_type == 'Point':
             transformed_prompts['points'].append(prompt_data.get('points', []))
             transformed_prompts['labels'].extend(prompt_data.get('labels', []))
@@ -121,12 +122,13 @@ def predict():
     try:
         # Get the image data from the request
         data = request.get_json()
-
+        logger.debug(f"Received data: {data}")
         # get env variable DATA_DIR from the docker container
-        DATA_DIR = os.environ.get('EASYEARTH_DATA_DIR')
-        TEMP_DIR = os.environ.get('EASYEARTH_TEMP_DIR')
-
-        # Validate and convert image path
+        # DATA_DIR = os.environ.get('DATA_DIR')
+        DATA_DIR = 'data'
+        logger.debug(f"Using DATA_DIR: {DATA_DIR}")
+        TEMP_DIR = 'tmp'
+        logger.debug(f"Using TEMP_DIR: {TEMP_DIR}")
         image_path = data.get('image_path')
 
         if not image_path:
@@ -218,25 +220,22 @@ def predict():
                         # New format with metadata
                         if embedding_data.get('image_shape') == image_array.shape[:2]:
                             image_embeddings = embedding_data['embeddings'].to(sam.device)
-                            used_cache = True
                         else:
                             logger.warning("Cached embedding shape mismatch, will generate new one")
                     else:
                         # Old format - direct embeddings
                         image_embeddings = embedding_data.to(sam.device)
-                        used_cache = True
 
                 except Exception as e:
                     image_embeddings = None
 
             # Generate new embeddings if needed
             else:
-                logger.info("Generating new embeddings without saving.")
                 image_embeddings = sam.get_image_embeddings(image_array)
-
                 # generate an index file to relate the image to the embedding
                 os.makedirs(os.path.join(DATA_DIR, 'embeddings'), exist_ok=True)
                 index_path = os.path.join(DATA_DIR, 'embeddings', 'index.json')
+
                 if os.path.exists(index_path):
                     with open(index_path, 'r') as f:
                         index = json.load(f)
@@ -245,6 +244,7 @@ def predict():
 
                 # add the embedding path to the index
                 index[image_path] = embedding_path
+
                 with open(index_path, 'w') as f:
                     json.dump(index, f)
 
@@ -278,28 +278,12 @@ def predict():
                 }), 400
 
             geojson_path = f"{TEMP_DIR}/predict-sam_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson"
-            # Convert to GeoJSON
-            geojson = sam.raster_to_vector(
-                masks,
-                scores,
-                transform,
-                filename=geojson_path
-            )
+            geojson = sam.raster_to_vector(masks, scores, transform, filename=geojson_path)
 
-            return jsonify({
-                'status': 'success',
-                'features': geojson,
-                'crs': source_crs
-            }), 200
+            return jsonify({'status': 'success', 'features': geojson, 'crs': source_crs}), 200
 
         except Exception as e:
-            return jsonify({
-                'status': 'error',
-                'message': f'Prediction error: {str(e)}'
-            }), 500
+            return jsonify({'status': 'error', 'message': f'Prediction error: {str(e)}'}), 500
 
     except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': f'Server error: {str(e)}'
-        }), 500
+        return jsonify({'status': 'error', 'message': f'Server error: {str(e)}'}), 500
