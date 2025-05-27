@@ -34,3 +34,5 @@ dist/
 *.egg-info/
 tests/
 coverage/
+
+easyearth_env
