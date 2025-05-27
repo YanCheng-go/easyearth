@@ -164,21 +164,22 @@ cp -r ./easyearth_plugin ~/.local/share/QGIS/QGIS3/profiles/default/python/plugi
 
 ---
 
-## ✨ Model APIs
+## ✨ Model APIs (Development testing)
 
 ### 📍 Use SAM with Prompts
 
 ```bash
-curl -X POST http://127.0.0.1:3781/v1/easyearth/sam-predict \
+curl -X POST http://127.0.0.1:3781/v1/easyearth/predict \
 -H "Content-Type: application/json" \
 -d '{
-  "image_path": "/usr/src/app/user/DJI_0108.JPG",
-  "embedding_path": "/usr/src/app/user/embeddings/DJI_0108.pt", # if empty, the code will generate embeddings first
-  "model_path": "facebook/sam-vit-large", # model path from huggingface
+  "model_type": "sam",
+  "image_path": "<DATA FOLDER>/DJI_0108.JPG",
+  "embedding_path": "<DATA FOLDER>/embeddings/DJI_0108.pt",
+  "model_path": "facebook/sam-vit-large",
   "prompts": [{
     "type": "Point",
     "data": {
-      "points": [[850, 1100]],  # can be multiple points
+      "points": [[850, 1100]]
     }
   }]
 }'
@@ -187,11 +188,12 @@ curl -X POST http://127.0.0.1:3781/v1/easyearth/sam-predict \
 ### 🚫 Use Models Without Prompts
 
 ```bash
-curl -X POST http://127.0.0.1:3781/v1/easyearth/segment-predict \
+curl -X POST http://127.0.0.1:3781/v1/easyearth/predict \
 -H "Content-Type: application/json" \
 -d '{
-  "image_path": "/usr/src/app/user/DJI_0108.JPG",
-  "model_path": "restor/tcd-segformer-mit-b2", # model path from huggingface
+  "model_type": "segment",
+  "image_path": "<DATA FOLDER>/DJI_0108.JPG",
+  "model_path": "restor/tcd-segformer-mit-b2",
   "prompts": []
 }'
 ```
