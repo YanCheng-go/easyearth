@@ -1,30 +1,25 @@
 """Entry point for the QGIS plugin. Handles plugin registration, menu/toolbar actions, and high-level coordination."""
 
+from datetime import datetime
 from qgis.PyQt.QtWidgets import (QAction, QDockWidget, QPushButton, QVBoxLayout,
                                 QWidget, QMessageBox, QLabel, QHBoxLayout,
-                                QLineEdit, QFileDialog, QComboBox, QGroupBox, QSizePolicy, QInputDialog, QProgressBar, QCheckBox, QButtonGroup, QRadioButton, QDialog, QApplication, QScrollArea)
-from qgis.PyQt.QtCore import Qt, QByteArray, QBuffer, QIODevice, QProcess, QTimer, QProcessEnvironment, QVariant, QSettings
-from qgis.PyQt.QtGui import QIcon, QMovie, QColor
-from qgis.core import (QgsVectorLayer, QgsFeature, QgsGeometry, QgsPolygon,
-                      QgsPointXY, QgsField, QgsProject, QgsPoint, QgsLineString,
-                      QgsWkbTypes, QgsRasterLayer, Qgis, QgsApplication, QgsVectorFileWriter, QgsSymbol, QgsCategorizedSymbolRenderer,
-                      QgsRendererCategory, QgsMarkerSymbol, QgsFillSymbol, QgsCoordinateTransform, QgsSingleSymbolRenderer, QgsFields)
+                                QLineEdit, QFileDialog, QComboBox, QGroupBox, QShortcut, QProgressBar, QCheckBox, QButtonGroup, QRadioButton, QApplication, QScrollArea)
+from qgis.PyQt.QtCore import Qt, QTimer
+from qgis.PyQt.QtGui import QIcon, QKeySequence, QColor
+from qgis.core import (QgsVectorLayer, QgsGeometry,
+                      QgsPointXY, QgsProject,
+                      QgsWkbTypes, QgsRasterLayer, Qgis, QgsApplication, QgsCategorizedSymbolRenderer,
+                      QgsRendererCategory, QgsMarkerSymbol, QgsFillSymbol, QgsCoordinateTransform, QgsSingleSymbolRenderer)
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
-import os
-import requests
-import subprocess
-import sys
-import time
-import logging
-import shutil
-import tempfile
-import yaml
-import json
-import zipfile
-from datetime import datetime
-
 from .core.utils import setup_logger
 from .core.prompt_editor import BoxMapTool
+import json
+import logging
+import os
+import requests
+import shutil
+import subprocess
+import time
 
 class EasyEarthPlugin:
     def __init__(self, iface):
@@ -152,7 +147,7 @@ class EasyEarthPlugin:
             run_mode_group = QGroupBox("Run Mode")
             # run_mode_group.setMaximumHeight(150)
             run_mode_layout = QVBoxLayout()
-            run_mode_info_label = QLabel('You can launch the plugin server either by using Docker if you have it installed or <a href="https://github.com/YanCheng-go/easyearth?tab=readme-ov-file#local-mode">running the server locally outside QGIS</a>.   Local mode is required for making use of Mac OS GPUs.')
+            run_mode_info_label = QLabel('You can launch the plugin server either by using Docker if you have it installed or <a href="https://github.com/YanCheng-go/easyearth?tab=readme-ov-file#local-mode">running the server locally outside QGIS</a>.&nbsp;Local mode is required for making use of Mac OS GPUs.')
             run_mode_info_label.setWordWrap(True)
             run_mode_info_label.setOpenExternalLinks(True)  # allows the link to be clickable
             run_mode_info_label.setTextFormat(Qt.RichText)  # enables rich text formatting
@@ -349,6 +344,8 @@ class EasyEarthPlugin:
             self.undo_button = QPushButton("Undo last drawing")
             self.undo_button.clicked.connect(self.undo_last_drawing)
             self.undo_button.setEnabled(False) # enable after drawing starts
+            self.undo_shortcut = QShortcut(QKeySequence.Undo, self.iface.mainWindow())
+            self.undo_shortcut.activated.connect(self.undo_last_drawing)  # Connect shortcut to undo function
             button_layout.addWidget(self.undo_button)
             settings_layout.addLayout(button_layout)
 
@@ -368,21 +365,18 @@ class EasyEarthPlugin:
 
             # Real-time vs Batch Prediction Option
             self.realtime_checkbox = QCheckBox("Get inference in real time while drawing")
-            self.realtime_checkbox.setChecked(False)  # Default to real-time
+            self.realtime_checkbox.setChecked(False) # Default to not real-time
             settings_layout.addWidget(self.realtime_checkbox)
             self.realtime_checkbox.stateChanged.connect(self.on_realtime_checkbox_changed)
 
             # Set the main layout
             main_layout.addStretch()
-            # main_layout.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
             main_widget.setLayout(main_layout)
             scroll_area = QScrollArea()
             scroll_area.setWidgetResizable(True)
             scroll_area.setWidget(main_widget)
             self.dock_widget.setWidget(scroll_area)
-
-            # Add dock widget to QGIS
-            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dock_widget)
+            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dock_widget) # Add dock widget to QGIS
 
             # initialize the data and tmp directory
             # TODO: move to after checking if docker image is running...and return mounted data folder using docker inspect
@@ -538,6 +532,7 @@ class EasyEarthPlugin:
                 self.download_button.hide()
                 self.layer_dropdown.show()
                 self.update_layer_dropdown()
+                self.embedding_group.setVisible(self.is_sam_model()) # show embedding section if SAM model is selected
             elif text == "Link":
                 self.image_path.show()
                 self.image_path.setReadOnly(False)
@@ -890,7 +885,6 @@ class EasyEarthPlugin:
     def toggle_drawing(self, checked):
         """Toggle drawing mode"""
 
-        # TODO: handle situations when regretting the drawing
         try:
             self.logger.info(f"Toggle drawing called with checked={checked}")
 
@@ -978,12 +972,7 @@ class EasyEarthPlugin:
                 self.prompt_count += + 1 # increments prompt counter
 
                 # Prepare prompt for server
-                prompt = [{
-                    'type': 'Point',
-                    'data': {
-                        "points": [[px, py]],
-                    }
-                }]
+                prompt = [{'type': 'Point', 'data': {"points": [[px, py]]}}]
 
                 if self.realtime_checkbox.isChecked():
                     self.get_prediction(prompt)
@@ -998,8 +987,12 @@ class EasyEarthPlugin:
 
     def undo_last_drawing(self):
         self.prompts_geojson['features'] = self.prompts_geojson['features'][:-1] # removes the last point from the prompts geojson
-        self.prompt_count -= 1 # decrements the prompt counter
+        self.prompt_count = self.prompt_count - 1 if self.prompt_count > 0 else 0  # decrements the prompt counter
         self.add_features_to_layer([], "prompts")
+
+        if self.realtime_checkbox.isChecked():
+            self.predictions_geojson['features'] = self.predictions_geojson['features'][:-1] # removes the last point from the prompts geojson
+            self.add_features_to_layer([], "predictions")
 
     def on_box_drawn(self, box_geom, start_point, end_point):
         """Handle box drawing completion
@@ -1746,6 +1739,9 @@ class EasyEarthPlugin:
             if hasattr(self, 'point_layer') and self.point_layer:
                 QgsProject.instance().removeMapLayer(self.point_layer.id())
 
+            if hasattr(self, 'undo_shortcut') and self.undo_shortcut:
+                self.undo_shortcut.setParent(None)
+    
             # Remove temporary drawn features layer
             if hasattr(self, 'drawn_layer') and self.drawn_layer:
                 QgsProject.instance().removeMapLayer(self.drawn_layer.id())
