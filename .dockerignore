@@ -36,3 +36,6 @@ tests/
 coverage/
 
 easyearth_env
+logs
+tmp
+data

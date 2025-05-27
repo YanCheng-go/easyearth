@@ -76,6 +76,7 @@ cp -r ./easyearth/easyearth_plugin easyearth_plugin
 ```
 
 ### Local mode
+Run in a terminal
 ```bash
 chmod +x ./launch_server_local.sh && ./launch_server_local.sh
 ```
