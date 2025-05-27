@@ -93,7 +93,6 @@ class EasyEarthPlugin:
         self.predictions_geojson = None
         self.predictions_layer = None
         self.prompts_geojson = None
-        self.prompts_layer = None
 
         # initialize image crs and extent...
         self.raster_crs = None
@@ -182,6 +181,7 @@ class EasyEarthPlugin:
             service_layout.addLayout(status_layout)
             self.docker_run_btn = QPushButton("Start docker")
             self.docker_run_btn.clicked.connect(self.run_or_stop_container)
+            self.docker_run_btn.hide()
             service_layout.addWidget(self.docker_run_btn)
 
             # API Information
@@ -230,11 +230,11 @@ class EasyEarthPlugin:
             # Image source selection
             source_layout = QHBoxLayout()
             source_label = QLabel("Source:")
-            self.source_combo = QComboBox()
-            self.source_combo.addItems(["File", "Layer", "Link"])
-            self.source_combo.currentTextChanged.connect(self.on_image_source_changed)
+            self.source_dropdown = QComboBox()
+            self.source_dropdown.addItems(["File", "Layer", "Link"])
+            self.source_dropdown.currentTextChanged.connect(self.on_image_source_changed)
             source_layout.addWidget(source_label)
-            source_layout.addWidget(self.source_combo)
+            source_layout.addWidget(self.source_dropdown)
             image_layout.addLayout(source_layout)
 
             # File input
@@ -385,14 +385,15 @@ class EasyEarthPlugin:
             # Update the layer (raster) list in the combo box whenever a layer is added or removed
             QgsProject.instance().layersAdded.connect(self.update_layer_dropdown)
             QgsProject.instance().layersRemoved.connect(self.update_layer_dropdown)
+            # QgsProject.instance().layersAdded.connect(self.auto_zoom_to_selected_layer)
 
             # Connect to QGIS quit signal
             QgsApplication.instance().aboutToQuit.connect(self.cleanup_docker)
 
-            # Check if the container is running on startup
-            self.inspect_running_container()
-
-            self.logger.debug("Finished initGui setup")
+            # Start periodic server status check
+            self.status_timer = QTimer()
+            self.status_timer.timeout.connect(self.check_server_status)
+            self.status_timer.start(5000)  # Check every 5 seconds
         except Exception as e:
             self.logger.error(f"Error in initGui: {str(e)}")
             self.logger.exception("Full traceback:")
@@ -431,19 +432,19 @@ class EasyEarthPlugin:
             self.server_running = False
             self.docker_running = False
             self.docker_run_btn.setText("Start docker")
+        
+        self.docker_run_btn.show()
 
     def run_mode_selected(self, mode):
         """Handle run mode selection (Docker or Local)"""
         self.server_group.show()  # Show server group when a mode is selected
-        # Start periodic server status check
-        self.status_timer = QTimer()
-        self.status_timer.timeout.connect(self.check_server_status)
-        self.status_timer.start(5000)  # Check every 5 seconds
 
         if mode == 'docker':
             self.local_mode_button.setChecked(False)
             self.docker_mode = True
-            self.docker_run_btn.show()
+
+            if self.server_status.text() != 'Checking...':
+                self.docker_run_btn.show()
         elif mode == 'local':
             self.docker_mode_button.setChecked(False)
             self.docker_mode = False
@@ -523,7 +524,8 @@ class EasyEarthPlugin:
                 self.browse_button.show()
                 self.layer_dropdown.hide()
                 self.download_button.hide()
-                self.initialize_image_path()
+                self.image_path.clear()
+                self.image_path.setPlaceholderText("No image selected")
                 self.initialize_embedding_path()
                 self.deactivate_embedding_section() if not self.is_sam_model() else None
             elif text == "Layer":
@@ -539,7 +541,7 @@ class EasyEarthPlugin:
                 self.browse_button.hide()
                 self.download_button.show()
                 self.layer_dropdown.hide()
-                self.image_path.setPlaceholderText("Enter image URL (http/https)...")
+                self.image_path.setPlaceholderText("Enter image URL (http/https...)")
                 self.image_path.clear()
                 self.initialize_embedding_path()
                 self.deactivate_embedding_section() if not self.is_sam_model() else None
@@ -586,7 +588,7 @@ class EasyEarthPlugin:
             self.downloading_progress_status.hide()
 
             # Switch to File mode and update path
-            self.source_combo.setCurrentText("File")
+            self.source_dropdown.setCurrentText("File")
             self.image_path.setText(save_path)
             self.load_image()
         except Exception as e:
@@ -702,14 +704,11 @@ class EasyEarthPlugin:
                 )
                 self.logger.info(f"Will save new embedding to: {embedding_path}")
             else:
-                # Check if embedding file exists
                 if os.path.exists(embedding_path):
                     # Found existing embedding
                     self.load_embedding_radio.setChecked(True)
                     self.embedding_path_edit.setEnabled(True)
                     self.embedding_browse_btn.setEnabled(True)
-
-                    # Set the embedding path in the text box
                     self.embedding_path_edit.setText(embedding_path)
 
                     self.iface.messageBar().pushMessage(
@@ -722,7 +721,7 @@ class EasyEarthPlugin:
                 else:
                     # No existing embedding
                     self.no_embedding_radio.setChecked(True)
-                    self.load_embedding_radio.setEnabled(False)  # TODO: what if the user have the embeddings saved somewhere else?
+                    self.load_embedding_radio.setEnabled(False)
                     # clear the embedding path
                     self.embedding_path_edit.clear()
                     self.embedding_browse_btn.setEnabled(False)
@@ -740,18 +739,38 @@ class EasyEarthPlugin:
             self.logger.error(f"Error updating embeddings: {str(e)}")
             QMessageBox.critical(None, "Error", f"Failed to update embeddings: {str(e)}")
 
-    def initialize_image_path(self):
-        """Reinitialize the image path input field"""
+    def on_image_selected(self):
+        selected_layer = QgsProject.instance().mapLayersByName(os.path.basename(self.image_path.text()))[0]
+        self.iface.setActiveLayer(selected_layer) # set the selected layer as the active layer
+        self.iface.messageBar().pushMessage(f"Selected layer {selected_layer.name()} with ID {selected_layer.id()}", level=Qgis.Info)
+        
+        if selected_layer.crs() != self.project_crs:
+            selected_layer.setCrs(self.project_crs)  # Set the layer CRS to match the project CRS
+        
+        extent = selected_layer.extent()
 
-        self.image_path.clear()
-        self.image_path.setPlaceholderText("No image selected")
-        self.image_path.setEnabled(True)
-        self.browse_button.setEnabled(True)
+        if not extent.isEmpty():
+            # Add small buffer around the layer (5%)
+            width = extent.width()
+            height = extent.height()
+            
+            if width > 0 and height > 0:
+                buffer_x = width * 0.05
+                buffer_y = height * 0.05
+                
+                extent.setXMinimum(extent.xMinimum() - buffer_x)
+                extent.setXMaximum(extent.xMaximum() + buffer_x)
+                extent.setYMinimum(extent.yMinimum() - buffer_y)
+                extent.setYMaximum(extent.yMaximum() + buffer_y)
+            
+            # Set the canvas extent
+            self.iface.mapCanvas().setExtent(extent)
+            self.iface.mapCanvas().refresh()
 
     def browse_image(self):
         """Open file dialog for image selection"""
         try:
-            initial_dir = self.data_dir if os.path.exists(self.data_dir) else ""
+            initial_dir = self.data_dir
             file_path, _ = QFileDialog.getOpenFileName(
                 self.dock_widget,
                 "Select Image File",
@@ -781,14 +800,16 @@ class EasyEarthPlugin:
             if not image_path:
                 return
 
-            # Load the image as a raster layer
-            raster_layer = QgsRasterLayer(image_path, os.path.basename(image_path))
+            raster_layer = QgsRasterLayer(image_path, os.path.basename(image_path)) # loads the image as a raster layer
 
             if not raster_layer.isValid():
                 QMessageBox.warning(None, "Error", "Invalid raster layer")
                 return
 
-            QgsProject.instance().addMapLayer(raster_layer) # adds raster layer to the project
+            if len(QgsProject.instance().mapLayersByName(raster_layer.name())) == 0: # checks if the layer already exists
+                QgsProject.instance().addMapLayer(raster_layer) # adds raster layer to the project
+            
+            self.on_image_selected()
 
             # Get image crs and extent
             self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(raster_layer)
@@ -946,7 +967,7 @@ class EasyEarthPlugin:
                 # Show coordinates in message bar
                 self.iface.messageBar().pushMessage("Point Info",
                                                     f"Map coordinates: ({point.x():.2f}, {point.y():.2f})\n"
-                                                    f"Pixel coordinates sent to server: ({px}, {py})",
+                                                    f"Pixel coordinates: ({px}, {py})",
                                                     level=Qgis.Info,
                                                     duration=3)
 
@@ -990,8 +1011,8 @@ class EasyEarthPlugin:
         self.prompt_count = self.prompt_count - 1 if self.prompt_count > 0 else 0  # decrements the prompt counter
         self.add_features_to_layer([], "prompts")
 
-        if self.realtime_checkbox.isChecked():
-            self.predictions_geojson['features'] = self.predictions_geojson['features'][:-1] # removes the last point from the prompts geojson
+        if len(self.predictions_geojson.get('features')) > 0:
+            self.predictions_geojson['features'] = self.predictions_geojson['features'][0] # removes the last point from the predictions geojson
             self.add_features_to_layer([], "predictions")
 
     def on_box_drawn(self, box_geom, start_point, end_point):
@@ -1043,7 +1064,7 @@ class EasyEarthPlugin:
         # Show message bar with box coordinates
         self.iface.messageBar().pushMessage(
             "Box Info",
-            f"Box coordinates sent to server: ({pixel_x}, {pixel_y}, {pixel_x + pixel_width}, {pixel_y + pixel_height})",
+            f"Box coordinates: ({pixel_x}, {pixel_y}, {pixel_x + pixel_width}, {pixel_y + pixel_height})",
             level=Qgis.Info,
             duration=3
         )
@@ -1084,6 +1105,45 @@ class EasyEarthPlugin:
             self.get_prediction(prompt)
 
         return box_geom
+
+    def on_layer_selected(self, index):
+        """Handle layer selection change and check for existing embeddings"""
+        try:
+            if index > 0: # 0th index is "Select a layer..."
+                layer_id = self.layer_dropdown.itemData(index)
+                selected_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
+
+                if not selected_layer:
+                    return
+
+                # Get image crs and extent
+                self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(selected_layer)
+                msg = (
+                    f"Extent: X min: {self.raster_extent.xMinimum()}, X max: {self.raster_extent.xMaximum()}, "
+                    f"Y min: {self.raster_extent.yMinimum()}, Y max: {self.raster_extent.yMaximum()}; "
+                    f"Width: {self.raster_width}; "
+                    f"Height: {self.raster_height}; "
+                    f"CRS: {self.raster_crs.authid()}"
+                )
+                self.iface.messageBar().pushMessage(
+                    "Selected raster CRS and dimensions",
+                    msg,
+                    level=Qgis.Info,
+                    duration=5
+                )
+
+                self.image_path.setText(selected_layer.source())
+                self.create_prediction_layers()
+
+                # Check for existing embedding
+                layer_source = selected_layer.source()
+                image_name = os.path.splitext(os.path.basename(layer_source))[0]
+                self.update_embeddings(image_name)
+                self.on_image_selected()
+        except Exception as e:
+            self.logger.error(f"Error handling layer selection: {str(e)}")
+            self.logger.exception("Full traceback:")
+            QMessageBox.critical(None, "Error", f"Failed to handle layer selection: {str(e)}")
 
     def add_features_to_layer(self, features, layer_type='prompts', crs=None):
         """
@@ -1232,6 +1292,7 @@ class EasyEarthPlugin:
 
                 if not layer.isValid():
                     raise ValueError("Failed to create valid vector layer")
+                
                 QgsProject.instance().addMapLayer(layer)
                 setattr(self, layer_attr, layer)
             else:
@@ -1312,12 +1373,7 @@ class EasyEarthPlugin:
             # if there are boxes and points in the prompts, we need to run the prediction for both
             if self.is_sam_model():
                 if len(prompts) == 0:
-                    self.iface.messageBar().pushMessage(
-                        "Info",
-                        "No prompts found. Please draw points or boxes.",
-                        level=Qgis.Info,
-                        duration=3
-                    )
+                    self.iface.messageBar().pushMessage("Info", "No prompts found. Please draw points or boxes.", level=Qgis.Info, duration=3)
                     return
                 else:
                     # Check if there are both points and boxes
@@ -1362,8 +1418,6 @@ class EasyEarthPlugin:
             # Show loading indicator
             self.iface.messageBar().pushMessage("Info", "Getting prediction...", level=Qgis.Info)
             QApplication.setOverrideCursor(Qt.WaitCursor)
-
-            # Get the image path and convert for container
             image_path = self.image_path.text()
 
             if not os.path.exists(image_path):
@@ -1623,46 +1677,6 @@ class EasyEarthPlugin:
             self.logger.exception("Full traceback:")
             QMessageBox.critical(None, "Error", f"Failed to prepare layers: {str(e)}")
 
-    def on_layer_selected(self, index):
-        """Handle layer selection change and check for existing embeddings"""
-        try:
-            if index > 0: # 0th index is "Select a layer..."
-                layer_id = self.layer_dropdown.itemData(index)
-                selected_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
-
-                if not selected_layer:
-                    return
-
-                # Get image crs and extent
-                self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(selected_layer)
-                msg = (
-                    f"Extent: X min: {self.raster_extent.xMinimum()}, X max: {self.raster_extent.xMaximum()}, "
-                    f"Y min: {self.raster_extent.yMinimum()}, Y max: {self.raster_extent.yMaximum()}; "
-                    f"Width: {self.raster_width}; "
-                    f"Height: {self.raster_height}; "
-                    f"CRS: {self.raster_crs.authid()}"
-                )
-                self.iface.messageBar().pushMessage(
-                    "Selected raster CRS and dimensions",
-                    msg,
-                    level=Qgis.Info,
-                    duration=5
-                )
-
-                self.image_path.setText(selected_layer.source())
-                self.create_prediction_layers()
-
-                # Check for existing embedding
-                layer_source = selected_layer.source()
-
-                image_name = os.path.splitext(os.path.basename(layer_source))[0]
-                self.update_embeddings(image_name)
-
-        except Exception as e:
-            self.logger.error(f"Error handling layer selection: {str(e)}")
-            self.logger.exception("Full traceback:")
-            QMessageBox.critical(None, "Error", f"Failed to handle layer selection: {str(e)}")
-
     def cleanup_docker(self):
         """Clean up Docker resources when unloading plugin"""
         try:
@@ -1751,7 +1765,7 @@ class EasyEarthPlugin:
                 QgsProject.instance().removeMapLayer(self.prompts_layer.id())
             if self.predictions_layer:
                 QgsProject.instance().removeMapLayer(self.predictions_layer.id())
-
+            
             # Remove temporary files
             for file_path in [self.temp_prompts_geojson, self.temp_predictions_geojson]:
                 if file_path and os.path.exists(file_path):
