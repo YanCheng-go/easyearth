@@ -1,6 +1,5 @@
 services:
-  easyearth-server:
-    image: easyearth_easyearth-server
+  easyearth-local-server:
     build:
       context: .
       dockerfile: Dockerfile
@@ -9,8 +8,8 @@ services:
     volumes:
       - .:/usr/src/app # Sync the application code
       - ${DATA_DIR:-./data}:/usr/src/app/data # data directory
-      - ${TEMP_DIR:-./tmp}:/usr/src/app/tmp # temporary directory
-      - ${LOG_DIR:-./logs}:/usr/src/app/logs # log directory
+      - ${TEMP_DIR:-./data/tmp}:/usr/src/app/tmp # temporary directory
+      - ${LOG_DIR:-./data/logs}:/usr/src/app/logs # log directory
       - ${MODEL_DIR:-~/.cache/easyearth/models}:/usr/src/app/.cache/models # model directory
     environment:
       - PYTHONUNBUFFERED=1
