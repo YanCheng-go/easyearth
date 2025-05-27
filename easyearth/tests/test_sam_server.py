@@ -4,7 +4,7 @@ import requests
 class TestSAMServer(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.base_url = "http://localhost:5000"
+        self.base_url = "http://localhost:3781"
         self.test_image_path = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"  # Replace with actual test image path
         self.input_points = [[[850, 1100]], [[2250, 1000]]]
         self.input_boxes = [[[620, 900, 1000, 1255]], [[2000, 800, 2500, 1200]]]
