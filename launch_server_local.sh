@@ -16,7 +16,6 @@ pip install --prefer-binary -r $REQUIREMENTS
 
 # Set up local directories and environment
 export APP_DIR="$(pwd)"
-export EASYEARTH_TEMP_DIR="$(pwd)/tmp"
 export MODEL_CACHE_DIR="$HOME/.cache/easyearth/models"
 export PYTORCH_ENABLE_MPS_FALLBACK=1 # Enable MPS fallback for PyTorch
 
