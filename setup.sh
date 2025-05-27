@@ -5,28 +5,21 @@ set -e
 
 # Set the script's directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-IMAGE_NAME="easyearth_easyearth-server"
-MODEL_DIR="~/.cache/easyearth/models"
-
-apt_get_command() {
-  local command=("${@}")
-
-  if ! apt-get "${command[@]}"; then
-    brew "${command[@]}"
-  fi
-}
-
-execute_command_with_sudo() {
-  echo "Executing with sudo"
-  local command=("${@}")
-  "${command[@]}"
-}
+IMAGE_NAME="easyearth"
+MODEL_DIR=".cache/easyearth/models"
 
 execute_command() {
   local command=("${@}")
+  local command_first_part="${command[0]}"
 
-  if ! "${command[@]}"; then
-    execute_command_with_sudo sudo "${command[@]}"
+  # Use sudo if not on MacOS
+  if [[ "$OSTYPE" != "darwin"* ]]; then
+    sudo "${command[@]}"
+  elif [[ "$command_first_part" == "apt-get" ]]; then
+    command[0]="brew"
+    "${command[@]}"
+  else
+    "${command[@]}"
   fi
 }
 
@@ -37,14 +30,14 @@ execute_command chmod -R 755 "$SCRIPT_DIR"
 check_docker_installation() {
   if ! command -v docker-compose &>/dev/null; then
     echo "Installing docker-compose..."
-    execute_command apt_get_command update
-    execute_command apt_get_command install -y docker-compose
+    execute_command apt-get update
+    execute_command apt-get install -y docker-compose
   else
     echo "docker-compose is already installed."
   fi
 }
 
-# Check if the docker image easyearth_plugin_easyearth-server exists, if exists return 0 else return 1
+# Check if the docker image exists, if exists return 0 else return 1
 check_docker_image() {
   if execute_command docker images | grep -q "$IMAGE_NAME"; then  # TODO: for some reason docker-compose images is not working... if using docker... need to make sure docker is installed...
     echo "Docker image $IMAGE_NAME already exists."
@@ -114,7 +107,7 @@ test_server() {
   if curl -s http://localhost:3781/v1/easyearth/ping | grep -q "Server is alive"; then
     echo "Server is running!"
   else
-    echo "Server is not running. Check the logs."
+    echo "Server is not running."
     exit 1
   fi
 }
