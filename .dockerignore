@@ -40,3 +40,5 @@ logs
 tmp
 data
 easyearth_plugin
+cache
+.cache
