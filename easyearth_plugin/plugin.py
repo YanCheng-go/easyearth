@@ -365,21 +365,18 @@ class EasyEarthPlugin:
 
             # Real-time vs Batch Prediction Option
             self.realtime_checkbox = QCheckBox("Get inference in real time while drawing")
-            self.realtime_checkbox.setChecked(False)  # Default to real-time
+            self.realtime_checkbox.setChecked(False) # Default to not real-time
             settings_layout.addWidget(self.realtime_checkbox)
             self.realtime_checkbox.stateChanged.connect(self.on_realtime_checkbox_changed)
 
             # Set the main layout
             main_layout.addStretch()
-            # main_layout.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
             main_widget.setLayout(main_layout)
             scroll_area = QScrollArea()
             scroll_area.setWidgetResizable(True)
             scroll_area.setWidget(main_widget)
             self.dock_widget.setWidget(scroll_area)
-
-            # Add dock widget to QGIS
-            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dock_widget)
+            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dock_widget) # Add dock widget to QGIS
 
             # initialize the data and tmp directory
             # TODO: move to after checking if docker image is running...and return mounted data folder using docker inspect
@@ -535,6 +532,7 @@ class EasyEarthPlugin:
                 self.download_button.hide()
                 self.layer_dropdown.show()
                 self.update_layer_dropdown()
+                self.embedding_group.setVisible(self.is_sam_model()) # show embedding section if SAM model is selected
             elif text == "Link":
                 self.image_path.show()
                 self.image_path.setReadOnly(False)
@@ -887,7 +885,6 @@ class EasyEarthPlugin:
     def toggle_drawing(self, checked):
         """Toggle drawing mode"""
 
-        # TODO: handle situations when regretting the drawing
         try:
             self.logger.info(f"Toggle drawing called with checked={checked}")
 
@@ -975,12 +972,7 @@ class EasyEarthPlugin:
                 self.prompt_count += + 1 # increments prompt counter
 
                 # Prepare prompt for server
-                prompt = [{
-                    'type': 'Point',
-                    'data': {
-                        "points": [[px, py]],
-                    }
-                }]
+                prompt = [{'type': 'Point', 'data': {"points": [[px, py]]}}]
 
                 if self.realtime_checkbox.isChecked():
                     self.get_prediction(prompt)
@@ -995,8 +987,12 @@ class EasyEarthPlugin:
 
     def undo_last_drawing(self):
         self.prompts_geojson['features'] = self.prompts_geojson['features'][:-1] # removes the last point from the prompts geojson
-        self.prompt_count -= 1 # decrements the prompt counter
+        self.prompt_count = self.prompt_count - 1 if self.prompt_count > 0 else 0  # decrements the prompt counter
         self.add_features_to_layer([], "prompts")
+
+        if self.realtime_checkbox.isChecked():
+            self.predictions_geojson['features'] = self.predictions_geojson['features'][:-1] # removes the last point from the prompts geojson
+            self.add_features_to_layer([], "predictions")
 
     def on_box_drawn(self, box_geom, start_point, end_point):
         """Handle box drawing completion
