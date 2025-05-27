@@ -1,30 +1,25 @@
 """Entry point for the QGIS plugin. Handles plugin registration, menu/toolbar actions, and high-level coordination."""
 
+from datetime import datetime
 from qgis.PyQt.QtWidgets import (QAction, QDockWidget, QPushButton, QVBoxLayout,
                                 QWidget, QMessageBox, QLabel, QHBoxLayout,
-                                QLineEdit, QFileDialog, QComboBox, QGroupBox, QSizePolicy, QInputDialog, QProgressBar, QCheckBox, QButtonGroup, QRadioButton, QDialog, QApplication, QScrollArea)
-from qgis.PyQt.QtCore import Qt, QByteArray, QBuffer, QIODevice, QProcess, QTimer, QProcessEnvironment, QVariant, QSettings
-from qgis.PyQt.QtGui import QIcon, QMovie, QColor
-from qgis.core import (QgsVectorLayer, QgsFeature, QgsGeometry, QgsPolygon,
-                      QgsPointXY, QgsField, QgsProject, QgsPoint, QgsLineString,
-                      QgsWkbTypes, QgsRasterLayer, Qgis, QgsApplication, QgsVectorFileWriter, QgsSymbol, QgsCategorizedSymbolRenderer,
-                      QgsRendererCategory, QgsMarkerSymbol, QgsFillSymbol, QgsCoordinateTransform, QgsSingleSymbolRenderer, QgsFields)
+                                QLineEdit, QFileDialog, QComboBox, QGroupBox, QShortcut, QProgressBar, QCheckBox, QButtonGroup, QRadioButton, QApplication, QScrollArea)
+from qgis.PyQt.QtCore import Qt, QTimer
+from qgis.PyQt.QtGui import QIcon, QKeySequence, QColor
+from qgis.core import (QgsVectorLayer, QgsGeometry,
+                      QgsPointXY, QgsProject,
+                      QgsWkbTypes, QgsRasterLayer, Qgis, QgsApplication, QgsCategorizedSymbolRenderer,
+                      QgsRendererCategory, QgsMarkerSymbol, QgsFillSymbol, QgsCoordinateTransform, QgsSingleSymbolRenderer)
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
-import os
-import requests
-import subprocess
-import sys
-import time
-import logging
-import shutil
-import tempfile
-import yaml
-import json
-import zipfile
-from datetime import datetime
-
 from .core.utils import setup_logger
 from .core.prompt_editor import BoxMapTool
+import json
+import logging
+import os
+import requests
+import shutil
+import subprocess
+import time
 
 class EasyEarthPlugin:
     def __init__(self, iface):
@@ -152,7 +147,7 @@ class EasyEarthPlugin:
             run_mode_group = QGroupBox("Run Mode")
             # run_mode_group.setMaximumHeight(150)
             run_mode_layout = QVBoxLayout()
-            run_mode_info_label = QLabel('You can launch the plugin server either by using Docker if you have it installed or <a href="https://github.com/YanCheng-go/easyearth?tab=readme-ov-file#local-mode">running the server locally outside QGIS</a>.   Local mode is required for making use of Mac OS GPUs.')
+            run_mode_info_label = QLabel('You can launch the plugin server either by using Docker if you have it installed or <a href="https://github.com/YanCheng-go/easyearth?tab=readme-ov-file#local-mode">running the server locally outside QGIS</a>.&nbsp;Local mode is required for making use of Mac OS GPUs.')
             run_mode_info_label.setWordWrap(True)
             run_mode_info_label.setOpenExternalLinks(True)  # allows the link to be clickable
             run_mode_info_label.setTextFormat(Qt.RichText)  # enables rich text formatting
@@ -349,6 +344,8 @@ class EasyEarthPlugin:
             self.undo_button = QPushButton("Undo last drawing")
             self.undo_button.clicked.connect(self.undo_last_drawing)
             self.undo_button.setEnabled(False) # enable after drawing starts
+            self.undo_shortcut = QShortcut(QKeySequence.Undo, self.iface.mainWindow())
+            self.undo_shortcut.activated.connect(self.undo_last_drawing)  # Connect shortcut to undo function
             button_layout.addWidget(self.undo_button)
             settings_layout.addLayout(button_layout)
 
@@ -1746,6 +1743,9 @@ class EasyEarthPlugin:
             if hasattr(self, 'point_layer') and self.point_layer:
                 QgsProject.instance().removeMapLayer(self.point_layer.id())
 
+            if hasattr(self, 'undo_shortcut') and self.undo_shortcut:
+                self.undo_shortcut.setParent(None)
+    
             # Remove temporary drawn features layer
             if hasattr(self, 'drawn_layer') and self.drawn_layer:
                 QgsProject.instance().removeMapLayer(self.drawn_layer.id())
