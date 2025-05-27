@@ -128,18 +128,12 @@ def predict():
 
         # Validate and convert image path
         image_path = data.get('image_path')
+
         if not image_path:
-            return jsonify({
-                'status': 'error',
-                'message': 'image_path is required'
-            }), 400
-        # Verify image path
+            return jsonify({'status': 'error', 'message': 'image_path is required'}), 400
         else:
             if not verify_image_path(image_path):
-                return jsonify({
-                    'status': 'error',
-                    'message': f'Invalid image path: {image_path}'
-                }), 408
+                return jsonify({'status': 'error', 'message': f'Invalid image path: {image_path}'}), 408
 
         # Get model path and warm up
         model_path = data.get('model_path', 'facebook/sam-vit-base')
@@ -148,13 +142,6 @@ def predict():
                 'status': 'error',
                 'message': 'model_path is required'
             }), 408
-        # Verify model path
-        # else:
-        #     if not verify_model_path(model_path):
-        #         return jsonify({
-        #             'status': 'error',
-        #             'message': f'Invalid model path: {model_path}'
-        #         }), 408
 
         # Warm up the model
         logger.debug(f"Warmup model: {model_path}")

@@ -59,14 +59,10 @@ class BaseModel:
 
             # Suppress the specific CUDA warning
             with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore", 
-                    message="CUDA initialization: CUDA unknown error"
-                )
+                warnings.filterwarnings("ignore", message="CUDA initialization: CUDA unknown error")
                 
                 if torch.cuda.is_available() and torch.cuda.device_count() > 0:
-                    # Try to get the first available CUDA device
-                    cuda_device = torch.device("cuda:0")
+                    cuda_device = torch.device("cuda:0") # try to get the first available CUDA device
                     # Test if the device is actually available
                     torch.zeros((1,), device=cuda_device)
                     self.logger.info(f"Using CUDA device: {torch.cuda.get_device_name(0)}")

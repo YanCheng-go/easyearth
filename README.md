@@ -75,6 +75,11 @@ git clone https://github.com/YanCheng-go/easyearth.git
 cp -r ./easyearth/easyearth_plugin easyearth_plugin
 ```
 
+### Local mode
+```bash
+chmod +x ./launch_server_local.sh && ./launch_server_local.sh
+```
+
 ### 🐳 Set Up Docker Server
 
 This will install Docker, build the image, and launch the EasyEarth server.

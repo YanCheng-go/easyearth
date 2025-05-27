@@ -1,5 +1,3 @@
-version: '3.8'   # More recent features
-
 services:
   easyearth-server:
     image: easyearth_easyearth-server
@@ -10,10 +8,10 @@ services:
       - "3781:3781"
     volumes:
       - .:/usr/src/app # Sync the application code
-      - ${DATA_DIR:-./data}:/usr/src/app/data # Data directory
-      - ${TEMP_DIR:-./tmp}:/usr/src/app/tmp  # Temporary directory
-      - ${LOG_DIR:-./logs}:/usr/src/app/logs  # Log directory
-      - ${MODEL_DIR:-~/.cache/easyearth/models}:/usr/src/app/.cache/models  # Model directory
+      - ${DATA_DIR:-./data}:/usr/src/app/data # data directory
+      - ${TEMP_DIR:-./tmp}:/usr/src/app/tmp # temporary directory
+      - ${LOG_DIR:-./logs}:/usr/src/app/logs # log directory
+      - ${MODEL_DIR:-~/.cache/easyearth/models}:/usr/src/app/.cache/models # model directory
     environment:
       - PYTHONUNBUFFERED=1
       - EASYEARTH_DATA_DIR=/usr/src/app/data
