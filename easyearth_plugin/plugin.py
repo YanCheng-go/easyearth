@@ -11,9 +11,10 @@
 
 """Entry point for the QGIS plugin. Handles plugin registration, menu/toolbar actions, and high-level coordination."""
 
+from threading import Thread
 from qgis.PyQt.QtWidgets import (QAction, QDockWidget, QPushButton, QVBoxLayout,
                                 QWidget, QMessageBox, QLabel, QHBoxLayout,
-                                QLineEdit, QFileDialog, QComboBox, QGroupBox, QGridLayout, QInputDialog, QProgressBar, QCheckBox, QButtonGroup, QRadioButton, QDialog, QApplication)
+                                QLineEdit, QFileDialog, QComboBox, QGroupBox, QGridLayout, QInputDialog, QProgressBar, QCheckBox, QButtonGroup, QRadioButton, QDialog, QApplication, QScrollArea)
 from qgis.PyQt.QtCore import Qt, QByteArray, QBuffer, QIODevice, QProcess, QTimer, QProcessEnvironment, QVariant, QSettings
 from qgis.PyQt.QtGui import QIcon, QMovie, QColor
 from qgis.core import (QgsVectorLayer, QgsFeature, QgsGeometry, QgsPolygon,
@@ -24,12 +25,14 @@ from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
 import os
 import requests
 import subprocess
+import sys
 import time
 import logging
 import shutil
 import tempfile
 import yaml
 import json
+import zipfile
 from datetime import datetime
 
 from .core.utils import setup_logger
@@ -60,6 +63,7 @@ class EasyEarthPlugin:
         self.docker_path = 'docker' if shutil.which('docker') else '/Applications/Docker.app/Contents/Resources/bin/docker' # adds compatibility for macOS
         # self.docker_hub_image_name = "maverickmiaow/easyearth"
         self.docker_hub_image_name = "lgordon99/easyearth"
+        self.docker_mode = True
 
         # Initialize map tools and data
         self.canvas = iface.mapCanvas() # QGIS map canvas instance
@@ -140,42 +144,78 @@ class EasyEarthPlugin:
             main_widget = QWidget()
             main_layout = QVBoxLayout()
 
-            # 1. Docker Run (Manual) Group
-            docker_run_group = QGroupBox("Docker Run (Manual)")
-            docker_run_layout = QVBoxLayout()
-
-            # Data folder selection
+            # 1. Data folder
+            data_folder_group = QGroupBox("Data Folder")
             data_folder_layout = QHBoxLayout()
             self.data_folder_edit = QLineEdit(self.data_dir)
             self.data_folder_edit.setReadOnly(True)
-            self.data_folder_btn = QPushButton("Select Folder")
+            self.data_folder_btn = QPushButton("Select folder")
             self.data_folder_btn.clicked.connect(self.select_data_folder)
-            data_folder_layout.addWidget(QLabel("Data folder:"))
             data_folder_layout.addWidget(self.data_folder_edit)
             data_folder_layout.addWidget(self.data_folder_btn)
-            docker_run_layout.addLayout(data_folder_layout)
+            data_folder_group.setLayout(data_folder_layout)
+            main_layout.addWidget(data_folder_group)
 
-            # Run/Stop docker button
-            self.docker_run_btn = QPushButton("Run Container")
-            self.docker_run_btn.clicked.connect(self.run_or_stop_container)
-            docker_run_layout.addWidget(self.docker_run_btn)
+            # 2. Run mode
+            run_mode_group = QGroupBox("Run Mode")
+            run_mode_layout = QVBoxLayout()
+            run_mode_info_label = QLabel("You can launch the plugin server either by using Docker if you have it installed or running the server locally outside QGIS.  Local mode is required for making use of Mac OS GPUs.")
+            run_mode_info_label.setWordWrap(True)
+            run_mode_layout.addWidget(run_mode_info_label)
 
-            # Add docker to layout
-            docker_run_group.setLayout(docker_run_layout)
-            main_layout.addWidget(docker_run_group)
+            run_mode_button_layout = QHBoxLayout()
+            self.docker_mode_button = QPushButton("Docker")
+            self.docker_mode_button.setCheckable(True)
+            self.docker_mode_button.clicked.connect(lambda: self.run_mode_selected("docker"))
+            run_mode_button_layout.addWidget(self.docker_mode_button)
+            
+            self.local_mode_button = QPushButton("Local")
+            self.local_mode_button.setCheckable(True)
+            self.local_mode_button.clicked.connect(lambda: self.run_mode_selected("local"))
+            run_mode_button_layout.addWidget(self.local_mode_button)
+            run_mode_layout.addLayout(run_mode_button_layout)
+            run_mode_group.setLayout(run_mode_layout)
+            main_layout.addWidget(run_mode_group)
+
+            # 1. Docker Run (Manual) Group
+            # docker_run_group = QGroupBox("Docker Run (Manual)")
+            # docker_run_layout = QVBoxLayout()
+
+            # Data folder selection
+            # data_folder_layout = QHBoxLayout()
+            # self.data_folder_edit = QLineEdit(self.data_dir)
+            # self.data_folder_edit.setReadOnly(True)
+            # self.data_folder_btn = QPushButton("Select Folder")
+            # self.data_folder_btn.clicked.connect(self.select_data_folder)
+            # data_folder_layout.addWidget(QLabel("Data folder:"))
+            # data_folder_layout.addWidget(self.data_folder_edit)
+            # data_folder_layout.addWidget(self.data_folder_btn)
+            # docker_run_layout.addLayout(data_folder_layout)
+
+            # # Run/Stop docker button
+            # self.docker_run_btn = QPushButton("Run Container")
+            # self.docker_run_btn.clicked.connect(self.run_or_stop_container)
+            # docker_run_layout.addWidget(self.docker_run_btn)
+
+            # # Add docker to layout
+            # docker_run_group.setLayout(docker_run_layout)
+            # main_layout.addWidget(docker_run_group)
 
             # 2. Service Information Group
-            service_group = QGroupBox("Service Information")
+            service_group = QGroupBox("Server")
             service_layout = QVBoxLayout()
 
             # Server status
             status_layout = QHBoxLayout()
-            server_label = QLabel("Server Status:")
-            self.server_status = QLabel("Checking...")
+            server_label = QLabel("Server status:")
             status_layout.addWidget(server_label)
+            self.server_status = QLabel("Checking...")
             status_layout.addWidget(self.server_status)
             status_layout.addStretch()
             service_layout.addLayout(status_layout)
+            self.docker_run_btn = QPushButton("Start docker")
+            self.docker_run_btn.clicked.connect(self.run_or_stop_container)
+            service_layout.addWidget(self.docker_run_btn)
 
             # API Information
             api_layout = QVBoxLayout()
@@ -360,7 +400,10 @@ class EasyEarthPlugin:
 
             # Set the main layout
             main_widget.setLayout(main_layout)
-            self.dock_widget.setWidget(main_widget)
+            scroll_area = QScrollArea()
+            scroll_area.setWidgetResizable(True)
+            scroll_area.setWidget(main_widget)
+            self.dock_widget.setWidget(scroll_area)
 
             # Add dock widget to QGIS
             self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dock_widget)
@@ -401,62 +444,84 @@ class EasyEarthPlugin:
             response = requests.get(f"http://0.0.0.0:{self.server_port}/v1/easyearth/ping", timeout=2)
 
             if response.status_code == 200:
-                self.server_status.setText("Running")
+                self.server_status.setText("Online")
                 self.server_status.setStyleSheet("color: green;")
                 self.server_running = True
                 self.docker_running = True
                 # TODO: need to first check which image is running, then when click stop docker, stop the right one...
-                self.docker_run_btn.setText("Stop Docker")
+                self.docker_run_btn.setText("Stop server")
             else:
                 self.server_status.setText("Error")
                 self.server_status.setStyleSheet("color: red;")
                 self.server_running = False
                 # TODO: this would only run the docker run command, running the docker image from the hub...
-                self.docker_run_btn.setText("Run Docker")
+                self.docker_run_btn.setText("Start docker")
         except requests.exceptions.RequestException:
-            self.server_status.setText("Not Running")
+            self.server_status.setText("Offline")
             self.server_status.setStyleSheet("color: red;")
             self.server_running = False
-            self.docker_run_btn.setText("Run Docker")
+            self.docker_run_btn.setText("Start docker")
 
-    def start_docker_container(self):
-        logs_dir = os.path.join(self.plugin_dir, 'logs')
-        cache_dir = os.path.expandvars("$HOME/.cache/easyearth/models")
-        docker_run_cmd = (f"{self.docker_path} rm -f easyearth-container 2>/dev/null || true && " # removes the container if it already exists
-                         f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
-                         f"{self.docker_path} run -d --name easyearth-container -p 3781:3781 "
-                         f"-v \"{self.data_dir}\":/usr/src/app/data " # mounts the data directory in the container
-                         f"-v \"{self.tmp_dir}\":/usr/src/app/tmp " # mounts the tmp directory in the container
-                         f"-v \"{logs_dir}\":/usr/src/app/logs " # mounts the logs directory in the container
-                         f"-v \"{cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
-                         f"{self.docker_hub_image_name}")
-        result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
+            if self.local_mode_button.isChecked():
+                self.docker_run_btn.hide() # hides the button if in local mode
+            else:
+                self.docker_run_btn.show()
+
+    def run_mode_selected(self, mode):
+        """Handle run mode selection (Docker or Local)"""
+        
+        if mode == 'docker':
+            self.local_mode_button.setChecked(False)
+            self.docker_mode = True
+        elif mode == 'local':
+            self.docker_mode_button.setChecked(False)
+            self.docker_mode = False
+
+    def start_server(self):
+        if self.docker_mode_button.isChecked():
+            logs_dir = os.path.join(self.plugin_dir, 'logs')
+            cache_dir = os.path.expandvars("$HOME/.cache/easyearth/models")
+            docker_run_cmd = (f"{self.docker_path} rm -f easyearth 2>/dev/null || true && " # removes the container if it already exists
+                            f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
+                            f"{self.docker_path} run -d --name easyearth -p 3781:3781 "
+                            f"-v \"{self.data_dir}\":/usr/src/app/data " # mounts the data directory in the container
+                            f"-v \"{self.tmp_dir}\":/usr/src/app/tmp " # mounts the tmp directory in the container
+                            f"-v \"{logs_dir}\":/usr/src/app/logs " # mounts the logs directory in the container
+                            f"-v \"{cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
+                            f"{self.docker_hub_image_name}")
+            result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
+            self.iface.messageBar().pushMessage("Info",
+                                                f"Starting server...\nRunning command: {result}",
+                                                level=Qgis.Info,
+                                                duration=5)
+            
+            if result.returncode == 0:
+                self.docker_running = True
+
+    def stop_server(self):
+        if self.docker_mode_button.isChecked():
+            result = subprocess.run(f"{self.docker_path} stop easyearth && {self.docker_path} rm easyearth", capture_output=True, text=True, shell=True)
+            self.docker_hub_process = None
+            self.docker_running = False
+        else:
+            result = subprocess.run('kill $(lsof -t -i:3781)', capture_output=True, text=True, shell=True) # kills the process running on port 3781
+
         self.iface.messageBar().pushMessage("Info",
-                                            f"Starting Docker container...\nRunning command: {result}",
+                                            f"Stopping server with command: {result}",
                                             level=Qgis.Info,
                                             duration=5)
-        self.docker_running = True
-
-    def stop_docker_container(self):
-        result = subprocess.run(f"{self.docker_path} stop easyearth-container && {self.docker_path} rm easyearth-container", capture_output=True, text=True, shell=True)
-        self.iface.messageBar().pushMessage("Info",
-                                            f"Stopping Docker container...\nRunning command: {result}",
-                                            level=Qgis.Info,
-                                            duration=5)
-        self.docker_hub_process = None
-        self.docker_running = False
 
     def run_or_stop_container(self):
         if not self.docker_running: # if the docker container is not running, start it
             self.data_folder_edit.setReadOnly(True)
             self.data_folder_btn.setEnabled(False)
-            self.docker_run_btn.setText("Stop Docker")
-            self.start_docker_container()
+            self.docker_run_btn.setText("Stop server")
+            self.start_server()
         else: # if the container is running, stop it
-            self.stop_docker_container()
+            self.stop_server()
             self.data_folder_edit.setReadOnly(False)
             self.data_folder_btn.setEnabled(True)
-            self.docker_run_btn.setText("Run Docker")
+            self.docker_run_btn.setText("Run server")
 
     def select_data_folder(self):
         folder = QFileDialog.getExistingDirectory(None, "Select Data Folder", self.data_folder_edit.text()) # opens a dialog to select a folder
@@ -604,7 +669,7 @@ class EasyEarthPlugin:
 
         if not is_sam:
             self.draw_button.setChecked(False)
-            self.draw_button.setText("Start Drawing")
+            self.draw_button.setText("Start drawing")
 
         # Embedding section
         self.embedding_path_edit.setEnabled(is_sam and not self.no_embedding_radio.isChecked())
@@ -856,7 +921,7 @@ class EasyEarthPlugin:
                 self.logger.info("Drawing session started successfully")
             else:
                 self.canvas.unsetMapTool(self.point_tool)
-                self.draw_button.setText("Start Drawing")
+                self.draw_button.setText("Start drawing")
                 self.undo_button.setEnabled(False)
                 self.logger.info("Stopping drawing session")
 
@@ -887,10 +952,6 @@ class EasyEarthPlugin:
                 point = transform.transform(point)
 
             if draw_type == "Point":
-                # Reset rubber band for each new point to prevent line creation
-                # self.rubber_band.reset(QgsWkbTypes.PointGeometry)
-                # self.rubber_band.addPoint(point)
-
                 # Calculate pixel coordinates
                 px = int((point.x() - extent.xMinimum()) * width / extent.width())
                 py = int((extent.yMaximum() - point.y()) * height / extent.height())
@@ -1552,9 +1613,11 @@ class EasyEarthPlugin:
 
     def get_container_path(self, host_path):
         """Convert host path to container path if within data_dir."""
-        if host_path and host_path.startswith(self.data_dir):
+        
+        if host_path and host_path.startswith(self.data_dir) and self.docker_mode_button.isChecked():
             relative_path = os.path.relpath(host_path, self.data_dir)
             return os.path.join('/usr/src/app/data', relative_path)
+        
         return host_path
 
     def create_prediction_layers(self):
