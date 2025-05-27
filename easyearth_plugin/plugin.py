@@ -1,14 +1,3 @@
-# TODO: split into multiple files, plugin.py, docker_manager.py, ui.py, layer_manager.py, prediction.py, utils.py
-# TODO: allow scrapping from wms file...
-# TODO: add function for converting local models to hugging face models
-# TODO: allow loading multiple images, create a prompt layer and a prediction layer for each image... zoom to layers to draw on and run prediction on...good for multiple images over the same location - timeseries
-
-# TODO: handle situations when regretting the drawing, and refine the predictions, editing
-# TODO: incorporate SAM2, text prompt
-# TODO: models with no prompts
-# TODO: test for windows and macbook
-# TODO: ease the incorporation of more models
-
 """Entry point for the QGIS plugin. Handles plugin registration, menu/toolbar actions, and high-level coordination."""
 
 from threading import Thread
@@ -85,8 +74,10 @@ class EasyEarthPlugin:
         self.start_point = None
         self.drawn_features = []
         self.drawn_layer = None
-        self.data_dir = self.plugin_dir + '/user' # user data directory, where the data will be stored
+        self.data_dir = os.path.join(self.plugin_dir, 'data') # data directory for storing images and embeddings
         self.tmp_dir = os.path.join(self.plugin_dir, 'tmp') # temporary directory for storing temporary files
+        self.logs_dir = os.path.join(self.plugin_dir, 'logs') # logs directory for storing logs
+        self.cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "easyearth", "models") # cache directory for storing models
         self.model_path = None
         self.feature_count = 0 # for generating unique IDs
         self.prompt_count = 0 # for generating unique IDs
@@ -177,30 +168,6 @@ class EasyEarthPlugin:
             run_mode_group.setLayout(run_mode_layout)
             main_layout.addWidget(run_mode_group)
 
-            # 1. Docker Run (Manual) Group
-            # docker_run_group = QGroupBox("Docker Run (Manual)")
-            # docker_run_layout = QVBoxLayout()
-
-            # Data folder selection
-            # data_folder_layout = QHBoxLayout()
-            # self.data_folder_edit = QLineEdit(self.data_dir)
-            # self.data_folder_edit.setReadOnly(True)
-            # self.data_folder_btn = QPushButton("Select Folder")
-            # self.data_folder_btn.clicked.connect(self.select_data_folder)
-            # data_folder_layout.addWidget(QLabel("Data folder:"))
-            # data_folder_layout.addWidget(self.data_folder_edit)
-            # data_folder_layout.addWidget(self.data_folder_btn)
-            # docker_run_layout.addLayout(data_folder_layout)
-
-            # # Run/Stop docker button
-            # self.docker_run_btn = QPushButton("Run Container")
-            # self.docker_run_btn.clicked.connect(self.run_or_stop_container)
-            # docker_run_layout.addWidget(self.docker_run_btn)
-
-            # # Add docker to layout
-            # docker_run_group.setLayout(docker_run_layout)
-            # main_layout.addWidget(docker_run_group)
-
             # 2. Service Information Group
             service_group = QGroupBox("Server")
             service_layout = QVBoxLayout()
@@ -240,7 +207,6 @@ class EasyEarthPlugin:
             self.model_combo = QComboBox()
             self.model_combo.setEditable(True)
             # Add common models
-            # TODO: add and test model models
             self.model_combo.addItems([
                 "facebook/sam-vit-base",
                 "facebook/sam-vit-large",
@@ -275,13 +241,11 @@ class EasyEarthPlugin:
             self.image_path = QLineEdit("")
             self.image_path.setReadOnly(True)
             self.image_path.setPlaceholderText("No image selected")
-            # self.image_path.returnPressed.connect(self.on_image_path_entered)
             self.browse_button = QPushButton("Select image")
             self.browse_button.clicked.connect(self.browse_image)
             file_layout.addWidget(image_path_label)
             file_layout.addWidget(self.image_path)
             file_layout.addWidget(self.browse_button)
-            image_layout.addLayout(file_layout)
 
             # Link input
             self.download_button = QPushButton("Download")
@@ -289,7 +253,6 @@ class EasyEarthPlugin:
             self.download_button.clicked.connect(self.on_download_button_clicked)
             file_layout.addWidget(self.download_button)
 
-            # Move these lines here (right after the download button):
             self.image_download_progress_bar = QProgressBar()
             self.image_download_progress_bar.setMinimum(0)
             self.image_download_progress_bar.setMaximum(100)
@@ -304,10 +267,11 @@ class EasyEarthPlugin:
             # Layer selection
             self.layer_dropdown = QComboBox() # displays a list of available raster layers in the project
             self.layer_dropdown.hide()
-            image_layout.addWidget(self.layer_dropdown)
+            file_layout.addWidget(self.layer_dropdown)
             # Connect to layer selection change
             self.layer_dropdown.currentIndexChanged.connect(self.on_layer_selected)
 
+            image_layout.addLayout(file_layout)
             image_group.setLayout(image_layout)
             main_layout.addWidget(image_group)
 
@@ -419,11 +383,13 @@ class EasyEarthPlugin:
             # Connect to QGIS quit signal
             QgsApplication.instance().aboutToQuit.connect(self.cleanup_docker)
 
-            # TODO: add check at the start and disable docker button
             # Start periodic server status check
             self.status_timer = QTimer()
             self.status_timer.timeout.connect(self.check_server_status)
             self.status_timer.start(5000)  # Check every 5 seconds
+
+            # Check if the container is running on startup
+            self.inspect_running_container()
 
             self.logger.debug("Finished initGui setup")
         except Exception as e:
@@ -448,24 +414,25 @@ class EasyEarthPlugin:
                 self.server_status.setStyleSheet("color: green;")
                 self.server_running = True
                 self.docker_running = True
-                # TODO: need to first check which image is running, then when click stop docker, stop the right one...
+                self.docker_run_btn.show()
                 self.docker_run_btn.setText("Stop server")
             else:
                 self.server_status.setText("Error")
                 self.server_status.setStyleSheet("color: red;")
                 self.server_running = False
-                # TODO: this would only run the docker run command, running the docker image from the hub...
+                self.docker_running = False
                 self.docker_run_btn.setText("Start docker")
         except requests.exceptions.RequestException:
             self.server_status.setText("Offline")
             self.server_status.setStyleSheet("color: red;")
             self.server_running = False
+            self.docker_running = False
             self.docker_run_btn.setText("Start docker")
 
-            if self.local_mode_button.isChecked():
-                self.docker_run_btn.hide() # hides the button if in local mode
-            else:
-                self.docker_run_btn.show()
+            # if self.local_mode_button.isChecked():
+            #     self.docker_run_btn.hide() # hides the button if in local mode
+            # else:
+            #     self.docker_run_btn.show()
 
     def run_mode_selected(self, mode):
         """Handle run mode selection (Docker or Local)"""
@@ -473,9 +440,13 @@ class EasyEarthPlugin:
         if mode == 'docker':
             self.local_mode_button.setChecked(False)
             self.docker_mode = True
+            self.docker_run_btn.show()
         elif mode == 'local':
             self.docker_mode_button.setChecked(False)
             self.docker_mode = False
+
+            if not self.server_running:
+                self.docker_run_btn.hide() # hides the button if in local mode
 
     def start_server(self):
         if self.docker_mode_button.isChecked():
@@ -529,6 +500,10 @@ class EasyEarthPlugin:
         if folder: # if a folder is selected
             self.data_folder_edit.setText(folder)
             self.data_dir = folder
+
+        if not os.path.exists(self.data_dir):
+            QMessageBox.warning(None, "Error", f"Data directory does not exist: {self.data_dir}")
+            return
         
         self.iface.messageBar().pushMessage("Info", f"Data folder set to: {self.data_dir}", level=Qgis.Info, duration=5)
 
@@ -538,6 +513,7 @@ class EasyEarthPlugin:
         try:
             if text == "File":
                 self.image_path.show()
+                self.image_path.setReadOnly(True)
                 self.browse_button.show()
                 self.layer_dropdown.hide()
                 self.download_button.hide()
@@ -759,7 +735,7 @@ class EasyEarthPlugin:
         """Reinitialize the image path input field"""
 
         self.image_path.clear()
-        self.image_path.setPlaceholderText("Enter image path or click Select...")
+        self.image_path.setPlaceholderText("No image selected")
         self.image_path.setEnabled(True)
         self.browse_button.setEnabled(True)
 
@@ -1804,89 +1780,3 @@ class EasyEarthPlugin:
         except Exception as e:
             self.logger.error(f"Error during plugin unload: {str(e)}")
             self.logger.exception("Full traceback:")
-
-    # def initialize_data_directory(self):
-    #     """Initialize or load data directory configuration"""
-    #     try:
-    #         settings = QSettings()
-    #         default_data_dir = os.path.join(self.plugin_dir, 'user')
-
-    #         # Create custom dialog for directory choice
-    #         msg = QMessageBox()
-    #         msg.setIcon(QMessageBox.Question)
-    #         msg.setText("Data Directory Configuration")
-    #         msg.setInformativeText(
-    #             "Would you like to:\n\n"
-    #             "1. Use a custom directory for your data\n"
-    #             "2. Use the default directory\n\n"
-    #             f"Default directory: {default_data_dir}"
-    #         )
-    #         custom_button = msg.addButton("Select Custom Directory", QMessageBox.ActionRole)
-    #         default_button = msg.addButton("Use Default Directory", QMessageBox.ActionRole)
-    #         msg.setDefaultButton(custom_button)
-
-    #         msg.exec_()
-    #         clicked_button = msg.clickedButton()
-
-    #         if clicked_button == custom_button:
-    #             # User wants to select custom directory
-    #             data_dir = QFileDialog.getExistingDirectory(
-    #                 self.iface.mainWindow(),
-    #                 "Select Data Directory",
-    #                 os.path.expanduser("~"),
-    #                 QFileDialog.ShowDirsOnly
-    #             )
-
-    #             if not data_dir:  # User cancelled selection
-    #                 self.logger.info("User cancelled custom directory selection, using default")
-    #                 data_dir = default_data_dir
-    #         else:
-    #             # User chose default directory
-    #             data_dir = default_data_dir
-
-    #         # Create the directory and subdirectories
-    #         try:
-    #             os.makedirs(data_dir, exist_ok=True)
-    #             os.makedirs(os.path.join(data_dir, 'embeddings'), exist_ok=True)
-
-    #             # Save the setting
-    #             settings.setValue("easyearth/data_dir", data_dir)
-    #             self.data_dir = data_dir
-
-    #             # create a tmp directory
-    #             self.tmp_dir = os.path.join(data_dir, 'tmp')
-    #             os.makedirs(self.tmp_dir, exist_ok=True)
-    #             self.logger.info(f"Tmp data directory: {data_dir}")
-
-    #             # Show confirmation
-    #             QMessageBox.information(
-    #                 None,
-    #                 "Data Directory Set",
-    #                 f"Data directory has been set to:\n{data_dir}\n\n"
-    #                 f"Temporary directory has been set to:\n{self.tmp_dir}\n\n"
-    #                 "Please make sure to:\n"
-    #                 "1. Place your input images in this directory\n"
-    #                 "2. Ensure Docker has access to this location\n"
-    #                 "3. Check the temporary directory for any temporary outputs\n"
-    #             )
-
-    #             self.logger.info(f"Data directory set to: {data_dir}")
-
-    #         except Exception as e:
-    #             self.logger.error(f"Error creating directories: {str(e)}")
-    #             QMessageBox.critical(
-    #                 None,
-    #                 "Error",
-    #                 f"Failed to create data directory structure: {str(e)}\n"
-    #                 "Please check permissions and try again."
-    #             )
-    #             return None
-
-    #         return data_dir
-
-    #     except Exception as e:
-    #         self.logger.error(f"Error initializing data directory: {str(e)}")
-    #         self.logger.exception("Full traceback:")
-    #         QMessageBox.critical(None, "Error",
-    #             f"Failed to initialize data directory: {str(e)}")
-    #         return None
