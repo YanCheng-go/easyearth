@@ -80,7 +80,12 @@ class Sam(BaseModel):
             input_boxes=input_boxes,
             input_labels=input_labels,
             return_tensors="pt"
-        ).to(self.device)
+        )
+
+        if torch.backends.mps.is_available():
+            inputs = inputs.to(torch.float32).to(self.device)
+        else:
+            inputs = inputs.to(self.device)
 
         inputs.pop("pixel_values", None)
         inputs.update({"image_embeddings": image_embeddings})

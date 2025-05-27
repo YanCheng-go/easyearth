@@ -108,3 +108,6 @@ venv.bak/
 /logs/*
 /easyearth/logs/*
 /easyearth/test/logs/*
+
+tmp
+logs
