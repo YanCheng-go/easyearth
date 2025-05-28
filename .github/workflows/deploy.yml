@@ -4,6 +4,7 @@ on:
     push:
         branches:
         - yan
+        - lucia
         paths:
         - 'Dockerfile'
 #        - 'docker-compose.yml'
