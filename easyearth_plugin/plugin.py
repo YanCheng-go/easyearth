@@ -11,8 +11,7 @@ from qgis.core import (QgsVectorLayer, QgsGeometry,
                       QgsWkbTypes, QgsRasterLayer, Qgis, QgsApplication, QgsCategorizedSymbolRenderer,
                       QgsRendererCategory, QgsMarkerSymbol, QgsFillSymbol, QgsCoordinateTransform, QgsSingleSymbolRenderer)
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
-from .core.utils import setup_logger
-from .core import BoxMapTool, DockerManager, setup_logger
+from .core import BoxMapTool, DockerManager, setup_logger, map_id
 import json
 import logging
 import os
@@ -86,6 +85,7 @@ class EasyEarthPlugin:
             self.cache_dir = os.path.join(os.environ.get("HOME", ""), ".cache", "easyearth", "models")
             
         self.model_path = None
+        self.model_type = None
         self.feature_count = 0 # for generating unique IDs
         self.prompt_count = 0 # for generating unique IDs
         self.temp_prompts_geojson = None # temporary file for storing prompts
@@ -1045,13 +1045,36 @@ class EasyEarthPlugin:
             return None
 
     def undo_last_drawing(self):
+        """Undo the last drawing action by removing the last point or box"""
+
+        if self.prompt_count == 0:
+            self.iface.messageBar().pushMessage("Undo Last Drawing", "No drawings to undo.", level=Qgis.Warning, duration=3)
+            return
+
+        last_prompt_id = self.prompts_geojson['features'][-1]['properties']['id'] # gets the last prompt ID from prompts_geojson
+        last_prediction_ID = map_id(self.prompts_geojson['features']) # finds the last prediction feature ID using map_id
+
         self.prompts_geojson['features'] = self.prompts_geojson['features'][:-1] # removes the last point from the prompts geojson
         self.prompt_count = self.prompt_count - 1 if self.prompt_count > 0 else 0  # decrements the prompt counter
-        self.add_features_to_layer([], "prompts")
-
-        if len(self.predictions_geojson.get('features')) > 0:
-            self.predictions_geojson['features'] = self.predictions_geojson['features'][0] # removes the last point from the predictions geojson
+        self.add_features_to_layer([], "prompts") # updates the prompts layer
+        
+        if self.realtime_checkbox.isChecked():
+            self.predictions_geojson['features'] = self.predictions_geojson['features'][:-1] # removes the last point from the prompts geojson
+            self.feature_count = self.feature_count - 1 if self.feature_count > 0 else 0
             self.add_features_to_layer([], "predictions")
+        else:
+            if self.predictions_geojson:
+                # Get the last prediction ID from predictions_geojson
+                last_prediction_index = last_prediction_ID.get(last_prompt_id, None)
+                last_prediction_id = self.predictions_geojson['features'][last_prediction_index]['properties']['id']
+
+                if last_prediction_id is None:
+                    self.iface.messageBar().pushMessage("Error", "No matching prediction found for the last prompt.", level=Qgis.Critical, duration=3)
+                    return
+                
+                self.predictions_geojson['features'] = [f for f in self.predictions_geojson['features'] if f['properties']['id'] != last_prediction_id] # removes the last prediction feature from predictions_geojson
+                self.feature_count = self.feature_count - 1 if self.feature_count > 0 else 0 # updates the feature count
+                self.add_features_to_layer([], "predictions") # updates the predictions layer
 
     def on_box_drawn(self, box_geom, start_point, end_point):
         """Handle box drawing completion
@@ -1216,12 +1239,13 @@ class EasyEarthPlugin:
                 # Assign unique ids
                 if not hasattr(self, 'feature_count'):
                     self.feature_count = 0
+                    
                 start_id = self.feature_count
                 features = [{
                     "type": "Feature",
                     "properties": {
                         "id": start_id + i,
-                        "scores": feat.get('properties', {}).get('scores', 0),
+                        # "scores": feat.get('properties', {}).get('scores', 0),  # TODO： if scores are available in the feature properties
                     },
                     "geometry": feat['geometry']
                 } for i, feat in enumerate(features)]
@@ -1464,10 +1488,11 @@ class EasyEarthPlugin:
 
             # add the model path to the payload if not empty
             self.model_path = self.model_dropdown.currentText().strip()
+            self.model_type = "sam" if self.is_sam_model() else "segment"
 
             if self.model_path:
                 payload["model_path"] = self.model_path
-                payload["model_type"] = "sam" if self.is_sam_model() else "segment"
+                payload["model_type"] = self.model_type
 
             # Show payload in message bar
             if prompts is None or len(prompts) == 0:
@@ -1481,6 +1506,8 @@ class EasyEarthPlugin:
                     f"- Host embedding path: {embedding_path}\n"
                     f"- (re)Save embeddings: {save_embeddings}\n"
                     f"- Prompts: {json.dumps(prompts, indent=2)}\n"
+                    f"- Model path: {self.model_path}\n"
+                    f"- Model type: {self.model_type}\n"
                 )
 
             self.iface.messageBar().pushMessage(
@@ -1646,10 +1673,10 @@ class EasyEarthPlugin:
             self.temp_predictions_geojson = os.path.join(self.tmp_dir, f'predictions_{timestamp}.geojson')
 
             # Initialize feature counter
-            self.feature_count = 1
+            self.feature_count = 0
 
             # Initialize prompt counter
-            self.prompt_count = 1
+            self.prompt_count = 0
 
             self.logger.info(f"Prepared file paths: \n"
                              f"Prompts: {self.temp_prompts_geojson}\n"

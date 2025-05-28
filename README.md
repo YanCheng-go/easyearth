@@ -52,7 +52,18 @@ EasyEarth enables seamless application of cutting-edge computer vision and visio
 easyearth/
 ├── easyearth/         # Server app – use this if you're only interested in the backend
 ├── easyearth_plugin/  # QGIS plugin – use this folder to install the QGIS interface
-│   └── easyearth/     # Server app (same as above, for plugin integration)
+    ├── core/               # Core plugin files
+    ├── resources/          # Plugin resources (icons, images, etc.)
+    ├── ui/                 # Plugin UI files
+├── Dockerfile             # Dockerfile to build the EasyEarth server image
+├── docker-compose.yml # Docker Compose file to set up the server
+├── launch_server_local.sh # Script to run the server locally
+├── setup.sh           # Script to set up the Docker server
+├── requirements.txt   # Python dependencies for the server
+├── README.md          # Project documentation
+└── docs/              # Documentation files
+    ├── DeveloperGuide.md
+    
 ```
 
 ---
@@ -164,62 +175,6 @@ cp -r ./easyearth_plugin ~/.local/share/QGIS/QGIS3/profiles/default/python/plugi
 
 ---
 
-## ✨ Model APIs (Development testing)
-
-### 📍 Use SAM with Prompts
-
-```bash
-curl -X POST http://127.0.0.1:3781/predict \
--H "Content-Type: application/json" \
--d '{
-  "model_type": "sam",
-  "image_path": "<DATA FOLDER>/DJI_0108.JPG",
-  "embedding_path": "<DATA FOLDER>/embeddings/DJI_0108.pt",
-  "model_path": "facebook/sam-vit-large",
-  "prompts": [{
-    "type": "Point",
-    "data": {
-      "points": [[850, 1100]]
-    }
-  }]
-}'
-```
-
-### 🚫 Use Models Without Prompts
-
-```bash
-curl -X POST http://127.0.0.1:3781/predict \
--H "Content-Type: application/json" \
--d '{
-  "model_type": "segment",
-  "image_path": "<DATA FOLDER>/DJI_0108.JPG",
-  "model_path": "restor/tcd-segformer-mit-b2",
-  "prompts": []
-}'
-```
-
----
-
-### 🔌 Run EasyEarth Outside QGIS
-
-You can also run EasyEarth server headlessly:
-
-1. Start the Docker container
-```bash
-cd easyearth_plugin  # go to the directory where the repo is located
-sudo TEMP_DIR=/custom/temp/data DATA_DIR=/custom/data/path LOG_DIR=/custom/log/path MODEL_DIR=/custom/cache/path docker-compose up -d # start the container while mounting the custom directories.
-```
-2. Use Rest API to send requests to the server, check [Model APIs](#-model-apis) for more details.
-
-
-### ✅ Health Check
-Check if the server is running, the response should be `Server is alive`
-
-```bash
-curl -X GET http://127.0.0.1:3781/ping
-```
-
----
 ## 📚 Documentation (TO BE UPDATED)
 Check out our User Guide and Developer Guide for more.
 - [User Guide](docs/UserGuide.md)
