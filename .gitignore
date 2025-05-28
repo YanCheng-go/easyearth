@@ -115,3 +115,5 @@ easyearth_env
 data
 .cache
 cache
+easyearth_base
+easyearth_env.zip

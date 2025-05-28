@@ -169,7 +169,7 @@ cp -r ./easyearth_plugin ~/.local/share/QGIS/QGIS3/profiles/default/python/plugi
 ### 📍 Use SAM with Prompts
 
 ```bash
-curl -X POST http://127.0.0.1:3781/v1/easyearth/predict \
+curl -X POST http://127.0.0.1:3781/predict \
 -H "Content-Type: application/json" \
 -d '{
   "model_type": "sam",
@@ -188,7 +188,7 @@ curl -X POST http://127.0.0.1:3781/v1/easyearth/predict \
 ### 🚫 Use Models Without Prompts
 
 ```bash
-curl -X POST http://127.0.0.1:3781/v1/easyearth/predict \
+curl -X POST http://127.0.0.1:3781/predict \
 -H "Content-Type: application/json" \
 -d '{
   "model_type": "segment",
@@ -216,7 +216,7 @@ sudo TEMP_DIR=/custom/temp/data DATA_DIR=/custom/data/path LOG_DIR=/custom/log/p
 Check if the server is running, the response should be `Server is alive`
 
 ```bash
-curl -X GET http://127.0.0.1:3781/v1/easyearth/ping
+curl -X GET http://127.0.0.1:3781/ping
 ```
 
 ---

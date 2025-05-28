@@ -9,13 +9,9 @@ services:
       - "3781:3781"
     volumes:
       - .:/usr/src/app # Sync the application code
-      - ${DATA_DIR:-./data}:/usr/src/app/data # data directory
-      - ${TEMP_DIR:-./data/tmp}:/usr/src/app/tmp # temporary directory
-      - ${LOG_DIR:-./data/logs}:/usr/src/app/logs # log directory
+      - ${BASE_DIR:-./data}:/usr/src/app/easyearth_base # base directory
       - ${MODEL_DIR:-./.cache/easyearth/models}:/usr/src/app/.cache/models # model directory
     environment:
       - PYTHONUNBUFFERED=1
-      - EASYEARTH_DATA_DIR=/usr/src/app/data
-      - EASYEARTH_TEMP_DIR=/usr/src/app/tmp
-      - EASYEARTH_LOG_DIR=/usr/src/app/logs
+      - BASE_DIR=/usr/src/app/easyearth_base
       - MODEL_CACHE_DIR=/usr/src/app/.cache/models

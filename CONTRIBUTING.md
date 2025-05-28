@@ -72,7 +72,7 @@ If you make changes to backend APIs:
 
 ```bash
 # Example: test if the server is running
-curl http://127.0.0.1:3781/v1/easyearth/ping
+curl http://127.0.0.1:3781/ping
 ```
 
 If you make GUI changes:
