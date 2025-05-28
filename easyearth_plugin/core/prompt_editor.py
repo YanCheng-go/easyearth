@@ -5,6 +5,7 @@ from qgis.core import QgsWkbTypes, QgsGeometry, QgsPointXY
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt
 from qgis.gui import QgsMapTool
+from itertools import chain
 
 class BoxMapTool(QgsMapTool):
     def __init__(self, canvas, on_box_drawn):
@@ -48,4 +49,18 @@ class BoxMapTool(QgsMapTool):
                 self.start_point
             ]
             self.temp_rubber_band.setToGeometry(QgsGeometry.fromPolygonXY([points]), None)
+
+def map_id(prompts):
+    """Map IDs of predictions to their corresponding prompts.
+    Args:
+        prompts: List of prompts, each with an 'id' and 'type' field.
+    Returns:
+        A dictionary mapping prompt IDs to their indices in the reordered list.
+    """
+    points = [p for p in prompts if p.get('properties', {}).get('type', '').lower() == 'point']
+    boxes = [p for p in prompts if p.get('properties', {}).get('type', '').lower() == 'box']
+    reordered_prompts = list(chain(points, boxes))
+    # create a mapping of prompt IDs to their indices that can be used to find the corresponding prediction IDs)
+    id_map = {prompt['properties']['id']: idx for idx, prompt in enumerate(reordered_prompts)}
+    return id_map
 

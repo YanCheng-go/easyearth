@@ -11,8 +11,7 @@ from qgis.core import (QgsVectorLayer, QgsGeometry,
                       QgsWkbTypes, QgsRasterLayer, Qgis, QgsApplication, QgsCategorizedSymbolRenderer,
                       QgsRendererCategory, QgsMarkerSymbol, QgsFillSymbol, QgsCoordinateTransform, QgsSingleSymbolRenderer)
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
-from .core.utils import setup_logger
-from .core import BoxMapTool, DockerManager, setup_logger
+from .core import BoxMapTool, DockerManager, setup_logger, map_id
 import json
 import logging
 import os
@@ -1015,12 +1014,37 @@ class EasyEarthPlugin:
             return None
 
     def undo_last_drawing(self):
+        """Undo the last drawing action by removing the last point or box"""
+
+        if self.prompt_count == 0:
+            self.iface.messageBar().pushMessage("Undo Last Drawing", "No drawings to undo.", level=Qgis.Warning, duration=3)
+            return
+
+        # Get the last prompt ID from prompts_geojson
+        last_prompt_id = self.prompts_geojson['features'][-1]['properties']['id']
+        # Find the last prediction feature ID using map_id
+        id_map = map_id(self.prompts_geojson['features'])
+
         self.prompts_geojson['features'] = self.prompts_geojson['features'][:-1] # removes the last point from the prompts geojson
         self.prompt_count = self.prompt_count - 1 if self.prompt_count > 0 else 0  # decrements the prompt counter
         self.add_features_to_layer([], "prompts")
 
         if self.realtime_checkbox.isChecked():
             self.predictions_geojson['features'] = self.predictions_geojson['features'][:-1] # removes the last point from the prompts geojson
+            self.feature_count = self.feature_count - 1 if self.feature_count > 0 else 0
+            self.add_features_to_layer([], "predictions")
+        else:
+            # Get the last prediction ID from predictions_geojson
+            last_prediction_indice = id_map.get(last_prompt_id, None)
+            last_prediction_id = self.predictions_geojson['features'][last_prediction_indice]['properties']['id']
+            if last_prediction_id is None:
+                self.iface.messageBar().pushMessage("Error", "No matching prediction found for the last prompt.", level=Qgis.Critical, duration=3)
+                return
+            # Remove the last prediction feature from predictions_geojson
+            self.predictions_geojson['features'] = [f for f in self.predictions_geojson['features'] if f['properties']['id'] != last_prediction_id]
+            # Update the feature count
+            self.feature_count = self.feature_count - 1 if self.feature_count > 0 else 0
+            # Update the predictions layer
             self.add_features_to_layer([], "predictions")
 
     def on_box_drawn(self, box_geom, start_point, end_point):
@@ -1616,10 +1640,10 @@ class EasyEarthPlugin:
             self.temp_predictions_geojson = os.path.join(self.tmp_dir, f'predictions_{timestamp}.geojson')
 
             # Initialize feature counter
-            self.feature_count = 1
+            self.feature_count = 0
 
             # Initialize prompt counter
-            self.prompt_count = 1
+            self.prompt_count = 0
 
             self.logger.info(f"Prepared file paths: \n"
                              f"Prompts: {self.temp_prompts_geojson}\n"
