@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import time
 import torch
+import platform
 
 class EasyEarthPlugin:
     def __init__(self, iface):
@@ -71,9 +72,12 @@ class EasyEarthPlugin:
         self.drawn_features = []
         self.drawn_layer = None
         self.data_dir = os.path.join(self.plugin_dir, 'data') # data directory for storing images and embeddings
-        self.tmp_dir = os.path.join(self.plugin_dir, 'tmp') # temporary directory for storing temporary files
-        self.logs_dir = os.path.join(self.plugin_dir, 'logs') # logs directory for storing logs
-        self.cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "easyearth", "models") # cache directory for storing models
+        self.tmp_dir = os.path.join(self.plugin_dir, 'data', 'tmp') # temporary directory for storing temporary files
+        self.logs_dir = os.path.join(self.plugin_dir, 'data', 'logs') # logs directory for storing logs
+        if os.name == "nt" or platform.system().lower().startswith("win"):
+            self.cache_dir = os.path.join(os.environ.get("USERPROFILE", ""), ".cache", "easyearth", "models")
+        else:
+            self.cache_dir = os.path.join(os.environ.get("HOME", ""), ".cache", "easyearth", "models")
         self.model_path = None
         self.feature_count = 0 # for generating unique IDs
         self.prompt_count = 0 # for generating unique IDs
@@ -476,8 +480,8 @@ class EasyEarthPlugin:
                             f"{self.docker_path} run -d --name easyearth -p 3781:3781 "
                             f"-v \"{self.data_dir}\":/usr/src/app/data " # mounts the data directory in the container
                             f"-v \"{self.tmp_dir}\":/usr/src/app/tmp " # mounts the tmp directory in the container
-                            f"-v \"{logs_dir}\":/usr/src/app/logs " # mounts the logs directory in the container
-                            f"-v \"{cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
+                            f"-v \"{self.logs_dir}\":/usr/src/app/logs " # mounts the logs directory in the container
+                            f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
                             f"{self.docker_hub_image_name}")
             result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
             self.iface.messageBar().pushMessage("Info",
@@ -522,6 +526,9 @@ class EasyEarthPlugin:
         if folder: # if a folder is selected
             self.data_folder_edit.setText(folder)
             self.data_dir = folder
+            # Update tmp and logs directories
+            self.tmp_dir = os.path.join(self.data_dir, 'tmp')
+            self.logs_dir = os.path.join(self.data_dir, 'logs')
 
         if not os.path.exists(self.data_dir):
             QMessageBox.warning(None, "Error", f"Data directory does not exist: {self.data_dir}")

@@ -113,3 +113,5 @@ tmp
 logs
 easyearth_env
 data
+.cache
+cache
