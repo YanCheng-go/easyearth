@@ -22,8 +22,8 @@ WORKDIR $APP_DIR
 COPY requirements.txt $APP_DIR/
 
 # upgrade pip
-RUN pip install --upgrade pip setuptools wheel
-RUN pip install --no-cache-dir -r requirements.txt --upgrade
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt --upgrade
 
 # Copy the application code
 COPY . $APP_DIR/
