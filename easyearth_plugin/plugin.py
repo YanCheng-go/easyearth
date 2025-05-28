@@ -12,6 +12,7 @@ from qgis.core import (QgsVectorLayer, QgsGeometry,
                       QgsRendererCategory, QgsMarkerSymbol, QgsFillSymbol, QgsCoordinateTransform, QgsSingleSymbolRenderer)
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
 from .core import BoxMapTool, DockerManager, setup_logger, map_id
+from io import BytesIO
 import json
 import logging
 import os
@@ -22,6 +23,7 @@ import subprocess
 import time
 import torch
 import urllib.request
+import zipfile
 
 class EasyEarthPlugin:
     def __init__(self, iface):
@@ -115,7 +117,7 @@ class EasyEarthPlugin:
         self.project_crs = QgsProject.instance().crs()
 
         QgsProject.instance().crsChanged.connect(self.on_project_crs_changed)
-        os.environ['LOGS_DIR'] = self.logs_dir
+        # os.environ['LOGS_DIR'] = self.logs_dir
 
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI"""
@@ -192,10 +194,10 @@ class EasyEarthPlugin:
             status_layout.addWidget(self.server_status)
             status_layout.addStretch()
             service_layout.addLayout(status_layout)
-            self.docker_run_btn = QPushButton("Start docker")
-            self.docker_run_btn.clicked.connect(self.run_or_stop_container)
-            self.docker_run_btn.hide()
-            service_layout.addWidget(self.docker_run_btn)
+            self.toggle_server_button = QPushButton("")
+            self.toggle_server_button.clicked.connect(self.run_or_stop_container)
+            self.toggle_server_button.hide()
+            service_layout.addWidget(self.toggle_server_button)
 
             # API Information
             api_layout = QVBoxLayout()
@@ -406,7 +408,7 @@ class EasyEarthPlugin:
             self.status_timer.start(5000)  # Check every 5 seconds
 
             # # Check if the container is running on startup
-            DockerManager.inspect_running_container(self.iface, self.docker_path, self.data_folder_edit, self.docker_run_btn)
+            DockerManager.inspect_running_container(self.iface, self.docker_path, self.data_folder_edit, self.toggle_server_button)
 
             # Check GPU availability on startup
             self.check_gpu_availability()
@@ -446,8 +448,8 @@ class EasyEarthPlugin:
                 self.server_status.setStyleSheet("color: green;")
                 self.server_running = True
                 self.docker_running = True
-                self.docker_run_btn.show()
-                self.docker_run_btn.setText("Stop server")
+                self.toggle_server_button.show()
+                self.toggle_server_button.setText("Stop server")
                 
                 if self.base_dir:
                     self.model_group.show()  # Show model selection group when server is online
@@ -457,14 +459,14 @@ class EasyEarthPlugin:
                 self.server_status.setStyleSheet("color: red;")
                 self.server_running = False
                 self.docker_running = False
-                self.docker_run_btn.setText("Start docker")
+                self.toggle_server_button.setText("Start server")
         except requests.exceptions.RequestException:
             self.server_status.setText("Offline")
             self.server_status.setStyleSheet("color: red;")
             self.server_running = False
             self.docker_running = False
-            self.docker_run_btn.show()
-            self.docker_run_btn.setText("Start docker")
+            self.toggle_server_button.show()
+            self.toggle_server_button.setText("Start server")
 
     def select_base_folder(self):
         folder = QFileDialog.getExistingDirectory(self.dock_widget, "Select location for base folder", '', QFileDialog.ShowDirsOnly) # opens a dialog to select a folder
@@ -479,12 +481,14 @@ class EasyEarthPlugin:
             self.base_folder.setText(self.base_dir)
             self.iface.messageBar().pushMessage(f"Base folder set to {self.base_dir}", level=Qgis.Info)
             self.run_mode_group.show() # shows run mode group when base folder is selected
-
+            
             os.makedirs(self.images_dir, exist_ok=True)  # creates the images directory if it doesn't exist
             os.makedirs(self.embeddings_dir, exist_ok=True)  # creates the embeddings directory if it doesn't exist
             os.makedirs(self.predictions_dir, exist_ok=True)  # creates the predictions directory if it doesn't exist
             os.makedirs(self.tmp_dir, exist_ok=True)  # creates the tmp directory if it doesn't exist
             os.makedirs(self.logs_dir, exist_ok=True)  # creates the logs directory if it doesn't exist
+            
+            os.environ['BASE_DIR'] = self.base_dir
 
     def run_mode_selected(self, mode):
         """Handle run mode selection (Docker or Local)"""
@@ -497,35 +501,114 @@ class EasyEarthPlugin:
             self.docker_mode_button.setChecked(False)
             self.docker_mode = False
 
-            if not self.server_running:
-                self.docker_run_btn.hide() # hides the button if in local mode
+            # if not self.server_running:
+            #     self.toggle_server_button.hide()
+
+    def download_github_subfolder(self, repo_url, subfolder_path, output_dir):
+        """
+        Download a subfolder from a GitHub repository
+        
+        Args:
+            repo_url: Full GitHub URL (e.g., "https://github.com/user/repo")
+            subfolder_path: Path to subfolder (e.g., "src/utils")
+            output_dir: Local directory to save files
+        """
+        # Parse repository details
+        api_url = repo_url.replace('https://github.com', 'https://api.github.com/repos')
+        
+        # Get repository contents
+        contents_url = f"{api_url}/contents/{subfolder_path}"
+        response = requests.get(contents_url)
+        
+        if response.status_code != 200:
+            raise Exception(f"Failed to access repository: {response.status_code}")
+        
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Download each file in the subfolder
+        for item in response.json():
+            if item['type'] == 'file':
+                file_url = item['download_url']
+                file_response = requests.get(file_url)
+                file_path = os.path.join(output_dir, item['name'])
+                
+                with open(file_path, 'wb') as f:
+                    f.write(file_response.content)
+                print(f"Downloaded: {item['name']}")
+            elif item['type'] == 'dir':
+                # Recursively download subdirectories
+                new_subfolder = os.path.join(subfolder_path, item['name'])
+                new_output = os.path.join(output_dir, item['name'])
+                self.download_github_subfolder(repo_url, new_subfolder, new_output)
+
 
     def start_server(self):
         if self.docker_mode_button.isChecked():
-            docker_image_url = 'https://github.com/YanCheng-go/easyearth/releases/download/latest/easyearth.tar.gz'
-            zipped_docker_image_path = os.path.join(self.base_dir, 'easyearth.tar.gz')
-            docker_image_path = os.path.join(self.base_dir, 'easyearth.tar')
+            # docker_image_url = 'https://github.com/YanCheng-go/easyearth/releases/download/latest/easyearth.tar.gz'
+            # zipped_docker_image_path = os.path.join(self.base_dir, 'easyearth.tar.gz')
+            # docker_image_path = os.path.join(self.base_dir, 'easyearth.tar')
 
-            if not os.path.exists(docker_image_path):
-                urllib.request.urlretrieve(docker_image_url, zipped_docker_image_path) # downloads the docker image from the URL
-                self.iface.messageBar().pushMessage(f"Downloaded Docker image from {docker_image_url} to {zipped_docker_image_path}", level=Qgis.Info)
-                subprocess.run(['gunzip', '-f', zipped_docker_image_path]) # unzips the downloaded file
-                self.iface.messageBar().pushMessage(f"Unzipped Docker image to {docker_image_path}", level=Qgis.Info)
-                loading = subprocess.run([f'{self.docker_path}', 'load', '-i', docker_image_path], capture_output=True, text=True) # loads the docker image into Docker
-                self.iface.messageBar().pushMessage(f"Loaded Docker image from {docker_image_path}. {loading}", level=Qgis.Info)
+            # if not os.path.exists(docker_image_path):
+            #     urllib.request.urlretrieve(docker_image_url, zipped_docker_image_path) # downloads the docker image from the URL
+            #     self.iface.messageBar().pushMessage(f"Downloaded Docker image from {docker_image_url} to {zipped_docker_image_path}", level=Qgis.Info)
+            #     subprocess.run(['gunzip', '-f', zipped_docker_image_path]) # unzips the downloaded file
+            #     self.iface.messageBar().pushMessage(f"Unzipped Docker image to {docker_image_path}", level=Qgis.Info)
+            #     loading = subprocess.run([f'{self.docker_path}', 'load', '-i', docker_image_path], capture_output=True, text=True) # loads the docker image into Docker
+            #     self.iface.messageBar().pushMessage(f"Loaded Docker image from {docker_image_path}. {loading}", level=Qgis.Info)
 
             docker_run_cmd = (f"{self.docker_path} rm -f easyearth 2>/dev/null || true && " # removes the container if it already exists
-                            #   f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
+                              f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
                               f"{self.docker_path} run -d --name easyearth -p 3781:3781 " # runs the container in detached mode and maps port 3781
                               f"-v \"{self.base_dir}\":/usr/src/app/easyearth_base " # mounts the base directory in the container
                               f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
-                            #   f"{self.docker_hub_image_name}")
-                              "easyearth")
+                              f"{self.docker_hub_image_name}")
+                            #   "easyearth")
             result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
             self.iface.messageBar().pushMessage(f"Starting server...\nRunning command: {result}", level=Qgis.Info)
             
             if result.returncode == 0:
                 self.docker_running = True
+
+        if self.local_mode_button.isChecked():
+            # Download additional code
+            repo_url = "https://github.com/YanCheng-go/easyearth/archive/refs/heads/master.zip"
+            zipped_repo_path = os.path.join(self.base_dir, 'easyearth-master.zip')
+            repo_path = os.path.join(self.base_dir, 'easyearth-master')
+            easyearth_folder_path = os.path.join(self.base_dir, 'easyearth')
+
+            if not os.path.exists(easyearth_folder_path):
+                urllib.request.urlretrieve(repo_url, zipped_repo_path)
+                self.iface.messageBar().pushMessage(f"Downloaded easyearth repo from {repo_url} to {zipped_repo_path}", level=Qgis.Info)
+
+                with zipfile.ZipFile(zipped_repo_path, 'r') as zip_ref:
+                    zip_ref.extractall(self.base_dir)
+
+                self.iface.messageBar().pushMessage(f"Unzipped repo to {repo_path}", level=Qgis.Info)
+                shutil.move(os.path.join(repo_path, "easyearth"), easyearth_folder_path)
+                shutil.rmtree(repo_path)
+                self.iface.messageBar().pushMessage(f"Moved easyearth folder out of repo to {easyearth_folder_path}", level=Qgis.Info)
+
+            # Download env
+            env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/newest/easyearth_env.zip'
+            zipped_env_path = os.path.join(self.base_dir, 'easyearth_env.zip')
+            env_path = os.path.join(self.base_dir, 'easyearth_env')
+
+            if not os.path.exists(env_path):
+                urllib.request.urlretrieve(env_url, zipped_env_path)
+                self.iface.messageBar().pushMessage(f"Downloaded environment from {env_url} to {zipped_env_path}", level=Qgis.Info)
+                
+                with zipfile.ZipFile(zipped_env_path, 'r') as zip_ref:
+                    zip_ref.extractall(self.base_dir)
+
+                self.iface.messageBar().pushMessage(f"Unzipped environment to {env_path}", level=Qgis.Info)
+
+            result = subprocess.Popen(f'chmod +x \"{self.plugin_dir}\"/launch_server_local.sh && \"{self.plugin_dir}\"/launch_server_local.sh',
+                                      shell=True,
+                                      stdout=subprocess.PIPE,
+                                      stderr=subprocess.PIPE,
+                                      text=True,              # decodes output as text, not bytes
+                                      start_new_session=True)  # detaches from QGIS
+            self.iface.messageBar().pushMessage(f"Starting local server...", level=Qgis.Info)
 
     def stop_server(self):
         if self.docker_mode_button.isChecked():
@@ -546,10 +629,10 @@ class EasyEarthPlugin:
             self.stop_server()
             self.base_folder.setReadOnly(False)
             self.base_folder_button.setEnabled(True)
-            self.docker_run_btn.setText("Start docker")
+            self.toggle_server_button.setText("Start server")
 
             if self.local_mode_button.isChecked():
-                self.docker_run_btn.hide()
+                self.toggle_server_button.hide()
 
     def on_image_source_changed(self, text):
         """Handle image source selection change"""
@@ -810,10 +893,7 @@ class EasyEarthPlugin:
         layer_tree_layer = root.findLayer(selected_layer.id())
         
         if layer_tree_layer:
-            # Clone the node
             clone = layer_tree_layer.clone()
-            
-            # Get parent group (if any)
             parent = layer_tree_layer.parent()
             
             # Remove original and insert clone at top
