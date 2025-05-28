@@ -26,7 +26,7 @@ paths:
                     example: "Server is alive"
   /predict:
     post:
-      summary: Analyze an image with prompts
+      summary: Analyze an image with vision(-language) model
       operationId: easyearth.controllers.predict_controller.predict
       requestBody:
         required: true
@@ -35,73 +35,35 @@ paths:
             schema:
               type: object
               properties:
-                image_path:
+                model_type:
                   type: string
-                  description: Path to the image
-                embedding_path:
-                  type: string
-                  description: Path to the embedding (optional)
-                  nullable: true
-                prompts:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      type:
-                        type: string
-                        enum: ["Point", "Box", "Text", "None"]
-                      data:
-                        type: object
-                        description: Prompt-specific data
-                        nullable: true
-                        example: {}
-              required:
-                - image_path
-                - prompts
-      responses:
-        "200":
-          description: Analysis response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  model_description:
-                    type: string
-                  predictions:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        type:
-                          type: string
-                          enum: ["Class", "Points", "Polygons"]
-                        data:
-                          type: object
-                          description: Prediction-specific data
-  /sam-predict:
-    post:
-      summary: Analyze an image with prompts using the SAM model
-      operationId: easyearth.controllers.sam_controller.predict
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
+                  description: Type of the model to use for analysis, which will call the corresponding predictor under the models directory.
+                  example: "sam" # Or "segment"  #  TODO: add more model types such as "clip" and "local" etc.
+                  nullable: false
                 model_path:
                   type: string
-                  description: Path to the hugging face model (sam model)
+                  description: Path to the hugging face model # TODO: support local path
+                  example: "facebook/sam-vit-base"
+                  nullable: false
+                model_config:
+                  type: object
+                  description: Configuration for the model (optional)
+                  example: { "patch_size": 16, "image_size": 1024, "num_channels": 3, "num_classes": 1 }
+                  nullable: true
                 image_path:
                   type: string
                   description: Path to the image
+                  example: "/path/to/image.jpg"
+                  nullable: false
                 embedding_path:
                   type: string
                   description: Path to the embedding (optional)
+                  example: "/path/to/embedding.pt"
                   nullable: true
                 prompts:
                   type: array
+                  description: List of prompts to guide the analysis (optional)
+                  nullable: true
                   items:
                     type: object
                     properties:
@@ -112,10 +74,11 @@ paths:
                         type: object
                         description: Prompt-specific data
                         nullable: true
-                        example: { }
+                        example: { "points": [[100, 200]], "boxes": [[50, 50, 150, 150]], "text": "trees" }
               required:
                 - image_path
-                - prompts
+                - model_type
+                - model_path
       responses:
         "200":
           description: Analysis response
@@ -124,72 +87,29 @@ paths:
               schema:
                 type: object
                 properties:
-                  model_description:
-                    type: string
-                  predictions:
+                  status:
+                      type: string
+                      description: Status of the analysis
+                      example: "success"
+                  features:
                     type: array
+                    description: List of features extracted from the image
                     items:
                       type: object
                       properties:
-                        type:
-                          type: string
-                          enum: ["Class", "Points", "Polygons"]
-                        data:
+                        properties:
                           type: object
-                          description: Prediction-specific data
-  /segment-predict:
-    post:
-      summary: Segment all relevant objects for a given image using a segmentation model with no prompt engineering
-      operationId: easyearth.controllers.segmentation_controller.predict
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                image_path:
-                  type: string
-                  description: Path to the image
-                model_path:
-                  type: string
-                  description: Path to the hugging face model (segmentation models)
-                aois:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      type:
-                        type: string
-                        enum: ["Polygons"]
-                      data:
-                        type: object
-                        description: Prompt-specific data
-                        nullable: true
-                        example: { }
-              required:
-                - image_path
-      responses:
-        "200":
-          description: Analysis response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  model_description:
+                          description: Properties of the feature
+                          example: { "uid": 1}  # TODO: add more properties such as {"label": "tree", "confidence": 0.95 }
+                        geometry:
+                            type: object
+                            description: Geometry of the feature
+                            example: { "type": "Polygon", "coordinates": [[[50, 50], [150, 50], [150, 150], [50, 150], [50, 50]]] }
+                  crs:
                     type: string
-                  predictions:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        type:
-                          type: string
-                          enum: ["Class", "Polygons"]
-                        data:
-                          type: object
-                          description: Prediction-specific data
+                    description: Coordinate reference system of the image
+                    example: "EPSG:4326"
+                  # TODO: add information for example about the model used
 servers:
   - url: /v1/easyearth/
     description: Local easyearth
