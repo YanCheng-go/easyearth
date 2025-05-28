@@ -780,33 +780,48 @@ class EasyEarthPlugin:
             QMessageBox.critical(None, "Error", f"Failed to update embeddings: {str(e)}")
 
     def on_image_selected(self):
-            selected_layer = QgsProject.instance().mapLayersByName(os.path.basename(self.image_path.text()))[0]
-            self.iface.setActiveLayer(selected_layer) # set the selected layer as the active layer
-            self.iface.messageBar().pushMessage(f"Selected layer {selected_layer.name()} with ID {selected_layer.id()}", level=Qgis.Info)
-            
-            if selected_layer.crs() != self.project_crs:
-                selected_layer.setCrs(self.project_crs)  # Set the layer CRS to match the project CRS
-            
-            extent = selected_layer.extent()
+        selected_layer = QgsProject.instance().mapLayersByName(os.path.basename(self.image_path.text()))[0]
+        self.iface.setActiveLayer(selected_layer) # sets the selected layer as the active layer
+        self.iface.messageBar().pushMessage(f"Selected layer {selected_layer.name()} with ID {selected_layer.id()}", level=Qgis.Info)
+        
+        if selected_layer.crs() != self.project_crs:
+            selected_layer.setCrs(self.project_crs)  # Set the layer CRS to match the project CRS
+        
+        extent = selected_layer.extent()
 
-            if not extent.isEmpty():
-                # Add small buffer around the layer (5%)
-                width = extent.width()
-                height = extent.height()
+        if not extent.isEmpty():
+            # Add small buffer around the layer (5%)
+            width = extent.width()
+            height = extent.height()
+            
+            if width > 0 and height > 0:
+                buffer_x = width * 0.05
+                buffer_y = height * 0.05
                 
-                if width > 0 and height > 0:
-                    buffer_x = width * 0.05
-                    buffer_y = height * 0.05
-                    
-                    extent.setXMinimum(extent.xMinimum() - buffer_x)
-                    extent.setXMaximum(extent.xMaximum() + buffer_x)
-                    extent.setYMinimum(extent.yMinimum() - buffer_y)
-                    extent.setYMaximum(extent.yMaximum() + buffer_y)
-                
-                # Set the canvas extent
-                self.iface.mapCanvas().setExtent(extent)
-                self.iface.mapCanvas().refresh()
-
+                extent.setXMinimum(extent.xMinimum() - buffer_x)
+                extent.setXMaximum(extent.xMaximum() + buffer_x)
+                extent.setYMinimum(extent.yMinimum() - buffer_y)
+                extent.setYMaximum(extent.yMaximum() + buffer_y)
+            
+            self.iface.mapCanvas().setExtent(extent)
+            self.iface.mapCanvas().refresh()
+        
+        root = QgsProject.instance().layerTreeRoot()
+        layer_tree_layer = root.findLayer(selected_layer.id())
+        
+        if layer_tree_layer:
+            # Clone the node
+            clone = layer_tree_layer.clone()
+            
+            # Get parent group (if any)
+            parent = layer_tree_layer.parent()
+            
+            # Remove original and insert clone at top
+            parent.insertChildNode(0, clone)
+            parent.removeChildNode(layer_tree_layer)
+        
+        self.iface.mapCanvas().refresh()    
+        
     def browse_image(self):
         """Open file dialog for image selection"""
         try:
@@ -849,6 +864,7 @@ class EasyEarthPlugin:
                 QgsProject.instance().addMapLayer(raster_layer) # adds raster layer to the project
             
             self.on_image_selected()
+
             # Get image crs and extent
             self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(raster_layer)
             raster_properties = (f"Extent: X min: {self.raster_extent.xMinimum()}, X max: {self.raster_extent.xMaximum()}, "
@@ -1239,7 +1255,7 @@ class EasyEarthPlugin:
                 # Assign unique ids
                 if not hasattr(self, 'feature_count'):
                     self.feature_count = 0
-                    
+
                 start_id = self.feature_count
                 features = [{
                     "type": "Feature",
@@ -1659,6 +1675,7 @@ class EasyEarthPlugin:
             if hasattr(self, 'prompts_layer') and self.prompts_layer:
                 QgsProject.instance().removeMapLayer(self.prompts_layer)
                 self.prompts_layer = None
+
             if hasattr(self, 'predictions_layer') and self.predictions_layer:
                 QgsProject.instance().removeMapLayer(self.predictions_layer)
                 self.predictions_layer = None
@@ -1672,11 +1689,8 @@ class EasyEarthPlugin:
             self.temp_prompts_geojson = os.path.join(self.tmp_dir, f'prompts_{timestamp}.geojson')
             self.temp_predictions_geojson = os.path.join(self.tmp_dir, f'predictions_{timestamp}.geojson')
 
-            # Initialize feature counter
-            self.feature_count = 0
-
-            # Initialize prompt counter
-            self.prompt_count = 0
+            self.feature_count = 0 # resets feature counter
+            self.prompt_count = 0 # resets prompt counter
 
             self.logger.info(f"Prepared file paths: \n"
                              f"Prompts: {self.temp_prompts_geojson}\n"
@@ -1735,7 +1749,7 @@ class EasyEarthPlugin:
 
                 image_name = os.path.splitext(os.path.basename(layer_source))[0]
                 self.update_embeddings(image_name)
-
+                self.on_image_selected()
         except Exception as e:
             self.logger.error(f"Error handling layer selection: {str(e)}")
             self.logger.exception("Full traceback:")
