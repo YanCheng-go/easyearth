@@ -2,10 +2,10 @@ import connexion
 from flask_cors import CORS
 from flask_marshmallow import Marshmallow
 
-from easyearth.config.log_config import create_log
+from easyearth.config.log_config import setup_logger
 
 ma = Marshmallow()
-logger = create_log()
+logger = setup_logger()
 
 
 def init_api():
