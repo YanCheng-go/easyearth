@@ -15,7 +15,7 @@ class TestSAMServer(unittest.TestCase):
         response = requests.get(f"{self.base_url}/ping")
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data['status'], 'healthy')
+        self.assertEqual(data['status'], "Server is alive")
 
     def test_predict_with_point_prompts(self):
         """Test prediction with point prompts"""
@@ -26,7 +26,8 @@ class TestSAMServer(unittest.TestCase):
                     "type": "Point",
                     "data": {"points": self.input_points[0], "labels": self.input_labels[0]}
                 },
-            ]
+            ],
+            "model_type": "sam"
         }
         
         response = requests.post(
@@ -48,7 +49,8 @@ class TestSAMServer(unittest.TestCase):
                     "type": "Box",
                     "data": {"boxes": self.input_boxes[0]}
                 }
-            ]
+            ],
+            "model_type": "sam"
         }
         
         response = requests.post(
@@ -72,7 +74,8 @@ class TestSAMServer(unittest.TestCase):
                     "type": "Box",
                     "data": {"boxes": self.input_boxes[0]}
                 }
-            ]
+            ],
+            "model_type": "sam"
         }
         
         response = requests.post(
@@ -92,7 +95,8 @@ class TestSAMServer(unittest.TestCase):
                     "type": "Point",
                     "data": {"points": self.input_points[0], "labels": self.input_labels[0]}
                 }
-            ]
+            ],
+            "model_type": "sam"
         }
         
         response = requests.post(
