@@ -12,16 +12,16 @@ import os
 from datetime import datetime
 import warnings
 import torch.backends.mps
+from easyearth.config.log_config import setup_logger
 
 class BaseModel:
-    def __init__(self, model_path: str, log_dir: Optional[str] = None):
+    def __init__(self, model_path: str):
         """Initialize base segmentation model
         Args:
             model_path: Path or name of the model to load
-            log_dir: Directory to save log files (default: ./logs)
         """
         self.model_path = model_path
-        self._setup_logging(log_dir)
+        self.logger = setup_logger(name="easyearth_model")
         
         # Set CUDA device before any other CUDA operations
         self._setup_cuda()
@@ -74,45 +74,6 @@ class BaseModel:
         
         self.logger.info("Using CPU device")
         return torch.device("cpu")
-    
-    def _setup_logging(self, log_dir: Optional[str] = None):
-        """Setup logging configuration
-        Args:
-            log_dir: Directory to save log files
-        """
-        # Create logger
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.INFO)
-
-        # Define log directory
-        if log_dir is None:
-            log_dir = os.path.join(os.getcwd(), 'logs')
-            os.makedirs(log_dir, exist_ok=True)
-        
-        # Create log filename with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_file = os.path.join(log_dir, f"easyearth_model_{timestamp}.log")
-
-        # Create file handler
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setLevel(logging.INFO)
-
-        # Create console handler
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
-
-        # Create formatter
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        file_handler.setFormatter(formatter)
-        console_handler.setFormatter(formatter)
-
-        # Add handlers to logger
-        if not self.logger.handlers:
-            self.logger.addHandler(file_handler)
-            self.logger.addHandler(console_handler)
-
-        self.logger.info(f"Logging to: {log_file}")
-
 
     def raster_to_vector(self, 
                         masks: Union[List[np.ndarray], List[torch.Tensor]],

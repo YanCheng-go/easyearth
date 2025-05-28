@@ -1,12 +1,19 @@
 #!/bin/bash
 
+# Setup for devlopment environment for easyearth
+
 # Exit on any error
 set -e
 
 # Set the script's directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-IMAGE_NAME="easyearth"
-MODEL_DIR=".cache/easyearth/models"
+IMAGE_NAME="maverickmiaow/easyearth"
+DEFAULT_DATA_DIR="./data"
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
+  MODEL_DIR="$USERPROFILE/.cache/easyearth/models"
+else
+  MODEL_DIR="$HOME/.cache/easyearth/models"
+fi
 
 execute_command() {
   local command=("${@}")
@@ -23,8 +30,9 @@ execute_command() {
   fi
 }
 
-# Change the permissions of the script directory
+## Change the permissions of the script directory
 execute_command chmod -R 755 "$SCRIPT_DIR"
+execute_command chmod -R 755 "$DEFAULT_DATA_DIR"
 
 # Function to ensure Docker Compose is installed
 check_docker_installation() {
@@ -70,17 +78,21 @@ configure_directory() {
   read -p "Specify folder for $dir_name (default: $default_dir): " result_dir
   result_dir="${result_dir:-$default_dir}"
 
-  [ ! -d "$result_dir" ] && mkdir -p "$result_dir" && echo "Created $dir_name at $result_dir"
+  if [ ! -d "$result_dir" ]; then
+    mkdir -p "$result_dir"
+    chmod -R 755 "$result_dir"
+  fi
   chmod -R 755 "$result_dir"
   echo "$result_dir"
 }
 
 start_docker_container() {
   # Configure directories
-  DATA_DIR=$(configure_directory "data directory" "./data")
-  TEMP_DIR=$(configure_directory "temp directory" "./tmp")
+#  EASYEARTH_DIR=$(configure_directory "easyearth directory" "$HOME/.easyearth")
+  DATA_DIR=$(configure_directory "data directory" "$DEFAULT_DATA_DIR")
+  TEMP_DIR=$(configure_directory "temp directory" "$DATA_DIR/tmp")
   MODEL_DIR=$(configure_directory "model cache directory" "$MODEL_DIR")
-  LOG_DIR=$(configure_directory "logs directory" "./logs")
+  LOG_DIR=$(configure_directory "logs directory" "$DATA_DIR/logs")
 
   # Set environment variables
   export TEMP_DIR="$TEMP_DIR"
@@ -97,7 +109,13 @@ start_docker_container() {
   fi
 
   echo "Starting Docker container..."
-  execute_command docker-compose up -d
+  if [[ "$OSTYPE" != "darwin"* ]]; then
+    echo "Using sudo to start Docker container..."
+    sudo TEMP_DIR="$TEMP_DIR" DATA_DIR="$DATA_DIR" LOG_DIR="$LOG_DIR" MODEL_DIR="$MODEL_DIR" docker-compose up -d
+  else
+    echo "Starting Docker container without sudo..."
+    execute_command docker-compose up -d
+  fi
 }
 
 test_server() {
@@ -117,10 +135,14 @@ main() {
   echo "Starting setup"
   check_docker_installation
 
-  if check_docker_image; then
-    echo "Skipping Docker image build."
-  else
+  if [[ " $* " =~ [[:space:]]--force[[:space:]] ]]; then
+    echo "Forcing rebuild of Docker image..."
     build_docker_image
+  else
+    if ! check_docker_image ; then
+      echo "Docker image $IMAGE_NAME does not exist. Building the image..."
+      build_docker_image
+    fi
   fi
 
   create_cache_folder
@@ -131,4 +153,4 @@ main() {
 }
 
 # Run the script
-main
+main "$@"
