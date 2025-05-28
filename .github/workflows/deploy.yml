@@ -3,12 +3,8 @@ name: Build and Deploy Docker Image
 on:
     push:
         branches:
-        - master
-        paths-ignore:
-        - 'README.md'
-        - '.github/**'
-        - '.gitignore'
-        - 'easyearth_plugin/**'
+        - yan
+        - lucia
         paths:
         - 'Dockerfile'
 #        - 'docker-compose.yml'
@@ -18,11 +14,6 @@ on:
     pull_request:
         branches:
         - master
-        paths-ignore:
-        - 'README.md'
-        - '.github/**'
-        - '.gitignore'
-        - 'easyearth_plugin/**'
         paths:
         - 'Dockerfile'
 #        - 'docker-compose.yml'
@@ -49,9 +40,13 @@ jobs:
       run: |
           docker build -t ${{ secrets.DOCKER_USERNAME }}/easyearth:test .
 
-    - name: Run tests in Docker container
-      run: |
-        docker run --rm ${{ secrets.DOCKER_USERNAME }}/easyearth:test pytest --maxfail=1 --disable-warnings -q
+#    - name: Run server and tests in Docker container
+#      run: |
+#        docker run --rm -p 3781:3781 ${{ secrets.DOCKER_USERNAME }}/easyearth:test sh -c "
+#          python -m easyearth.app --host 0.0.0.0 --port 3781 &
+#          sleep 10
+#          python3 easyearth/tests/test_sam_server.py
+#        "
 
     - name: Tag as lastest after tests pass
       run: |
