@@ -68,10 +68,15 @@ class EasyEarthPlugin:
         self.start_point = None
         self.drawn_features = []
         self.drawn_layer = None
-        self.data_dir = os.path.join(self.plugin_dir, 'data') # data directory for storing images and embeddings
-        self.tmp_dir = os.path.join(self.plugin_dir, 'tmp') # temporary directory for storing temporary files
-        self.logs_dir = os.path.join(self.plugin_dir, 'logs') # logs directory for storing logs
-        self.cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "easyearth", "models") # cache directory for storing models
+
+        # Directories
+        self.base_dir = '' # data directory for storing images and embeddings
+        self.images_dir = '' # directory for storing images
+        self.embeddings_dir = '' # directory for storing embeddings
+        self.predictions_dir = '' # directory for storing predictions
+        self.tmp_dir = '' # temporary directory for storing temporary files
+        self.logs_dir = '' # logs directory for storing logs
+
         self.model_path = None
         self.feature_count = 0 # for generating unique IDs
         self.prompt_count = 0 # for generating unique IDs
@@ -129,22 +134,21 @@ class EasyEarthPlugin:
             main_widget = QWidget()
             main_layout = QVBoxLayout()
 
-            # 1. Data folder
-            data_folder_group = QGroupBox("Data Folder")
-            # data_folder_group.setMaximumHeight(100)  # Limit height to avoid excessive space
-            data_folder_layout = QHBoxLayout()
-            self.data_folder_edit = QLineEdit(self.data_dir)
-            self.data_folder_edit.setReadOnly(True)
-            self.data_folder_btn = QPushButton("Select folder")
-            self.data_folder_btn.clicked.connect(self.select_data_folder)
-            data_folder_layout.addWidget(self.data_folder_edit)
-            data_folder_layout.addWidget(self.data_folder_btn)
-            data_folder_group.setLayout(data_folder_layout)
-            main_layout.addWidget(data_folder_group)
+            # 1. Base folder
+            base_folder_group = QGroupBox("Base Folder")
+            base_folder_layout = QHBoxLayout()
+            self.base_folder = QLineEdit('')
+            self.base_folder.setPlaceholderText("No folder selected")
+            self.base_folder.setReadOnly(True)
+            self.base_folder_button = QPushButton("Select folder")
+            self.base_folder_button.clicked.connect(self.select_base_folder)
+            base_folder_layout.addWidget(self.base_folder)
+            base_folder_layout.addWidget(self.base_folder_button)
+            base_folder_group.setLayout(base_folder_layout)
+            main_layout.addWidget(base_folder_group)
 
             # 2. Run mode
-            run_mode_group = QGroupBox("Run Mode")
-            # run_mode_group.setMaximumHeight(150)
+            self.run_mode_group = QGroupBox("Run Mode")
             run_mode_layout = QVBoxLayout()
             run_mode_info_label = QLabel('You can launch the plugin server either by using Docker if you have it installed or <a href="https://github.com/YanCheng-go/easyearth?tab=readme-ov-file#local-mode">running the server locally outside QGIS</a>.&nbsp;Local mode is required for making use of Mac OS GPUs.')
             run_mode_info_label.setWordWrap(True)
@@ -163,8 +167,9 @@ class EasyEarthPlugin:
             self.local_mode_button.clicked.connect(lambda: self.run_mode_selected("local"))
             run_mode_button_layout.addWidget(self.local_mode_button)
             run_mode_layout.addLayout(run_mode_button_layout)
-            run_mode_group.setLayout(run_mode_layout)
-            main_layout.addWidget(run_mode_group)
+            self.run_mode_group.setLayout(run_mode_layout)
+            main_layout.addWidget(self.run_mode_group)
+            self.run_mode_group.hide() # hide by default, will show when base folder is selected
 
             # 3. Server
             self.server_group = QGroupBox("Server")
@@ -205,20 +210,19 @@ class EasyEarthPlugin:
             self.model_group.hide() # Hide by default, will show when server is online
             model_layout = QHBoxLayout()
 
-            self.model_combo = QComboBox()
-            self.model_combo.setEditable(True)
-            # Add common models
-            self.model_combo.addItems([
+            self.model_dropdown = QComboBox()
+            self.model_dropdown.setEditable(True)
+            self.model_dropdown.addItems([
                 "facebook/sam-vit-base",
                 "facebook/sam-vit-large",
                 "facebook/sam-vit-huge",
                 "restor/tcd-segformer-mit-b5",
             ])
-            self.model_combo.setEditText("facebook/sam-vit-base") # default
-            self.model_combo.currentTextChanged.connect(self.on_model_changed)
-            self.model_path = self.model_combo.currentText().strip()
+            self.model_dropdown.setEditText("facebook/sam-vit-base") # default
+            self.model_dropdown.currentTextChanged.connect(self.on_model_changed)
+            self.model_path = self.model_dropdown.currentText().strip()
 
-            model_layout.addWidget(self.model_combo)
+            model_layout.addWidget(self.model_dropdown)
             self.model_group.setLayout(model_layout)
             main_layout.addWidget(self.model_group)
 
@@ -259,12 +263,12 @@ class EasyEarthPlugin:
             self.image_download_progress_bar.setMinimum(0)
             self.image_download_progress_bar.setMaximum(100)
             self.image_download_progress_bar.hide()
-            file_layout.addWidget(self.image_download_progress_bar)  # <-- Add to file_layout
+            file_layout.addWidget(self.image_download_progress_bar)
 
             self.downloading_progress_status = QLabel()
             self.downloading_progress_status.setWordWrap(True)
             self.downloading_progress_status.hide()
-            file_layout.addWidget(self.downloading_progress_status)  # <-- Add to file_layout
+            file_layout.addWidget(self.downloading_progress_status)
 
             # Layer selection
             self.layer_dropdown = QComboBox() # displays a list of available raster layers in the project
@@ -380,7 +384,7 @@ class EasyEarthPlugin:
 
             # initialize the data and tmp directory
             # TODO: move to after checking if docker image is running...and return mounted data folder using docker inspect
-            # self.data_dir = self.initialize_data_directory()
+            # self.base_dir = self.initialize_data_directory()
 
             # Update the layer (raster) list in the combo box whenever a layer is added or removed
             QgsProject.instance().layersAdded.connect(self.update_layer_dropdown)
@@ -418,8 +422,10 @@ class EasyEarthPlugin:
                 self.docker_running = True
                 self.docker_run_btn.show()
                 self.docker_run_btn.setText("Stop server")
-                self.model_group.show()  # Show model selection group when server is online
-                self.image_group.show()  # Show image source group when server is online
+                
+                if self.base_dir:
+                    self.model_group.show()  # Show model selection group when server is online
+                    self.image_group.show()  # Show image source group when server is online
             else:
                 self.server_status.setText("Error")
                 self.server_status.setStyleSheet("color: red;")
@@ -434,6 +440,26 @@ class EasyEarthPlugin:
             self.docker_run_btn.setText("Start docker")
         
         self.docker_run_btn.show()
+
+    def select_base_folder(self):
+        folder = QFileDialog.getExistingDirectory(self.dock_widget, "Select location for base folder", '', QFileDialog.ShowDirsOnly) # opens a dialog to select a folder
+
+        if folder: # if a folder is selected
+            self.base_dir = os.path.join(folder, 'easyearth_base')
+            self.images_dir = os.path.join(self.base_dir, 'images')
+            self.embeddings_dir = os.path.join(self.base_dir, 'embeddings')
+            self.predictions_dir = os.path.join(self.base_dir, 'predictions')
+            self.tmp_dir = os.path.join(self.base_dir, 'tmp')
+            self.logs_dir = os.path.join(self.base_dir, 'logs')
+            self.base_folder.setText(self.base_dir)
+            self.iface.messageBar().pushMessage(f"Base folder set to {self.base_dir}", level=Qgis.Info)
+            self.run_mode_group.show() # shows run mode group when base folder is selected
+
+            os.makedirs(self.images_dir, exist_ok=True)  # creates the images directory if it doesn't exist
+            os.makedirs(self.embeddings_dir, exist_ok=True)  # creates the embeddings directory if it doesn't exist
+            os.makedirs(self.predictions_dir, exist_ok=True)  # creates the predictions directory if it doesn't exist
+            os.makedirs(self.tmp_dir, exist_ok=True)  # creates the tmp directory if it doesn't exist
+            os.makedirs(self.logs_dir, exist_ok=True)  # creates the logs directory if it doesn't exist
 
     def run_mode_selected(self, mode):
         """Handle run mode selection (Docker or Local)"""
@@ -454,15 +480,12 @@ class EasyEarthPlugin:
 
     def start_server(self):
         if self.docker_mode_button.isChecked():
-            logs_dir = os.path.join(self.plugin_dir, 'logs')
-            cache_dir = os.path.expandvars("$HOME/.cache/easyearth/models")
+            model_dir = os.path.expandvars("$HOME/.cache/easyearth/models")
             docker_run_cmd = (f"{self.docker_path} rm -f easyearth 2>/dev/null || true && " # removes the container if it already exists
                             f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
                             f"{self.docker_path} run -d --name easyearth -p 3781:3781 "
-                            f"-v \"{self.data_dir}\":/usr/src/app/data " # mounts the data directory in the container
-                            f"-v \"{self.tmp_dir}\":/usr/src/app/tmp " # mounts the tmp directory in the container
-                            f"-v \"{logs_dir}\":/usr/src/app/logs " # mounts the logs directory in the container
-                            f"-v \"{cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
+                            f"-v \"{self.base_dir}\":/usr/src/app/base " # mounts the base directory in the container
+                            f"-v \"{model_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
                             f"{self.docker_hub_image_name}")
             result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
             self.iface.messageBar().pushMessage("Info",
@@ -488,31 +511,18 @@ class EasyEarthPlugin:
 
     def run_or_stop_container(self):
         if not self.docker_running: # if the docker container is not running, start it
-            self.data_folder_edit.setReadOnly(True)
-            self.data_folder_btn.setEnabled(False)
+            self.base_folder.setReadOnly(True)
+            self.base_folder_button.setEnabled(False)
             self.docker_run_btn.setText("Stop server")
             self.start_server()
         else: # if the container is running, stop it
             self.stop_server()
-            self.data_folder_edit.setReadOnly(False)
-            self.data_folder_btn.setEnabled(True)
+            self.base_folder.setReadOnly(False)
+            self.base_folder_button.setEnabled(True)
             self.docker_run_btn.setText("Start docker")
 
             if self.local_mode_button.isChecked():
                 self.docker_run_btn.hide()
-
-    def select_data_folder(self):
-        folder = QFileDialog.getExistingDirectory(None, "Select Data Folder", self.data_folder_edit.text()) # opens a dialog to select a folder
-
-        if folder: # if a folder is selected
-            self.data_folder_edit.setText(folder)
-            self.data_dir = folder
-
-        if not os.path.exists(self.data_dir):
-            QMessageBox.warning(None, "Error", f"Data directory does not exist: {self.data_dir}")
-            return
-        
-        self.iface.messageBar().pushMessage("Info", f"Data folder set to: {self.data_dir}", level=Qgis.Info, duration=5)
 
     def on_image_source_changed(self, text):
         """Handle image source selection change"""
@@ -569,7 +579,7 @@ class EasyEarthPlugin:
             self.downloading_progress_status.show()
 
             local_filename = os.path.basename(image_url.split("?")[0])
-            save_path = os.path.join(self.data_dir, local_filename)
+            save_path = os.path.join(self.base_dir, local_filename)
             response = requests.get(image_url, stream=True)
             total = int(response.headers.get('content-length', 0))
             downloaded = 0
@@ -645,7 +655,7 @@ class EasyEarthPlugin:
         if text is not None:
             self.model_path = text.strip()
         else:
-            self.model_path = self.model_combo.currentText().strip()
+            self.model_path = self.model_dropdown.currentText().strip()
 
         is_sam = self.is_sam_model()
 
@@ -684,7 +694,7 @@ class EasyEarthPlugin:
             image_name = os.path.splitext(os.path.basename(image_path))[0] if image_name is None else image_name
 
             # Create embedding directory if it doesn't exist
-            embedding_dir = os.path.join(self.data_dir, 'embeddings')
+            embedding_dir = os.path.join(self.base_dir, 'embeddings')
             os.makedirs(embedding_dir, exist_ok=True)
 
             # Update the embedding path
@@ -770,18 +780,14 @@ class EasyEarthPlugin:
     def browse_image(self):
         """Open file dialog for image selection"""
         try:
-            initial_dir = self.data_dir
-            file_path, _ = QFileDialog.getOpenFileName(
-                self.dock_widget,
-                "Select Image File",
-                initial_dir,
-                "Image Files (*.png *.jpg *.jpeg *.tif *.tiff *.JPG *.JPEG *.PNG *.TIF *.TIFF);;All Files (*.*)"
-            )
-
+            file_path, _ = QFileDialog.getOpenFileName(self.dock_widget,
+                                                       "Select image",
+                                                       self.images_dir,
+                                                       "Image Files (*.png *.jpg *.jpeg *.tif *.tiff *.JPG *.JPEG *.PNG *.TIF *.TIFF);;All Files (*.*)")
             if file_path:
                 # Verify the file is within data_dir
-                if not os.path.commonpath([file_path]).startswith(os.path.commonpath([self.data_dir])):
-                    QMessageBox.warning(None, "Invalid Location", f"Please select an image from within the data directory:\n{self.data_dir}")
+                if not os.path.commonpath([file_path]).startswith(os.path.commonpath([self.base_dir])):
+                    QMessageBox.warning(None, "Invalid Location", f"Please select an image from within the data directory:\n{self.base_dir}")
                     return
 
                 self.image_path.setText(file_path)
@@ -1463,7 +1469,7 @@ class EasyEarthPlugin:
             }
 
             # add the model path to the payload if not empty
-            self.model_path = self.model_combo.currentText().strip()
+            self.model_path = self.model_dropdown.currentText().strip()
 
             if self.model_path:
                 payload["model_path"] = self.model_path
@@ -1578,7 +1584,7 @@ class EasyEarthPlugin:
         try:
             if self.load_embedding_radio.isChecked():
                 # Browse for existing file
-                embeddings_dir = os.path.join(self.data_dir, 'embeddings') if os.path.exists(os.path.join(self.data_dir, 'embeddings')) else self.data_dir
+                embeddings_dir = os.path.join(self.base_dir, 'embeddings') if os.path.exists(os.path.join(self.base_dir, 'embeddings')) else self.base_dir
                 file_path, _ = QFileDialog.getOpenFileName(None, "Select Embedding File", embeddings_dir, "Embedding Files (*.pt);;All Files (*.*)")
                 self.logger.debug(f"Selected existing embedding file: {file_path}")
             else:
@@ -1622,8 +1628,8 @@ class EasyEarthPlugin:
     def get_container_path(self, host_path):
         """Convert host path to container path if within data_dir."""
         
-        if host_path and host_path.startswith(self.data_dir) and self.docker_mode_button.isChecked():
-            relative_path = os.path.relpath(host_path, self.data_dir)
+        if host_path and host_path.startswith(self.images_dir) and self.docker_mode_button.isChecked():
+            relative_path = os.path.relpath(host_path, self.images_dir)
             return os.path.join('/usr/src/app/data', relative_path)
         
         return host_path
