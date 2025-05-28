@@ -8,7 +8,7 @@ class TestSAMServer(unittest.TestCase):
         self.test_image_path = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"  # Replace with actual test image path
         self.input_points = [[[850, 1100]], [[2250, 1000]]]
         self.input_boxes = [[[620, 900, 1000, 1255]], [[2000, 800, 2500, 1200]]]
-        self.input_labels = input_labels = [[1]]
+        self.input_labels = [[1]]
 
     def test_health_check(self):
         """Test the health check endpoint"""
@@ -27,7 +27,8 @@ class TestSAMServer(unittest.TestCase):
                     "data": {"points": self.input_points[0], "labels": self.input_labels[0]}
                 },
             ],
-            "model_type": "sam"
+            "model_type": "sam",
+            "model_path": "facebook/sam-vit-base",
         }
         
         response = requests.post(
@@ -50,7 +51,8 @@ class TestSAMServer(unittest.TestCase):
                     "data": {"boxes": self.input_boxes[0]}
                 }
             ],
-            "model_type": "sam"
+            "model_type": "sam",
+            "model_path": "facebook/sam-vit-base",
         }
         
         response = requests.post(
@@ -75,7 +77,8 @@ class TestSAMServer(unittest.TestCase):
                     "data": {"boxes": self.input_boxes[0]}
                 }
             ],
-            "model_type": "sam"
+            "model_type": "sam",
+            "model_path": "facebook/sam-vit-base",
         }
         
         response = requests.post(
@@ -96,7 +99,8 @@ class TestSAMServer(unittest.TestCase):
                     "data": {"points": self.input_points[0], "labels": self.input_labels[0]}
                 }
             ],
-            "model_type": "sam"
+            "model_type": "sam",
+            "model_path": "facebook/sam-vit-base",
         }
         
         response = requests.post(
