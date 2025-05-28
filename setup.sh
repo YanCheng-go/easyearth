@@ -25,20 +25,21 @@ execute_command() {
 }
 
 ## Change the permissions of the script directory
-#execute_command chmod -R 755 "$SCRIPT_DIR"
+execute_command chmod -R 755 "$SCRIPT_DIR"
+execute_command chmod -R 755 "$DEFAULT_DATA_DIR"
 
 # Function to ensure Docker Compose is installed
 check_docker_installation() {
   if ! command -v docker-compose &>/dev/null; then
     echo "Installing docker-compose..."
-    execute_command apt_get_command update
-    execute_command apt_get_command install -y docker-compose
+    execute_command apt-get update
+    execute_command apt-get install -y docker-compose
   else
     echo "docker-compose is already installed."
   fi
 }
 
-# Check if the docker image easyearth_plugin_easyearth-server exists, if exists return 0 else return 1
+# Check if the docker image exists, if exists return 0 else return 1
 check_docker_image() {
   if execute_command docker images | grep -q "$IMAGE_NAME"; then  # TODO: for some reason docker-compose images is not working... if using docker... need to make sure docker is installed...
     echo "Docker image $IMAGE_NAME already exists."
@@ -54,6 +55,14 @@ build_docker_image() {
   execute_command docker-compose build --no-cache
 }
 
+# if not cache folder exists, create it
+create_cache_folder() {
+  if [ ! -d "$MODEL_DIR" ]; then
+    mkdir -p "$MODEL_DIR"
+    chmod -R 755 "$MODEL_DIR"
+  fi
+}
+
 # Function to configure directories
 configure_directory() {
   local dir_name="$1"
@@ -65,10 +74,9 @@ configure_directory() {
 
   if [ ! -d "$result_dir" ]; then
     mkdir -p "$result_dir"
-    echo "Created $dir_name at $result_dir"
+    chmod -R 755 "$result_dir"
   fi
   chmod -R 755 "$result_dir"
-  # Only output the directory path (no other text)
   echo "$result_dir"
 }
 
@@ -95,7 +103,11 @@ start_docker_container() {
   fi
 
   echo "Starting Docker container..."
-  execute_command docker-compose up -d
+  if [[ "$OSTYPE" != "darwin"* ]]; then
+    sudo TEMP_DIR="$TEMP_DIR" DATA_DIR="$DATA_DIR" LOG_DIR="$LOG_DIR" MODEL_DIR="$MODEL_DIR" docker-compose up -d
+  else
+    execute_command docker-compose up -d
+  fi
 }
 
 test_server() {
@@ -105,7 +117,7 @@ test_server() {
   if curl -s http://localhost:3781/v1/easyearth/ping | grep -q "Server is alive"; then
     echo "Server is running!"
   else
-    echo "Server is not running. Check the logs."
+    echo "Server is not running."
     exit 1
   fi
 }
@@ -115,12 +127,17 @@ main() {
   echo "Starting setup"
   check_docker_installation
 
-  if check_docker_image; then
-    echo "Skipping Docker image build."
-  else
+  if [[ " $* " =~ [[:space:]]--force[[:space:]] ]]; then
+    echo "Forcing rebuild of Docker image..."
     build_docker_image
+  else
+    if ! check_docker_image ; then
+      echo "Docker image $IMAGE_NAME does not exist. Building the image..."
+      build_docker_image
+    fi
   fi
 
+  create_cache_folder
   start_docker_container
   test_server
 
@@ -128,4 +145,4 @@ main() {
 }
 
 # Run the script
-main
+main "$@"
