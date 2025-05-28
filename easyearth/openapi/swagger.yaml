@@ -111,6 +111,6 @@ paths:
                     example: "EPSG:4326"
                   # TODO: add information for example about the model used
 servers:
-  - url: /v1/easyearth/
+  - url: ''
     description: Local easyearth
 
