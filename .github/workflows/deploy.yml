@@ -4,11 +4,6 @@ on:
     push:
         branches:
         - yan
-        paths-ignore:
-        - 'README.md'
-        - '.github/**'
-        - '.gitignore'
-        - 'easyearth_plugin/**'
         paths:
         - 'Dockerfile'
 #        - 'docker-compose.yml'
@@ -18,11 +13,6 @@ on:
     pull_request:
         branches:
         - main
-        paths-ignore:
-        - 'README.md'
-        - '.github/**'
-        - '.gitignore'
-        - 'easyearth_plugin/**'
         paths:
         - 'Dockerfile'
 #        - 'docker-compose.yml'
