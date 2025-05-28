@@ -8,6 +8,12 @@ set -e
 # Set the script's directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IMAGE_NAME="easyearth"
+DEFAULT_DATA_DIR="./data"
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
+  MODEL_DIR="$USERPROFILE/.cache/easyearth/models"
+else
+  MODEL_DIR="$HOME/.cache/easyearth/models"
+fi
 
 execute_command() {
   local command=("${@}")
@@ -83,10 +89,10 @@ configure_directory() {
 start_docker_container() {
   # Configure directories
 #  EASYEARTH_DIR=$(configure_directory "easyearth directory" "$HOME/.easyearth")
-  DATA_DIR=$(configure_directory "data directory" "$HOME/easyearth/data")
-  TEMP_DIR=$(configure_directory "temp directory" "$HOME/easyearth/tmp")
-  MODEL_DIR=$(configure_directory "model cache directory" "$HOME/easyearth/cache/models")
-  LOG_DIR=$(configure_directory "logs directory" "$HOME/easyearth/logs")
+  DATA_DIR=$(configure_directory "data directory" "$DEFAULT_DATA_DIR")
+  TEMP_DIR=$(configure_directory "temp directory" "$DATA_DIR/tmp")
+  MODEL_DIR=$(configure_directory "model cache directory" "$MODEL_DIR")
+  LOG_DIR=$(configure_directory "logs directory" "$DATA_DIR/logs")
 
   # Set environment variables
   export TEMP_DIR="$TEMP_DIR"

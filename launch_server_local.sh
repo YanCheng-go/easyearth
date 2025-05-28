@@ -37,7 +37,13 @@ export EASYEARTH_TEMP_DIR="$DATA_DIR/tmp"
 mkdir -p "$TEMP_DIR"
 export LOG_DIR="$DATA_DIR/logs"
 mkdir -p "$LOG_DIR"
-export MODEL_CACHE_DIR="$HOME/.cache/easyearth/models"
+
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
+  export MODEL_CACHE_DIR="$USERPROFILE/.cache/easyearth/models"
+else
+  export MODEL_CACHE_DIR="$HOME/.cache/easyearth/models"
+fi
+
 # create model cache directory if it does not exist
 mkdir -p "$MODEL_CACHE_DIR"
 
