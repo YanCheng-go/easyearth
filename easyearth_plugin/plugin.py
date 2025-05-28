@@ -106,7 +106,6 @@ class EasyEarthPlugin:
         self.predictions_geojson = None
         self.predictions_layer = None
         self.prompts_geojson = None
-        self.prompts_layer = None
 
         # initialize image crs and extent...
         self.raster_crs = None
@@ -195,6 +194,7 @@ class EasyEarthPlugin:
             service_layout.addLayout(status_layout)
             self.docker_run_btn = QPushButton("Start docker")
             self.docker_run_btn.clicked.connect(self.run_or_stop_container)
+            self.docker_run_btn.hide()
             service_layout.addWidget(self.docker_run_btn)
 
             # API Information
@@ -241,11 +241,11 @@ class EasyEarthPlugin:
             # Image source selection
             source_layout = QHBoxLayout()
             source_label = QLabel("Source:")
-            self.source_combo = QComboBox()
-            self.source_combo.addItems(["File", "Layer", "Link"])
-            self.source_combo.currentTextChanged.connect(self.on_image_source_changed)
+            self.source_dropdown = QComboBox()
+            self.source_dropdown.addItems(["File", "Layer", "Link"])
+            self.source_dropdown.currentTextChanged.connect(self.on_image_source_changed)
             source_layout.addWidget(source_label)
-            source_layout.addWidget(self.source_combo)
+            source_layout.addWidget(self.source_dropdown)
             image_layout.addLayout(source_layout)
 
             # File input
@@ -400,6 +400,11 @@ class EasyEarthPlugin:
             # Connect to QGIS quit signal
             QgsApplication.instance().aboutToQuit.connect(self.cleanup_docker)
 
+            # Start periodic server status check
+            self.status_timer = QTimer()
+            self.status_timer.timeout.connect(self.check_server_status)
+            self.status_timer.start(5000)  # Check every 5 seconds
+
             # # Check if the container is running on startup
             DockerManager.inspect_running_container(self.iface, self.docker_path, self.data_folder_edit, self.docker_run_btn)
 
@@ -458,6 +463,7 @@ class EasyEarthPlugin:
             self.server_status.setStyleSheet("color: red;")
             self.server_running = False
             self.docker_running = False
+            self.docker_run_btn.show()
             self.docker_run_btn.setText("Start docker")
 
     def select_base_folder(self):
@@ -483,15 +489,10 @@ class EasyEarthPlugin:
     def run_mode_selected(self, mode):
         """Handle run mode selection (Docker or Local)"""
         self.server_group.show()  # Show server group when a mode is selected
-        # Start periodic server status check
-        self.status_timer = QTimer()
-        self.status_timer.timeout.connect(self.check_server_status)
-        self.status_timer.start(5000)  # Check every 5 seconds
 
         if mode == 'docker':
             self.local_mode_button.setChecked(False)
             self.docker_mode = True
-            self.docker_run_btn.show()
         elif mode == 'local':
             self.docker_mode_button.setChecked(False)
             self.docker_mode = False
@@ -560,7 +561,8 @@ class EasyEarthPlugin:
                 self.browse_button.show()
                 self.layer_dropdown.hide()
                 self.download_button.hide()
-                self.initialize_image_path()
+                self.image_path.clear()
+                self.image_path.setPlaceholderText("No image selected")
                 self.initialize_embedding_path()
                 self.deactivate_embedding_section() if not self.is_sam_model() else None
             elif text == "Layer":
@@ -576,7 +578,7 @@ class EasyEarthPlugin:
                 self.browse_button.hide()
                 self.download_button.show()
                 self.layer_dropdown.hide()
-                self.image_path.setPlaceholderText("Enter image URL (http/https)...")
+                self.image_path.setPlaceholderText("Enter image URL (http/https...)")
                 self.image_path.clear()
                 self.initialize_embedding_path()
                 self.deactivate_embedding_section() if not self.is_sam_model() else None
@@ -623,7 +625,7 @@ class EasyEarthPlugin:
             self.downloading_progress_status.hide()
 
             # Switch to File mode and update path
-            self.source_combo.setCurrentText("File")
+            self.source_dropdown.setCurrentText("File")
             self.image_path.setText(save_path)
             self.load_image()
         except Exception as e:
@@ -777,13 +779,33 @@ class EasyEarthPlugin:
             self.logger.error(f"Error updating embeddings: {str(e)}")
             QMessageBox.critical(None, "Error", f"Failed to update embeddings: {str(e)}")
 
-    def initialize_image_path(self):
-        """Reinitialize the image path input field"""
+    def on_image_selected(self):
+            selected_layer = QgsProject.instance().mapLayersByName(os.path.basename(self.image_path.text()))[0]
+            self.iface.setActiveLayer(selected_layer) # set the selected layer as the active layer
+            self.iface.messageBar().pushMessage(f"Selected layer {selected_layer.name()} with ID {selected_layer.id()}", level=Qgis.Info)
+            
+            if selected_layer.crs() != self.project_crs:
+                selected_layer.setCrs(self.project_crs)  # Set the layer CRS to match the project CRS
+            
+            extent = selected_layer.extent()
 
-        self.image_path.clear()
-        self.image_path.setPlaceholderText("No image selected")
-        self.image_path.setEnabled(True)
-        self.browse_button.setEnabled(True)
+            if not extent.isEmpty():
+                # Add small buffer around the layer (5%)
+                width = extent.width()
+                height = extent.height()
+                
+                if width > 0 and height > 0:
+                    buffer_x = width * 0.05
+                    buffer_y = height * 0.05
+                    
+                    extent.setXMinimum(extent.xMinimum() - buffer_x)
+                    extent.setXMaximum(extent.xMaximum() + buffer_x)
+                    extent.setYMinimum(extent.yMinimum() - buffer_y)
+                    extent.setYMaximum(extent.yMaximum() + buffer_y)
+                
+                # Set the canvas extent
+                self.iface.mapCanvas().setExtent(extent)
+                self.iface.mapCanvas().refresh()
 
     def browse_image(self):
         """Open file dialog for image selection"""
@@ -792,13 +814,6 @@ class EasyEarthPlugin:
                                                        "Select image",
                                                        self.images_dir,
                                                        "Image Files (*.png *.jpg *.jpeg *.tif *.tiff *.JPG *.JPEG *.PNG *.TIF *.TIFF);;All Files (*.*)")
-            # initial_dir = self.data_dir if os.path.exists(self.data_dir) else ""
-            # file_path, _ = QFileDialog.getOpenFileName(
-            #     self.dock_widget,
-            #     "Select Image File",
-            #     initial_dir,
-            #     "Image Files (*.png *.jpg *.jpeg *.tif *.tiff *.JPG *.JPEG *.PNG *.TIF *.TIFF);;All Files (*.*)"
-            # )
 
             if file_path:
                 # Verify the file is within data_dir
@@ -829,8 +844,11 @@ class EasyEarthPlugin:
                 QMessageBox.warning(None, "Error", "Invalid raster layer")
                 return
 
-            QgsProject.instance().addMapLayer(raster_layer) # adds raster layer to the project
 
+            if len(QgsProject.instance().mapLayersByName(raster_layer.name())) == 0: # checks if the layer already exists
+                QgsProject.instance().addMapLayer(raster_layer) # adds raster layer to the project
+            
+            self.on_image_selected()
             # Get image crs and extent
             self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(raster_layer)
             raster_properties = (f"Extent: X min: {self.raster_extent.xMinimum()}, X max: {self.raster_extent.xMaximum()}, "
@@ -987,7 +1005,7 @@ class EasyEarthPlugin:
                 # Show coordinates in message bar
                 self.iface.messageBar().pushMessage("Point Info",
                                                     f"Map coordinates: ({point.x():.2f}, {point.y():.2f})\n"
-                                                    f"Pixel coordinates sent to server: ({px}, {py})",
+                                                    f"Pixel coordinates: ({px}, {py})",
                                                     level=Qgis.Info,
                                                     duration=3)
 
@@ -1031,8 +1049,8 @@ class EasyEarthPlugin:
         self.prompt_count = self.prompt_count - 1 if self.prompt_count > 0 else 0  # decrements the prompt counter
         self.add_features_to_layer([], "prompts")
 
-        if self.realtime_checkbox.isChecked():
-            self.predictions_geojson['features'] = self.predictions_geojson['features'][:-1] # removes the last point from the prompts geojson
+        if len(self.predictions_geojson.get('features')) > 0:
+            self.predictions_geojson['features'] = self.predictions_geojson['features'][0] # removes the last point from the predictions geojson
             self.add_features_to_layer([], "predictions")
 
     def on_box_drawn(self, box_geom, start_point, end_point):
@@ -1084,7 +1102,7 @@ class EasyEarthPlugin:
         # Show message bar with box coordinates
         self.iface.messageBar().pushMessage(
             "Box Info",
-            f"Box coordinates sent to server: ({pixel_x}, {pixel_y}, {pixel_x + pixel_width}, {pixel_y + pixel_height})",
+            f"Box coordinates: ({pixel_x}, {pixel_y}, {pixel_x + pixel_width}, {pixel_y + pixel_height})",
             level=Qgis.Info,
             duration=3
         )
