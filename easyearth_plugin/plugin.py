@@ -79,9 +79,6 @@ class EasyEarthPlugin:
         self.tmp_dir = '' # temporary directory for storing temporary files
         self.logs_dir = '' # logs directory for storing logs
 
-        # self.data_dir = os.path.join(self.plugin_dir, 'data') # data directory for storing images and embeddings
-        # self.tmp_dir = os.path.join(self.plugin_dir, 'data', 'tmp') # temporary directory for storing temporary files
-        # self.logs_dir = os.path.join(self.plugin_dir, 'data', 'logs') # logs directory for storing logs
         if os.name == "nt" or platform.system().lower().startswith("win"):
             self.cache_dir = os.path.join(os.environ.get("USERPROFILE", ""), ".cache", "easyearth", "models")
         else:
@@ -503,17 +500,12 @@ class EasyEarthPlugin:
 
     def start_server(self):
         if self.docker_mode_button.isChecked():
-            # model_dir = os.path.expandvars("$HOME/.cache/easyearth/models")
             docker_run_cmd = (f"{self.docker_path} rm -f easyearth 2>/dev/null || true && " # removes the container if it already exists
-                            f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
-                            f"{self.docker_path} run -d --name easyearth -p 3781:3781 "
-                            f"-v \"{self.base_dir}\":/usr/src/app/easyearth_base " # mounts the base directory in the container
-                            # f"-v \"{model_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
-                            # f"-v \"{self.data_dir}\":/usr/src/app/data " # mounts the data directory in the container
-                            # f"-v \"{self.tmp_dir}\":/usr/src/app/tmp " # mounts the tmp directory in the container
-                            # f"-v \"{self.logs_dir}\":/usr/src/app/logs " # mounts the logs directory in the container
-                            f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
-                            f"{self.docker_hub_image_name}")
+                              f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
+                              f"{self.docker_path} run -d --name easyearth -p 3781:3781 " # runs the container in detached mode and maps port 3781
+                              f"-v \"{self.base_dir}\":/usr/src/app/easyearth_base " # mounts the base directory in the container
+                              f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
+                              f"{self.docker_hub_image_name}")
             result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
             self.iface.messageBar().pushMessage("Info",
                                                 f"Starting server...\nRunning command: {result}",
@@ -536,7 +528,6 @@ class EasyEarthPlugin:
         if not self.docker_running: # if the docker container is not running, start it
             self.base_folder.setReadOnly(True)
             self.base_folder_button.setEnabled(False)
-            # self.docker_run_btn.setText("Stop server")
             self.start_server()
         else: # if the container is running, stop it
             self.stop_server()
