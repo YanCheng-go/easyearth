@@ -11,9 +11,7 @@ from qgis.core import (QgsVectorLayer, QgsGeometry,
                       QgsWkbTypes, QgsRasterLayer, Qgis, QgsApplication, QgsCategorizedSymbolRenderer,
                       QgsRendererCategory, QgsMarkerSymbol, QgsFillSymbol, QgsCoordinateTransform, QgsSingleSymbolRenderer)
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
-from .core.utils import setup_logger
-from .core.prompt_editor import BoxMapTool
-from .core.model_manager import ModelManager
+from .core import BoxMapTool, DockerManager, setup_logger
 import json
 import logging
 import os
@@ -395,7 +393,7 @@ class EasyEarthPlugin:
             QgsApplication.instance().aboutToQuit.connect(self.cleanup_docker)
 
             # # Check if the container is running on startup
-            # self.inspect_running_container()
+            DockerManager.inspect_running_container(self.iface, self.docker_path, self.data_folder_edit, self.docker_run_btn)
 
             # Check GPU availability on startup
             self.check_gpu_availability()
