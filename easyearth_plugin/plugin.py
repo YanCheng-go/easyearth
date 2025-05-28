@@ -84,6 +84,7 @@ class EasyEarthPlugin:
             self.cache_dir = os.path.join(os.environ.get("HOME", ""), ".cache", "easyearth", "models")
             
         self.model_path = None
+        self.model_type = None
         self.feature_count = 0 # for generating unique IDs
         self.prompt_count = 0 # for generating unique IDs
         self.temp_prompts_geojson = None # temporary file for storing prompts
@@ -1458,10 +1459,11 @@ class EasyEarthPlugin:
 
             # add the model path to the payload if not empty
             self.model_path = self.model_dropdown.currentText().strip()
+            self.model_type = "sam" if self.is_sam_model() else "segment"
 
             if self.model_path:
                 payload["model_path"] = self.model_path
-                payload["model_type"] = "sam" if self.is_sam_model() else "segment"
+                payload["model_type"] = self.model_type
 
             # Show payload in message bar
             if prompts is None or len(prompts) == 0:
@@ -1475,6 +1477,8 @@ class EasyEarthPlugin:
                     f"- Host embedding path: {embedding_path}\n"
                     f"- (re)Save embeddings: {save_embeddings}\n"
                     f"- Prompts: {json.dumps(prompts, indent=2)}\n"
+                    f"- Model path: {self.model_path}\n"
+                    f"- Model type: {self.model_type}\n"
                 )
 
             self.iface.messageBar().pushMessage(
