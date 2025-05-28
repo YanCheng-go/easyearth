@@ -8,9 +8,9 @@ except ImportError:
     # For direct script execution
     from base_model import BaseModel
 from transformers import SamModel, SamProcessor
+import numpy as np
 import torch
 from PIL import Image
-import numpy as np
 from typing import Optional, List, Tuple, Union, Any
 import requests
 import rasterio
