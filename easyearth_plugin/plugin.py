@@ -27,7 +27,7 @@ import platform
 class EasyEarthPlugin:
     def __init__(self, iface):
         self.iface = iface # QGIS interface instance
-        self.logger = setup_logger() # initializes the loger
+        self.logger = setup_logger(name="plugin") # initializes the loger
 
         # If global logger failed to initialize, create a basic logger
         if self.logger is None:
