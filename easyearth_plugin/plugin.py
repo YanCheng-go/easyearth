@@ -1216,7 +1216,7 @@ class EasyEarthPlugin:
                     "type": "Feature",
                     "properties": {
                         "id": start_id + i,
-                        "scores": feat.get('properties', {}).get('scores', 0),
+                        # "scores": feat.get('properties', {}).get('scores', 0),  # TODO： if scores are available in the feature properties
                     },
                     "geometry": feat['geometry']
                 } for i, feat in enumerate(features)]
