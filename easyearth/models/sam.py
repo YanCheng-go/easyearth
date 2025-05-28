@@ -7,14 +7,14 @@ try:
 except ImportError:
     # For direct script execution
     from base_model import BaseModel
+from pathlib import Path
+from PIL import Image
 from transformers import SamModel, SamProcessor
+from typing import Optional, List, Tuple, Union, Any
 import numpy as np
 import torch
-from PIL import Image
-from typing import Optional, List, Tuple, Union, Any
 import requests
 import rasterio
-from pathlib import Path
 
 class Sam(BaseModel):
     def __init__(self, model_path: str = "facebook/sam-vit-huge"):
