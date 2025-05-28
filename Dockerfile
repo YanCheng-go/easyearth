@@ -11,13 +11,11 @@ RUN apt-get update \
 
 # Define environment variables for paths
 ENV APP_DIR=/usr/src/app
-ENV EASYEARTH_DATA_DIR=/usr/src/app/data
-ENV EASYEARTH_TEMP_DIR=/usr/src/app/tmp
-ENV EASYEARTH_LOG_DIR=/usr/src/app/logs
+ENV BASE_DIR=/usr/src/app/easyearth_base
 ENV MODEL_CACHE_DIR=/usr/src/app/.cache/models
 
 # Create required directories
-RUN mkdir -p $APP_DIR $EASYEARTH_DATA_DIR $EASYEARTH_TEMP_DIR $EASYEARTH_LOG_DIR $MODEL_CACHE_DIR
+RUN mkdir -p $MODEL_CACHE_DIR $BASE_DIR/embeddings $BASE_DIR/images $BASE_DIR/logs $BASE_DIR/predictions $BASE_DIR/tmp
 WORKDIR $APP_DIR
 
 # Copy only requirements first to leverage Docker cache
