@@ -3,7 +3,7 @@ name: Build and Deploy Docker Image
 on:
     push:
         branches:
-        - main
+        - master
         paths-ignore:
         - 'README.md'
         - '.github/**'
@@ -17,7 +17,7 @@ on:
         - 'easyearth/**'
     pull_request:
         branches:
-        - main
+        - master
         paths-ignore:
         - 'README.md'
         - '.github/**'
