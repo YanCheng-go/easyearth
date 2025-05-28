@@ -1756,12 +1756,18 @@ class EasyEarthPlugin:
             QMessageBox.critical(None, "Error", f"Failed to handle layer selection: {str(e)}")
 
     def cleanup_docker(self):
-        """Clean up Docker resources when unloading plugin"""
+        """Prompt user to stop Docker when closing QGIS."""
         try:
-            if self.sudo_password:
-                compose_path = os.path.join(self.plugin_dir, 'docker-compose.yml')
-                cmd = f'echo "{self.sudo_password}" | sudo -S docker-compose -p {self.project_name} -f "{compose_path}" down'
-                subprocess.run(['bash', '-c', cmd], check=True)
+            if self.docker_running:
+                reply = QMessageBox.question(
+                    None,
+                    "Stop Docker Container",
+                    "Do you want to stop the EasyEarth Docker container before exiting QGIS?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+                if reply == QMessageBox.Yes:
+                    self.stop_server()
         except Exception as e:
             self.logger.error(f"Error cleaning up Docker: {str(e)}")
 
