@@ -16,12 +16,13 @@ from .core import BoxMapTool, DockerManager, setup_logger
 import json
 import logging
 import os
+import platform
 import requests
 import shutil
 import subprocess
 import time
 import torch
-import platform
+import urllib.request
 
 class EasyEarthPlugin:
     def __init__(self, iface):
@@ -500,16 +501,27 @@ class EasyEarthPlugin:
 
     def start_server(self):
         if self.docker_mode_button.isChecked():
+            docker_image_url = 'https://github.com/YanCheng-go/easyearth/releases/download/latest/easyearth.tar.gz'
+            zipped_docker_image_path = os.path.join(self.base_dir, 'easyearth.tar.gz')
+            docker_image_path = os.path.join(self.base_dir, 'easyearth.tar')
+
+            if not os.path.exists(docker_image_path):
+                urllib.request.urlretrieve(docker_image_url, zipped_docker_image_path) # downloads the docker image from the URL
+                self.iface.messageBar().pushMessage(f"Downloaded Docker image from {docker_image_url} to {zipped_docker_image_path}", level=Qgis.Info)
+                subprocess.run(['gunzip', '-f', zipped_docker_image_path]) # unzips the downloaded file
+                self.iface.messageBar().pushMessage(f"Unzipped Docker image to {docker_image_path}", level=Qgis.Info)
+                loading = subprocess.run([f'{self.docker_path}', 'load', '-i', docker_image_path], capture_output=True, text=True) # loads the docker image into Docker
+                self.iface.messageBar().pushMessage(f"Loaded Docker image from {docker_image_path}. {loading}", level=Qgis.Info)
+
             docker_run_cmd = (f"{self.docker_path} rm -f easyearth 2>/dev/null || true && " # removes the container if it already exists
-                              f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
+                            #   f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
                               f"{self.docker_path} run -d --name easyearth -p 3781:3781 " # runs the container in detached mode and maps port 3781
                               f"-v \"{self.base_dir}\":/usr/src/app/easyearth_base " # mounts the base directory in the container
                               f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
-                              f"{self.docker_hub_image_name}")
+                            #   f"{self.docker_hub_image_name}")
+                              "easyearth")
             result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
-            self.iface.messageBar().pushMessage("Info",
-                                                f"Starting server...\nRunning command: {result}",
-                                                level=Qgis.Info)
+            self.iface.messageBar().pushMessage(f"Starting server...\nRunning command: {result}", level=Qgis.Info)
             
             if result.returncode == 0:
                 self.docker_running = True
