@@ -4,7 +4,7 @@ import requests
 class TestSAMServer(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.base_url = "http://localhost:3781"
+        self.base_url = "http://localhost:3781/v1/easyearth"
         self.test_image_path = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"  # Replace with actual test image path
         self.input_points = [[[850, 1100]], [[2250, 1000]]]
         self.input_boxes = [[[620, 900, 1000, 1255]], [[2000, 800, 2500, 1200]]]
@@ -12,7 +12,7 @@ class TestSAMServer(unittest.TestCase):
 
     def test_health_check(self):
         """Test the health check endpoint"""
-        response = requests.get(f"{self.base_url}/health")
+        response = requests.get(f"{self.base_url}/ping")
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data['status'], 'healthy')
