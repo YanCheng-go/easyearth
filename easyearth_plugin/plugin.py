@@ -505,7 +505,7 @@ class EasyEarthPlugin:
                               f"{self.docker_path} run -d --name easyearth -p 3781:3781 " # runs the container in detached mode and maps port 3781
                               f"-v \"{self.base_dir}\":/usr/src/app/easyearth_base " # mounts the base directory in the container
                               f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
-                              f"{self.docker_hub_image_name}")
+                              f"{self.docker_hub_image_name}:latest") # uses the latest image from Docker Hub
             result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
             self.iface.messageBar().pushMessage("Info",
                                                 f"Starting server...\nRunning command: {result}",
