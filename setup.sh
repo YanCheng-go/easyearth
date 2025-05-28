@@ -7,7 +7,7 @@ set -e
 
 # Set the script's directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-IMAGE_NAME="easyearth"
+IMAGE_NAME="maverickmiaow/easyearth"
 DEFAULT_DATA_DIR="./data"
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
   MODEL_DIR="$USERPROFILE/.cache/easyearth/models"
@@ -110,8 +110,10 @@ start_docker_container() {
 
   echo "Starting Docker container..."
   if [[ "$OSTYPE" != "darwin"* ]]; then
+    echo "Using sudo to start Docker container..."
     sudo TEMP_DIR="$TEMP_DIR" DATA_DIR="$DATA_DIR" LOG_DIR="$LOG_DIR" MODEL_DIR="$MODEL_DIR" docker-compose up -d
   else
+    echo "Starting Docker container without sudo..."
     execute_command docker-compose up -d
   fi
 }

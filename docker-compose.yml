@@ -1,5 +1,7 @@
 services:
-  easyearth-local-server:
+  easyearth-service:
+    image: maverickmiaow/easyearth:local
+    container_name: easyearth
     build:
       context: .
       dockerfile: Dockerfile
