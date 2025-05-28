@@ -128,8 +128,8 @@ def predict():
         model_type = data.get('model_type', 'sam')  # 'sam' or 'segmentation'
         image_path = data.get('image_path')
         model_path = data.get('model_path')
-        TEMP_DIR = os.environ.get('EASYEARTH_TEMP_DIR')
-        DATA_DIR = os.environ.get('EASYEARTH_DATA_DIR')
+        TEMP_DIR = os.path.join(os.environ['BASE_DIR'], 'tmp')
+        EMBEDDINGS_DIR = os.path.join(os.environ['BASE_DIR'], 'embeddings')
 
         if not image_path or not verify_image_path(image_path):
             return jsonify({'status': 'error', 'message': 'Invalid or missing image_path'}), 400
@@ -203,8 +203,8 @@ def predict():
                 image_embeddings = sam.get_image_embeddings(image_array)
 
                 # generate an index file to relate image to the embeddings
-                os.makedirs(os.path.join(DATA_DIR, 'embeddings'), exist_ok=True)
-                index_path = os.path.join(DATA_DIR, 'embeddings', 'index.json')
+                index_path = os.path.join(EMBEDDINGS_DIR, 'index.json')
+
                 if os.path.exists(index_path):
                     with open(index_path, 'r') as f:
                         index = json.load(f)
