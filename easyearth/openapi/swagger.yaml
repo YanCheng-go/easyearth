@@ -9,6 +9,18 @@ info:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
 paths:
+  /:
+    get:
+      summary: Get the welcome message
+      operationId: easyearth.controllers.welcome_controller.welcome
+      responses:
+        200:
+          description: Welcome message
+          content:
+            text/html:
+              schema:
+                type: string
+                example: "<h1>Welcome to EasyEarth API</h1>"
   /ping:
     get:
       summary: Check if the easyearth is alive

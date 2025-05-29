@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EasyEarth: Vision Models for Earth Observations</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+    color: #333;
+  }
+  header, footer {
+    background-color: #f7f7f7;
+    text-align: center;
+    padding: 2em 1em;
+  }
+  header img {
+    width: 120px;
+    margin-bottom: 1em;
+  }
+  main {
+    max-width: 1000px;
+    margin: auto;
+    padding: 2em 1em;
+  }
+  h1, h2, h3 {
+    color: #005288;
+  }
+  code, pre {
+    background: #f4f4f4;
+    border-radius: 4px;
+    padding: 0.5em;
+    display: block;
+    white-space: pre-wrap;
+  }
+  a {
+    color: #005288;
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1em;
+  }
+  th, td {
+    border: 1px solid #ddd;
+    padding: 0.6em;
+    text-align: left;
+  }
+  .section {
+    margin-bottom: 2em;
+  }
+  .button {
+    display: inline-block;
+    margin-top: 1em;
+    background: #005288;
+    color: white;
+    padding: 0.5em 1em;
+    border-radius: 4px;
+    text-decoration: none;
+  }
+  .button:hover {
+    background: #003f66;
+  }
+  .center {
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <img src="/static/icons/easyearth.png" alt="EasyEarth Logo" />
+  <h1>EasyEarth: Run Vision(-Language) Models for Earth Observations</h1>
+  <p>Seamlessly apply cutting-edge computer vision and vision-language models directly on Earth observation data — no coding required.</p>
+  <a class="button" href="https://drive.google.com/file/d/1AShHsXkYoBj4zltAGkdnzEfKp2GSFFeS/view">Watch Demo</a>
+</header>
+
+<main>
+  <section class="section">
+    <h2>🔧 Key Components</h2>
+    <ul>
+      <li><strong>Server-Side Infrastructure</strong> – Scalable backend to run AI models on geospatial data</li>
+      <li><strong>QGIS Plugin GUI</strong> – User-friendly interface to apply models inside QGIS</li>
+      <li><strong>Model Manager</strong> *(in development)* – Upload, version, and deploy models</li>
+    </ul>
+    <div class="center">
+      <img src="https://github.com/user-attachments/assets/91f2cad0-4cbb-4b9b-a7e4-2cd2d247cc42" alt="Architecture" width="80%" />
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>📁 Project Structure</h2>
+    <pre><code>easyearth/
+├── easyearth/         # Server app
+├── easyearth_plugin/  # QGIS plugin
+├── Dockerfile
+├── docker-compose.yml
+├── launch_server_local.sh
+├── setup.sh
+├── requirements.txt
+├── README.md
+└── docs/              # Documentation
+</code></pre>
+  </section>
+
+  <section class="section">
+    <h2>✅ Get Started</h2>
+    <h3>Requirements</h3>
+    <ul>
+      <li>Docker Compose ≥ 1.21.2 – <a href="https://docs.docker.com/compose/install/">Install Guide</a></li>
+      <li>Python ≥ 3.6</li>
+      <li><a href="https://qgis.org">QGIS</a></li>
+      <li>CUDA ≥ 12.4 – <a href="https://developer.nvidia.com/cuda-downloads">Download</a></li>
+    </ul>
+    <h3>Clone Repository</h3>
+    <pre><code>cd ~/Downloads
+git clone https://github.com/YanCheng-go/easyearth.git
+cp -r ./easyearth/easyearth_plugin easyearth_plugin</code></pre>
+
+    <h3>Run in Local Mode</h3>
+    <pre><code>chmod +x ./launch_server_local.sh
+./launch_server_local.sh</code></pre>
+
+    <h3>Set Up Docker Server</h3>
+    <pre><code>cd easyearth_plugin
+chmod +x ./setup.sh
+./setup.sh</code></pre>
+
+    <h3>Stop the Server</h3>
+    <pre><code>cd easyearth_plugin
+sudo docker-compose down</code></pre>
+
+    <h3>Useful Docker Commands</h3>
+    <pre><code>docker ps -a
+docker images
+docker rm $(docker ps -a -q)
+docker rmi $(docker images -q)
+docker volume rm $(docker volume ls -q)
+sudo docker inspect &lt;container_id&gt;
+sudo docker exec -it &lt;container_id&gt; /usr/src/app</code></pre>
+  </section>
+
+  <section class="section">
+    <h2>🧩 Install EasyEarth Plugin in QGIS</h2>
+    <h3>Manual Installation</h3>
+    <ol>
+      <li>Open QGIS > Settings > User Profiles > Open Active Profile Folder</li>
+      <li>Navigate to <code>python/plugins</code></li>
+      <li>Copy <code>easyearth_plugin</code> folder</li>
+      <li>Restart QGIS, enable the plugin via Plugins menu</li>
+    </ol>
+
+    <h3>Terminal Installation</h3>
+    <pre><code>cd ~/Downloads/easyearth_plugin
+cp -r ./easyearth_plugin ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins</code></pre>
+  </section>
+
+  <section class="section">
+    <h2>🚀 Usage</h2>
+    <h3>Run in QGIS</h3>
+    <ol>
+      <li>Stop external Docker containers:
+        <pre><code>cd easyearth_plugin
+sudo docker-compose down</code></pre>
+      </li>
+      <li>Open QGIS, click **Start Docker**</li>
+      <li>Load an image using **Browse Image**</li>
+      <li>Click **Start Drawing**</li>
+    </ol>
+    <div class="center">
+      <img src="https://github.com/user-attachments/assets/7233c11c-cc7f-4fd8-8dc5-196db4a4220b" alt="QGIS Plugin GUI" width="80%" />
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>🧠 Available Models</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Model Name</th>
+          <th>Description</th>
+          <th>Prompt Type</th>
+          <th>Prompt Data</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>SAM</td>
+          <td>Segment Anything Model</td>
+          <td>Point</td>
+          <td>[[x, y], [x, y], ...]</td>
+        </tr>
+        <tr>
+          <td>SAM</td>
+          <td>Segment Anything Model</td>
+          <td>Box</td>
+          <td>[[x1, y1, x2, y2]]</td>
+        </tr>
+        <tr>
+          <td>SAM2</td>
+          <td>Segment Anything Model</td>
+          <td>Point</td>
+          <td>[[x, y], [x, y], ...]</td>
+        </tr>
+        <tr>
+          <td>SAM2</td>
+          <td>Segment Anything Model</td>
+          <td>Box</td>
+          <td>[[x1, y1, x2, y2]]</td>
+        </tr>
+        <tr>
+          <td>LangSAM</td>
+          <td>Language Model</td>
+          <td>Text</td>
+          <td>["text1", "text2"]</td>
+        </tr>
+        <tr>
+          <td>restor/tcd-segformer-mit-b2</td>
+          <td>Semantic Segmentation</td>
+          <td>None</td>
+          <td>[]</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="section">
+    <h2>📚 Documentation</h2>
+    <p>Find out more in our:</p>
+    <ul>
+      <li><a href="docs/UserGuide.md">User Guide</a></li>
+      <li><a href="docs/DeveloperGuide.md">Developer Guide</a></li>
+      <li><a href="docs/APIReference.md">API Reference</a></li>
+      <li><a href="docs/ModelManagement.md">Model Management</a></li>
+      <li><a href="docs/QGISPlugin.md">QGIS Plugin</a></li>
+      <li><a href="docs/DockerSetup.md">Docker Setup</a></li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <h2>✅ Roadmap</h2>
+    <ul>
+      <li>✅ EasyEarth server for model inference</li>
+      <li>✅ QGIS plugin for model application</li>
+      <li>✅ Dockerized server for scalable inference</li>
+      <li>✅ Advanced prompt-guided segmentation</li>
+      <li>⏳ Complete documentation</li>
+      <li>⏳ Editing tools for segmentation</li>
+      <li>⏳ Model Manager</li>
+      <li>⏳ Chatbot integration</li>
+      <li>⏳ Cloud deployment templates</li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <h2>🤝 Contributing</h2>
+    <p>We welcome community contributions! Check out the <a href="CONTRIBUTING.md">CONTRIBUTING.md</a> for more details.</p>
+  </section>
+
+  <section class="section">
+    <h2>🧑‍💻 Author</h2>
+    <p>Developed by: Yan Cheng (chengyan2017@gmail.com), Ankit Kariryaa (ankit.ky@gmail.com), Lucia Gordon (luciagordon@g.harvard.edu)</p>
+  </section>
+</main>
+
+<footer>
+  <p>&copy; 2025 EasyEarth. All rights reserved.</p>
+</footer>
+
+</body>
+</html>
