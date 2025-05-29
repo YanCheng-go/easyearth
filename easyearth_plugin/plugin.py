@@ -59,6 +59,7 @@ class EasyEarthPlugin:
         self.docker_process = None
         self.server_url = f"http://0.0.0.0:3781/easyearth"  # Base URL for the server
         self.docker_running = False
+        self.local_docker_running = False
         self.server_running = False
         self.action = None
         self.dock_widget = None
@@ -406,8 +407,14 @@ class EasyEarthPlugin:
             self.status_timer.start(5000)  # Check every 5 seconds
 
             # # Check if the container is running on startup
-            # self.base_dir, self.docker_running = DockerManager(self.iface, self.logger).inspect_running_container(self.docker_path)
-            # self.after_inspection(self.docker_running)
+            self.base_dir, self.docker_running = DockerManager(self.iface, self.logger).inspect_running_container(self.docker_path, self.base_dir)
+            self.iface.messageBar().pushMessage("INFO", f"Any existing docker container running: {self.docker_running}", level=Qgis.Info)
+            self.after_inspection(self.docker_running)
+
+            # Check if local server is running before starting the plugin
+            self.local_docker_running = False
+            if self.server_running and (not self.docker_running):
+                self.local_docker_running = True
 
             self.logger.debug("Finished initGui setup")
         except Exception as e:
@@ -441,7 +448,6 @@ class EasyEarthPlugin:
                 self.server_status.setText("Online")
                 self.server_status.setStyleSheet("color: green;")
                 self.server_running = True
-                self.docker_running = True
                 self.toggle_server_button.show()
                 self.toggle_server_button.setText("Stop server")
 
@@ -450,8 +456,7 @@ class EasyEarthPlugin:
                     gpu_message = response.json()['device']
                     self.server_status.setText(f"Online - Device: {gpu_message}") # adds GPU message to the server status label
                 else:
-                    self.iface.messageBar().pushMessage("Info", "No device info available", level=Qgis.Info, duration=5)
-                    self.server_status.setText(f"Online - Device: {gpu_message}")
+                    self.server_status.setText(f"Online - Device: Not available") # adds GPU message to the server status label
                 if self.base_dir:
                     self.model_group.show()  # Show model selection group when server is online
                     self.image_group.show()  # Show image source group when server is online
@@ -459,13 +464,11 @@ class EasyEarthPlugin:
                 self.server_status.setText("Error")
                 self.server_status.setStyleSheet("color: red;")
                 self.server_running = False
-                self.docker_running = False
                 self.toggle_server_button.setText("Start server")
         except requests.exceptions.RequestException:
             self.server_status.setText("Offline")
             self.server_status.setStyleSheet("color: red;")
             self.server_running = False
-            self.docker_running = False
             self.toggle_server_button.show()
             self.toggle_server_button.setText("Start server")
 
@@ -475,11 +478,12 @@ class EasyEarthPlugin:
         If not, it opens a dialog to select a folder.
         """
         folder = None  # Initialize folder variable
-        if not self.docker_running:
-            folder = QFileDialog.getExistingDirectory(self.dock_widget, "Select location for base folder", '', QFileDialog.ShowDirsOnly) # opens a dialog to select a folder
-        elif self.docker_running and self.base_dir:
+        if self.docker_running and self.base_dir:
             # if base_dir is already set, use its parent directory
             folder = os.path.dirname(self.base_dir)
+        else:
+            # Open a dialog to select a folder
+            folder = QFileDialog.getExistingDirectory(self.iface.mainWindow(), "Select Base Folder", os.path.expanduser("~"))
 
         if folder: # if a folder is selected
             self.base_dir = os.path.join(folder, 'easyearth_base')
@@ -494,6 +498,9 @@ class EasyEarthPlugin:
             if self.docker_running:
                 self.run_mode_selected('docker')
                 self.docker_mode_button.setChecked(True)
+            if self.local_docker_running:
+                self.run_mode_selected('local')
+                self.local_mode_button.setChecked(True)
             
             os.makedirs(self.images_dir, exist_ok=True)  # creates the images directory if it doesn't exist
             os.makedirs(self.embeddings_dir, exist_ok=True)  # creates the embeddings directory if it doesn't exist
@@ -537,9 +544,11 @@ class EasyEarthPlugin:
                             #   "easyearth")
             result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
             self.iface.messageBar().pushMessage(f"Starting server...\nRunning command: {result}", level=Qgis.Info)
-            
+
+            self.docker_running = True
+
             if result.returncode == 0:
-                self.docker_running = True
+                self.iface.messageBar().pushMessage("Docker container started successfully", level=Qgis.Success)
 
         if self.local_mode_button.isChecked():
             # Download server code
@@ -581,27 +590,36 @@ class EasyEarthPlugin:
 
                 self.iface.messageBar().pushMessage(f"Unzipped environment to {env_path}", level=Qgis.Info)
 
-            log_file = open(f"{self.logs_dir}/launch_server_local.log", "w")  # log file for the local server launch
-            result = subprocess.Popen(f'chmod +x \"{self.plugin_dir}\"/launch_server_local.sh && \"{self.plugin_dir}\"/launch_server_local.sh',
-                                      shell=True,
-                                      stdout=log_file,  # redirects stdout to a log file
-                                      stderr=subprocess.STDOUT,  # redirects stderr to the same log file
-                                      text=True,              # decodes output as text, not bytes
-                                      start_new_session=True)  # detaches from QGIS
             self.iface.messageBar().pushMessage(f"Starting local server...", level=Qgis.Info)
+            log_file = open(f"{self.logs_dir}/launch_server_local.log", "w")  # log file for the local server launch
+            result = subprocess.Popen(
+                f'chmod +x \"{self.plugin_dir}\"/launch_server_local.sh && \"{self.plugin_dir}\"/launch_server_local.sh',
+                shell=True,
+                stdout=log_file,  # redirects stdout to a log file
+                stderr=subprocess.STDOUT,  # redirects stderr to the same log file
+                text=True,  # decodes output as text, not bytes
+                start_new_session=True)  # detaches from QGIS
+            self.local_docker_running = True
 
     def stop_server(self):
         if self.docker_mode_button.isChecked():
             result = subprocess.run(f"{self.docker_path} stop easyearth && {self.docker_path} rm easyearth", capture_output=True, text=True, shell=True)
-            self.docker_hub_process = None
             self.docker_running = False
-        else:
-            result = subprocess.run('kill $(lsof -t -i:3781)', capture_output=True, text=True, shell=True) # kills the process running on port 3781
+            if result.returncode == 0:
+                self.iface.messageBar().pushMessage("Docker container stopped successfully", level=Qgis.Success)
 
-        self.iface.messageBar().pushMessage(f"Stopping server with command: {result}", level=Qgis.Info)
+        elif self.local_mode_button.isChecked():
+            result = subprocess.run('kill $(lsof -t -i:3781)', capture_output=True, text=True, shell=True) # kills the process running on port 3781
+            self.local_docker_running = False
+            if result.returncode == 0:
+                self.iface.messageBar().pushMessage("Local server stopped successfully", level=Qgis.Success)
 
     def run_or_stop_container(self):
-        if not self.docker_running: # if the docker container is not running, start it
+        """Toggle the server state: start if not running, stop if running"""
+        self.logger.debug("Toggling server state")
+        self.logger.info(f"Docker running: {self.docker_running}, Local Docker running: {self.local_docker_running}")
+
+        if not (self.docker_running or self.local_docker_running): # if the docker container is not running, start it
             self.base_folder.setReadOnly(True)
             self.base_folder_button.setEnabled(False)
             self.start_server()

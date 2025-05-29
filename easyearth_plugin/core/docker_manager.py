@@ -12,25 +12,42 @@ class DockerManager:
         if logger is None:
             self.logger = setup_logger(name="DockerManager")
             self.logger.info("DockerManager initialized")
+        else:
+            self.logger = logger
+            self.logger.info("DockerManager initialized")
         self.iface = iface
 
-    def inspect_running_container(self, docker_path):
+    def is_container_running(self, docker_path, container_name):
+        # Run 'docker ps' to list running containers
+        result = subprocess.run(
+            [docker_path, "ps", "--filter", f"name={container_name}", "--format", "{{.Names}}"],
+            capture_output=True, text=True
+        )
+        # Check if the container name appears in the output
+        return container_name in result.stdout.strip().splitlines()
+
+    def inspect_running_container(self, docker_path, base_dir):
         """Inspect the running Docker container to get the mounted data directory"""
         try:
+            self.logger.info("Inspecting running Docker container for EasyEarth using docker ps")
+            # Use subprocess to run the docker inspect command
+            is_container_running = self.is_container_running(docker_path, "easyearth")
+
+            if not is_container_running:
+                self.logger.info("Docker container 'easyearth' is not running")
+                return base_dir, False
+
+            self.logger.info("Docker container is running")
             result = subprocess.run(f"{docker_path} inspect easyearth", capture_output=True, text=True, shell=True)
             if result.returncode != 0:
                 self.logger.error(f"Failed to inspect Docker container: {result.stderr}")
                 return '', False
 
             docker_running = False
-            base_dir = ''
 
             # check if docker container is running
-            if not result.stdout:
-                docker_running = False
-            else:
+            if result.stdout.strip():
                 docker_running = True
-
                 # Parse the JSON output
                 container_info = json.loads(result.stdout)
                 mounts = container_info[0].get('Mounts', [])
@@ -42,4 +59,4 @@ class DockerManager:
             return base_dir, docker_running
         except:
             self.logger.error(f"Failed to inspect Docker container: {result.stderr if 'result' in locals() else 'Unknown error'}")
-            return '', False
+            return base_dir, False
