@@ -8,11 +8,10 @@ from qgis.PyQt.QtCore import Qt, QTimer
 from qgis.PyQt.QtGui import QIcon, QKeySequence, QColor
 from qgis.core import (QgsVectorLayer, QgsGeometry,
                       QgsPointXY, QgsProject,
-                      QgsWkbTypes, QgsRasterLayer, Qgis, QgsApplication, QgsCategorizedSymbolRenderer,
+                      QgsWkbTypes, QgsRasterLayer, Qgis, QgsLayerTreeGroup, QgsCategorizedSymbolRenderer,
                       QgsRendererCategory, QgsMarkerSymbol, QgsFillSymbol, QgsCoordinateTransform, QgsSingleSymbolRenderer)
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
-from .core import BoxMapTool, DockerManager, setup_logger, map_id
-from io import BytesIO
+from .core import BoxMapTool, setup_logger, map_id
 import json
 import logging
 import os
@@ -107,7 +106,7 @@ class EasyEarthPlugin:
         self.predictions_layer = None
         self.prompts_geojson = None
 
-        # initialize image crs and extent...
+        # initialize image crs and extent
         self.raster_crs = None
         self.raster_extent = None
         self.raster_width = None
@@ -115,7 +114,6 @@ class EasyEarthPlugin:
         self.project_crs = QgsProject.instance().crs()
 
         QgsProject.instance().crsChanged.connect(self.on_project_crs_changed)
-        # os.environ['LOGS_DIR'] = self.logs_dir
 
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI"""
@@ -158,7 +156,7 @@ class EasyEarthPlugin:
             # 2. Run mode
             self.run_mode_group = QGroupBox("Run Mode")
             run_mode_layout = QVBoxLayout()
-            run_mode_info_label = QLabel('You can launch the plugin server either by using Docker if you have it installed or <a href="https://github.com/YanCheng-go/easyearth?tab=readme-ov-file#local-mode">running the server locally outside QGIS</a>.&nbsp;Local mode is required for making use of Mac OS GPUs.')
+            run_mode_info_label = QLabel('You can launch the plugin server either by using Docker if you have it installed or running the server locally.&nbsp;Local mode is required for making use of GPU.')
             run_mode_info_label.setWordWrap(True)
             run_mode_info_label.setOpenExternalLinks(True)  # allows the link to be clickable
             run_mode_info_label.setTextFormat(Qt.RichText)  # enables rich text formatting
@@ -389,25 +387,15 @@ class EasyEarthPlugin:
             self.dock_widget.setWidget(scroll_area)
             self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dock_widget) # Add dock widget to QGIS
 
-            # initialize the data and tmp directory
-            # TODO: move to after checking if docker image is running...and return mounted data folder using docker inspect
-            # self.base_dir = self.initialize_data_directory()
-
             # Update the layer (raster) list in the combo box whenever a layer is added or removed
             QgsProject.instance().layersAdded.connect(self.update_layer_dropdown)
             QgsProject.instance().layersRemoved.connect(self.update_layer_dropdown)
-
-            # Connect to QGIS quit signal
-            QgsApplication.instance().aboutToQuit.connect(self.cleanup_docker)
+            # QgsApplication.instance().aboutToQuit.connect(self.cleanup_docker) # connect to QGIS quit signal
 
             # Start periodic server status check
             self.status_timer = QTimer()
             self.status_timer.timeout.connect(self.check_server_status)
             self.status_timer.start(5000)  # Check every 5 seconds
-
-            # # Check if the container is running on startup
-            # self.base_dir, self.docker_running = DockerManager(self.iface, self.logger).inspect_running_container(self.docker_path)
-            # self.after_inspection(self.docker_running)
 
             self.logger.debug("Finished initGui setup")
         except Exception as e:
@@ -420,16 +408,6 @@ class EasyEarthPlugin:
             self.dock_widget.hide()
         else:
             self.dock_widget.show()
-
-    def after_inspection(self, docker_running):
-        if docker_running and self.base_dir:
-            self.iface.messageBar().pushMessage("Existing docker container is running", level=Qgis.Info)
-            # update the base folder text
-            self.base_folder.setText(self.base_dir)
-            # triggle actions after setting the base folder
-            self.select_base_folder()
-        else:
-            return
 
     def check_server_status(self):
         """Check if the server is running by pinging it"""
@@ -450,7 +428,7 @@ class EasyEarthPlugin:
                     gpu_message = response.json()['device']
                     self.server_status.setText(f"Online - Device: {gpu_message}") # adds GPU message to the server status label
                 else:
-                    self.iface.messageBar().pushMessage("Info", "No device info available", level=Qgis.Info, duration=5)
+                    self.iface.messageBar().pushMessage("No device info available", level=Qgis.Info)
                     self.server_status.setText(f"Online - Device: {gpu_message}")
                 if self.base_dir:
                     self.model_group.show()  # Show model selection group when server is online
@@ -474,12 +452,7 @@ class EasyEarthPlugin:
         If an existing is running when opening QGIS, it uses the parent directory of the existing base directory.
         If not, it opens a dialog to select a folder.
         """
-        folder = None  # Initialize folder variable
-        if not self.docker_running:
-            folder = QFileDialog.getExistingDirectory(self.dock_widget, "Select location for base folder", '', QFileDialog.ShowDirsOnly) # opens a dialog to select a folder
-        elif self.docker_running and self.base_dir:
-            # if base_dir is already set, use its parent directory
-            folder = os.path.dirname(self.base_dir)
+        folder = QFileDialog.getExistingDirectory(self.dock_widget, "Select location for base folder", '', QFileDialog.ShowDirsOnly) # opens a dialog to select a folder
 
         if folder: # if a folder is selected
             self.base_dir = os.path.join(folder, 'easyearth_base')
@@ -491,9 +464,6 @@ class EasyEarthPlugin:
             self.base_folder.setText(self.base_dir)
             self.iface.messageBar().pushMessage(f"Base folder set to {self.base_dir}", level=Qgis.Info)
             self.run_mode_group.show() # shows run mode group when base folder is selected
-            if self.docker_running:
-                self.run_mode_selected('docker')
-                self.docker_mode_button.setChecked(True)
             
             os.makedirs(self.images_dir, exist_ok=True)  # creates the images directory if it doesn't exist
             os.makedirs(self.embeddings_dir, exist_ok=True)  # creates the embeddings directory if it doesn't exist
@@ -562,29 +532,22 @@ class EasyEarthPlugin:
                 self.iface.messageBar().pushMessage(f"Moved easyearth folder out of repo to {easyearth_folder_path}", level=Qgis.Info)
 
             # Download env
-            env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/newest/easyearth_env.zip'
-            zipped_env_path = os.path.join(self.base_dir, 'easyearth_env.zip')
+            env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/env-v2/easyearth_env.tar.gz'
+            zipped_env_path = os.path.join(self.base_dir, 'easyearth_env.tar.gz')
             env_path = os.path.join(self.base_dir, 'easyearth_env')
 
             if not os.path.exists(env_path):
                 urllib.request.urlretrieve(env_url, zipped_env_path)
                 self.iface.messageBar().pushMessage(f"Downloaded environment from {env_url} to {zipped_env_path}", level=Qgis.Info)
                 
-                with zipfile.ZipFile(zipped_env_path, 'r') as zip_ref:
-                    zip_ref.extractall(self.base_dir)
-
+                unzipping = subprocess.run(f'tar -xzf \"{zipped_env_path}\" -C \"{self.base_dir}\"', capture_output=True, text=True, shell=True)  # unzips the environment tar.gz file
                 os.remove(zipped_env_path)  # remove the zip file after extraction
+                self.iface.messageBar().pushMessage(f"Unzipped environment to {env_path}: {unzipping}", level=Qgis.Info)
 
-                for path in os.listdir(self.base_dir):
-                    if path.startswith('_'):
-                        shutil.rmtree(os.path.join(self.base_dir, path))  # remove any hidden directories that start with '_'
-
-                self.iface.messageBar().pushMessage(f"Unzipped environment to {env_path}", level=Qgis.Info)
-
-            log_file = open(f"{self.logs_dir}/launch_server_local.log", "w")  # log file for the local server launch
+            self.local_server_log_file = open(f"{self.logs_dir}/launch_server_local.log", "w")  # log file for the local server launch
             result = subprocess.Popen(f'chmod +x \"{self.plugin_dir}\"/launch_server_local.sh && \"{self.plugin_dir}\"/launch_server_local.sh',
                                       shell=True,
-                                      stdout=log_file,  # redirects stdout to a log file
+                                      stdout=self.local_server_log_file,  # redirects stdout to a log file
                                       stderr=subprocess.STDOUT,  # redirects stderr to the same log file
                                       text=True,              # decodes output as text, not bytes
                                       start_new_session=True)  # detaches from QGIS
@@ -843,7 +806,13 @@ class EasyEarthPlugin:
             QMessageBox.critical(None, "Error", f"Failed to update embeddings: {str(e)}")
 
     def on_image_selected(self):
-        selected_layer = QgsProject.instance().mapLayersByName(os.path.basename(self.image_path.text()))[0]
+        selected_layer = None
+        for group in QgsProject.instance().layerTreeRoot().children():
+            for layer in group.children():
+                if layer.name() == os.path.basename(self.image_path.text()):
+                    selected_layer = layer
+
+        # selected_layer = QgsProject.instance().mapLayersByName(os.path.basename(self.image_path.text()))[0]
         self.iface.setActiveLayer(selected_layer) # sets the selected layer as the active layer
         self.iface.messageBar().pushMessage(f"Selected layer {selected_layer.name()} with ID {selected_layer.id()}", level=Qgis.Info)
         
@@ -869,18 +838,18 @@ class EasyEarthPlugin:
             self.iface.mapCanvas().setExtent(extent)
             self.iface.mapCanvas().refresh()
         
-        root = QgsProject.instance().layerTreeRoot()
-        layer_tree_layer = root.findLayer(selected_layer.id())
+        # root = QgsProject.instance().layerTreeRoot()
+        # layer_tree_layer = root.findLayer(selected_layer.id())
         
-        if layer_tree_layer:
-            clone = layer_tree_layer.clone()
-            parent = layer_tree_layer.parent()
+        # if layer_tree_layer:
+        #     clone = layer_tree_layer.clone()
+        #     parent = layer_tree_layer.parent()
             
-            # Remove original and insert clone at top
-            parent.insertChildNode(0, clone)
-            parent.removeChildNode(layer_tree_layer)
+        #     # Remove original and insert clone at top
+        #     parent.insertChildNode(0, clone)
+        #     parent.removeChildNode(layer_tree_layer)
         
-        self.iface.mapCanvas().refresh()    
+        # self.iface.mapCanvas().refresh()    
         
     def browse_image(self):
         """Open file dialog for image selection"""
@@ -903,6 +872,17 @@ class EasyEarthPlugin:
             self.logger.error(f"Error browsing image: {str(e)}")
             QMessageBox.critical(None, "Error", f"Failed to browse image: {str(e)}")
 
+    def check_group_exists(self, group_name):
+        """Checks if a group with the given name already exists in the layer tree."""
+
+        root = QgsProject.instance().layerTreeRoot()
+
+        for child in root.children():
+            if isinstance(child, QgsLayerTreeGroup) and child.name() == group_name:
+                return True
+            
+        return False
+
     def load_image(self):
         """Load the selected image, create prediction layers, and check for existing embeddings"""
         try:
@@ -912,16 +892,19 @@ class EasyEarthPlugin:
             if not image_path:
                 return
 
-            # Load the image as a raster layer
-            raster_layer = QgsRasterLayer(image_path, os.path.basename(image_path))
+            raster_layer = QgsRasterLayer(image_path, os.path.basename(image_path)) # loads the image as a raster layer
 
             if not raster_layer.isValid():
                 QMessageBox.warning(None, "Error", "Invalid raster layer")
                 return
 
+            instance = QgsProject.instance()
 
-            if len(QgsProject.instance().mapLayersByName(raster_layer.name())) == 0: # checks if the layer already exists
-                QgsProject.instance().addMapLayer(raster_layer) # adds raster layer to the project
+            # if len(instance.mapLayersByName(raster_layer.name())) == 0: # checks if the layer already exists
+            if not self.check_group_exists(raster_layer.name()): # checks if a group with the layer name already exists
+                group = instance.layerTreeRoot().addGroup(raster_layer.name()) # creates a group for the layer
+                group.addLayer(raster_layer) # adds the layer to the group
+                # instance.addMapLayer(raster_layer) # adds raster layer to the project
             
             self.on_image_selected()
 
@@ -1813,21 +1796,21 @@ class EasyEarthPlugin:
             self.logger.exception("Full traceback:")
             QMessageBox.critical(None, "Error", f"Failed to handle layer selection: {str(e)}")
 
-    def cleanup_docker(self):
-        """Prompt user to stop Docker when closing QGIS."""
-        try:
-            if self.docker_running:
-                reply = QMessageBox.question(
-                    None,
-                    "Stop Docker Container",
-                    "Do you want to stop the EasyEarth Docker container before exiting QGIS?",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No
-                )
-                if reply == QMessageBox.Yes:
-                    self.stop_server()
-        except Exception as e:
-            self.logger.error(f"Error cleaning up Docker: {str(e)}")
+    # def cleanup_docker(self):
+    #     """Prompt user to stop Docker when closing QGIS."""
+    #     try:
+    #         if self.docker_running:
+    #             reply = QMessageBox.question(
+    #                 None,
+    #                 "Stop Docker Container",
+    #                 "Do you want to stop the EasyEarth Docker container before exiting QGIS?",
+    #                 QMessageBox.Yes | QMessageBox.No,
+    #                 QMessageBox.No
+    #             )
+    #             if reply == QMessageBox.Yes:
+    #                 self.stop_server()
+    #     except Exception as e:
+    #         self.logger.error(f"Error cleaning up Docker: {str(e)}")
 
     def cleanup_previous_session(self):
         """Clean up temporary files and layers from previous session"""
@@ -1876,7 +1859,7 @@ class EasyEarthPlugin:
                 self.iface.removePluginMenu("Easy Earth", action)
                 self.iface.removeToolBarIcon(action)
 
-            self.cleanup_docker() # cleans up Docker resources
+            # self.cleanup_docker() # cleans up Docker resources
 
             self.sudo_password = None # clears sudo password
 
@@ -1912,6 +1895,9 @@ class EasyEarthPlugin:
             for file_path in [self.temp_prompts_geojson, self.temp_predictions_geojson]:
                 if file_path and os.path.exists(file_path):
                     os.remove(file_path)
+
+            if self.local_server_log_file:
+                self.local_server_log_file.close()
 
             self.logger.debug("Plugin unloaded successfully")
         except Exception as e:
