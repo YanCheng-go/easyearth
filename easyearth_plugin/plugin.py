@@ -406,8 +406,8 @@ class EasyEarthPlugin:
             self.status_timer.start(5000)  # Check every 5 seconds
 
             # # Check if the container is running on startup
-            self.base_dir, self.docker_running = DockerManager(self.iface, self.logger).inspect_running_container(self.docker_path)
-            self.after_inspection(self.docker_running)
+            # self.base_dir, self.docker_running = DockerManager(self.iface, self.logger).inspect_running_container(self.docker_path)
+            # self.after_inspection(self.docker_running)
 
             self.logger.debug("Finished initGui setup")
         except Exception as e:
@@ -514,44 +514,6 @@ class EasyEarthPlugin:
             self.docker_mode_button.setChecked(False)
             self.docker_mode = False
 
-    def download_github_subfolder(self, repo_url, subfolder_path, output_dir):
-        """
-        Download a subfolder from a GitHub repository
-        
-        Args:
-            repo_url: Full GitHub URL (e.g., "https://github.com/user/repo")
-            subfolder_path: Path to subfolder (e.g., "src/utils")
-            output_dir: Local directory to save files
-        """
-        # Parse repository details
-        api_url = repo_url.replace('https://github.com', 'https://api.github.com/repos')
-        
-        # Get repository contents
-        contents_url = f"{api_url}/contents/{subfolder_path}"
-        response = requests.get(contents_url)
-        
-        if response.status_code != 200:
-            raise Exception(f"Failed to access repository: {response.status_code}")
-        
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # Download each file in the subfolder
-        for item in response.json():
-            if item['type'] == 'file':
-                file_url = item['download_url']
-                file_response = requests.get(file_url)
-                file_path = os.path.join(output_dir, item['name'])
-                
-                with open(file_path, 'wb') as f:
-                    f.write(file_response.content)
-                print(f"Downloaded: {item['name']}")
-            elif item['type'] == 'dir':
-                # Recursively download subdirectories
-                new_subfolder = os.path.join(subfolder_path, item['name'])
-                new_output = os.path.join(output_dir, item['name'])
-                self.download_github_subfolder(repo_url, new_subfolder, new_output)
-
-
     def start_server(self):
         if self.docker_mode_button.isChecked():
             # docker_image_url = 'https://github.com/YanCheng-go/easyearth/releases/download/latest/easyearth.tar.gz'
@@ -619,10 +581,11 @@ class EasyEarthPlugin:
 
                 self.iface.messageBar().pushMessage(f"Unzipped environment to {env_path}", level=Qgis.Info)
 
+            log_file = open(f"{self.logs_dir}/launch_server_local.log", "w")  # log file for the local server launch
             result = subprocess.Popen(f'chmod +x \"{self.plugin_dir}\"/launch_server_local.sh && \"{self.plugin_dir}\"/launch_server_local.sh',
                                       shell=True,
-                                      stdout=subprocess.PIPE,
-                                      stderr=subprocess.PIPE,
+                                      stdout=log_file,  # redirects stdout to a log file
+                                      stderr=subprocess.STDOUT,  # redirects stderr to the same log file
                                       text=True,              # decodes output as text, not bytes
                                       start_new_session=True)  # detaches from QGIS
             self.iface.messageBar().pushMessage(f"Starting local server...", level=Qgis.Info)
