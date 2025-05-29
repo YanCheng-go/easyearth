@@ -906,7 +906,7 @@ class EasyEarthPlugin:
             if file_path:
                 # Verify the file is within data_dir
                 if not os.path.commonpath([file_path]).startswith(os.path.commonpath([self.base_dir])):
-                    QMessageBox.warning("Invalid Location", f"Please select an image from within the data directory:\n{self.base_dir}")
+                    QMessageBox.warning(None, "Invalid Location", f"Please select an image from within the data directory:\n{self.base_dir}")
                     return
 
                 self.image_path.setText(file_path)
