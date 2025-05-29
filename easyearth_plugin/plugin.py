@@ -407,7 +407,8 @@ class EasyEarthPlugin:
             self.status_timer.start(5000)  # Check every 5 seconds
 
             # # Check if the container is running on startup
-            DockerManager.inspect_running_container(self.iface, self.docker_path, self.data_folder_edit, self.toggle_server_button)
+            self.base_dir, self.docker_running = DockerManager(self.iface, self.logger).inspect_running_container(self.docker_path)
+            self.after_inspection(self.docker_running)
 
             self.logger.debug("Finished initGui setup")
         except Exception as e:
@@ -420,6 +421,16 @@ class EasyEarthPlugin:
             self.dock_widget.hide()
         else:
             self.dock_widget.show()
+
+    def after_inspection(self, docker_running):
+        if docker_running and self.base_dir:
+            self.iface.messageBar().pushMessage("Existing docker container is running", level=Qgis.Info)
+            # update the base folder text
+            self.base_folder.setText(self.base_dir)
+            # triggle actions after setting the base folder
+            self.select_base_folder()
+        else:
+            return
 
     def check_server_status(self):
         """Check if the server is running by pinging it"""
@@ -438,12 +449,7 @@ class EasyEarthPlugin:
                 # check GPU message in the response
                 if 'device' in response.json():
                     gpu_message = response.json()['device']
-                    self.iface.messageBar().pushMessage("Info", f"Device: {gpu_message}", level=Qgis.Info, duration=5)
-                    # add GPU message to the server status label
                     self.server_status.setText(f"Online - Device: {gpu_message}")
-                else:
-                    self.iface.messageBar().pushMessage("Info", "No device info available", level=Qgis.Info, duration=5)
-                
                 if self.base_dir:
                     self.model_group.show()  # Show model selection group when server is online
                     self.image_group.show()  # Show image source group when server is online
@@ -462,7 +468,16 @@ class EasyEarthPlugin:
             self.toggle_server_button.setText("Start server")
 
     def select_base_folder(self):
-        folder = QFileDialog.getExistingDirectory(self.dock_widget, "Select location for base folder", '', QFileDialog.ShowDirsOnly) # opens a dialog to select a folder
+        """Select the base folder for storing data.
+        If an existing is running when opening QGIS, it uses the parent directory of the existing base directory.
+        If not, it opens a dialog to select a folder.
+        """
+        folder = None  # Initialize folder variable
+        if not self.docker_running:
+            folder = QFileDialog.getExistingDirectory(self.dock_widget, "Select location for base folder", '', QFileDialog.ShowDirsOnly) # opens a dialog to select a folder
+        elif self.docker_running and self.base_dir:
+            # if base_dir is already set, use its parent directory
+            folder = os.path.dirname(self.base_dir)
 
         if folder: # if a folder is selected
             self.base_dir = os.path.join(folder, 'easyearth_base')
@@ -474,6 +489,9 @@ class EasyEarthPlugin:
             self.base_folder.setText(self.base_dir)
             self.iface.messageBar().pushMessage(f"Base folder set to {self.base_dir}", level=Qgis.Info)
             self.run_mode_group.show() # shows run mode group when base folder is selected
+            if self.docker_running:
+                self.run_mode_selected('docker')
+                self.docker_mode_button.setChecked(True)
             
             os.makedirs(self.images_dir, exist_ok=True)  # creates the images directory if it doesn't exist
             os.makedirs(self.embeddings_dir, exist_ok=True)  # creates the embeddings directory if it doesn't exist
