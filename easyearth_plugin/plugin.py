@@ -21,7 +21,6 @@ import requests
 import shutil
 import subprocess
 import time
-import torch
 import urllib.request
 import zipfile
 
