@@ -410,9 +410,6 @@ class EasyEarthPlugin:
             # # Check if the container is running on startup
             DockerManager.inspect_running_container(self.iface, self.docker_path, self.data_folder_edit, self.toggle_server_button)
 
-            # Check GPU availability on startup
-            self.check_gpu_availability()
-
             self.logger.debug("Finished initGui setup")
         except Exception as e:
             self.logger.error(f"Error in initGui: {str(e)}")
@@ -424,18 +421,6 @@ class EasyEarthPlugin:
             self.dock_widget.hide()
         else:
             self.dock_widget.show()
-
-    def check_gpu_availability(self):
-        """Check if GPU is available for model inference"""
-        if self.local_mode_button.isChecked() and torch.backends.mps.is_available():
-            self.iface.messageBar().pushMessage("MPS GPU is available", level=Qgis.Info, duration=5)
-            return "mps"
-        elif torch.cuda.is_available():
-            self.iface.messageBar().pushMessage("CUDA GPU is available", level=Qgis.Info, duration=5)
-            return "cuda"
-        else:
-            self.iface.messageBar().pushMessage("Warning", "No GPU available, using CPU", level=Qgis.Warning, duration=5)
-            return "cpu"
 
     def check_server_status(self):
         """Check if the server is running by pinging it"""
@@ -450,6 +435,15 @@ class EasyEarthPlugin:
                 self.docker_running = True
                 self.toggle_server_button.show()
                 self.toggle_server_button.setText("Stop server")
+
+                # check GPU message in the response
+                if 'device' in response.json():
+                    gpu_message = response.json()['device']
+                    self.iface.messageBar().pushMessage("Info", f"Device: {gpu_message}", level=Qgis.Info, duration=5)
+                    # add GPU message to the server status label
+                    self.server_status.setText(f"Online - Device: {gpu_message}")
+                else:
+                    self.iface.messageBar().pushMessage("Info", "No device info available", level=Qgis.Info, duration=5)
                 
                 if self.base_dir:
                     self.model_group.show()  # Show model selection group when server is online

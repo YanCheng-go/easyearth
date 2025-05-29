@@ -270,4 +270,11 @@ def predict():
         return jsonify({'status': 'error', 'message': f'Server error: {str(e)}'}), 500
 
 def ping():
-    return jsonify({"message": "Server is alive"}), 200
+    """Endpoint to check if the server is alive", and to check GPU availability"""
+    gpu_info = {
+        "cuda": torch.cuda.is_available(),
+        "mps": getattr(torch.backends, "mps", None) and torch.backends.mps.is_available(),
+        "cpu": not torch.cuda.is_available() and not (getattr(torch.backends, "mps", None) and torch.backends.mps.is_available())
+    }
+    gpu_info["device"] = "cuda" if gpu_info["cuda"] else "mps" if gpu_info["mps"] else "cpu"
+    return jsonify({"message": "Server is alive", "device": gpu_info["device"]}), 200
