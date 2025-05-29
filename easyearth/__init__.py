@@ -1,8 +1,8 @@
-import connexion
 from flask_cors import CORS
 from flask_marshmallow import Marshmallow
-
 from easyearth.config.log_config import setup_logger
+import connexion
+import uuid
 
 ma = Marshmallow()
 logger = setup_logger()
@@ -12,7 +12,7 @@ def init_api():
     app.add_api('swagger.yaml', 
                 arguments={'title': 'EasyEarth API'},
                 pythonic_params=True,
-                base_path='')
+                base_path='/easyearth')
     CORS(app.app)
     ma.init_app(app.app)
     return app
