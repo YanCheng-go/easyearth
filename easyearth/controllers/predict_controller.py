@@ -125,7 +125,7 @@ def predict():
 
     try:
         data = request.get_json()
-        model_type = data.get('model_type', 'sam')  # 'sam' or 'segmentation'
+        model_type = data.get('model_type', 'sam')  # 'sam' or 'segment'
         image_path = data.get('image_path')
         model_path = data.get('model_path')
         TEMP_DIR = os.path.join(os.environ['BASE_DIR'], 'tmp')
