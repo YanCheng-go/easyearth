@@ -900,13 +900,13 @@ class EasyEarthPlugin:
 
             instance = QgsProject.instance()
 
-            # if len(instance.mapLayersByName(raster_layer.name())) == 0: # checks if the layer already exists
-            if not self.check_group_exists(raster_layer.name()): # checks if a group with the layer name already exists
-                group = instance.layerTreeRoot().addGroup(raster_layer.name()) # creates a group for the layer
-                group.addLayer(raster_layer) # adds the layer to the group
-                # instance.addMapLayer(raster_layer) # adds raster layer to the project
+            if len(instance.mapLayersByName(raster_layer.name())) == 0: # checks if the layer already exists
+            # if not self.check_group_exists(raster_layer.name()): # checks if a group with the layer name already exists
+            #     group = instance.layerTreeRoot().addGroup(raster_layer.name()) # creates a group for the layer
+            #     group.addLayer(raster_layer) # adds the layer to the group
+                instance.addMapLayer(raster_layer) # adds raster layer to the project
             
-            self.on_image_selected()
+            # self.on_image_selected()
 
             # Get image crs and extent
             self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(raster_layer)
