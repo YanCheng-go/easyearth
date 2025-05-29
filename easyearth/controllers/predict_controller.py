@@ -246,7 +246,7 @@ def predict():
             geojson = sam.raster_to_vector(masks, scores, transform, filename=geojson_path)
 
         # --- Segmentation branch ---
-        elif model_type == 'segmentation':
+        elif model_type == 'segment':
             # Initialize Segmentation model
             logger.debug("Initializing Segmentation model")
             segformer = Segmentation(model_path or 'restor/tcd-segformer-mit-b5')
