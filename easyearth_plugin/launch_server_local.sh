@@ -2,6 +2,7 @@
 
 # Virtual environment
 echo "Using base directory: $BASE_DIR"
+chmod +x "$BASE_DIR/easyearth_env/bin/python"
 source "$BASE_DIR/easyearth_env/bin/activate"
 export PATH="$BASE_DIR/easyearth_env/bin:$PATH" # Add virtual environment's python to PATH
 
