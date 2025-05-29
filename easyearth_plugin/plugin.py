@@ -57,8 +57,7 @@ class EasyEarthPlugin:
         self.points = [] # list to store selected points
         self.rubber_bands = []
         self.docker_process = None
-        self.server_port = 3781  # Default port
-        self.server_url = f"http://0.0.0.0:{self.server_port}"
+        self.server_url = f"http://0.0.0.0:3781/easyearth"  # Base URL for the server
         self.docker_running = False
         self.server_running = False
         self.action = None
@@ -202,7 +201,7 @@ class EasyEarthPlugin:
             api_layout = QVBoxLayout()
             api_label = QLabel("API Endpoints:")
             api_label.setStyleSheet("font-weight: bold;")
-            self.api_info = QLabel(f"Base URL: http://0.0.0.0:{self.server_port}\n"
+            self.api_info = QLabel(f"Base URL: {self.server_url}\n"
                                    f"Inference: /predict\n"
                                    f"Health check: /ping")
             self.api_info.setWordWrap(True)
@@ -425,7 +424,7 @@ class EasyEarthPlugin:
         """Check if the server is running by pinging it"""
 
         try:
-            response = requests.get(f"http://0.0.0.0:{self.server_port}/ping", timeout=2)
+            response = requests.get(f"{self.server_url}/ping", timeout=2)
 
             if response.status_code == 200:
                 self.server_status.setText("Online")
@@ -438,9 +437,7 @@ class EasyEarthPlugin:
                 # check GPU message in the response
                 if 'device' in response.json():
                     gpu_message = response.json()['device']
-                    self.iface.messageBar().pushMessage("Info", f"Device: {gpu_message}", level=Qgis.Info, duration=5)
-                    # add GPU message to the server status label
-                    self.server_status.setText(f"Online - Device: {gpu_message}")
+                    self.server_status.setText(f"Online - Device: {gpu_message}") # adds GPU message to the server status label
                 else:
                     self.iface.messageBar().pushMessage("Info", "No device info available", level=Qgis.Info, duration=5)
                 
@@ -563,7 +560,7 @@ class EasyEarthPlugin:
                 self.docker_running = True
 
         if self.local_mode_button.isChecked():
-            # Download additional code
+            # Download server code
             repo_url = "https://github.com/YanCheng-go/easyearth/archive/refs/heads/master.zip"
             zipped_repo_path = os.path.join(self.base_dir, 'easyearth-master.zip')
             repo_path = os.path.join(self.base_dir, 'easyearth-master')
@@ -579,6 +576,7 @@ class EasyEarthPlugin:
                 self.iface.messageBar().pushMessage(f"Unzipped repo to {repo_path}", level=Qgis.Info)
                 shutil.move(os.path.join(repo_path, "easyearth"), easyearth_folder_path)
                 shutil.rmtree(repo_path)
+                os.remove(zipped_repo_path)
                 self.iface.messageBar().pushMessage(f"Moved easyearth folder out of repo to {easyearth_folder_path}", level=Qgis.Info)
 
             # Download env
@@ -592,6 +590,12 @@ class EasyEarthPlugin:
                 
                 with zipfile.ZipFile(zipped_env_path, 'r') as zip_ref:
                     zip_ref.extractall(self.base_dir)
+
+                os.remove(zipped_env_path)  # remove the zip file after extraction
+
+                for path in os.listdir(self.base_dir):
+                    if path.startswith('_'):
+                        shutil.rmtree(os.path.join(self.base_dir, path))  # remove any hidden directories that start with '_'
 
                 self.iface.messageBar().pushMessage(f"Unzipped environment to {env_path}", level=Qgis.Info)
 
@@ -1591,7 +1595,7 @@ class EasyEarthPlugin:
                 self.logger.debug(f"Prompts: {json.dumps(prompts, indent=2)}")
                 formatted_payload = (
                     f"Sending to server:\n"
-                    f"- Host image path: {image_path}\n"
+                    f"- Host image path: {container_image_path}\n"
                     f"- Host embedding path: {embedding_path}\n"
                     f"- (re)Save embeddings: {save_embeddings}\n"
                     f"- Prompts: {json.dumps(prompts, indent=2)}\n"
@@ -1608,9 +1612,7 @@ class EasyEarthPlugin:
 
             # Send request to SAM server
             try:
-                predict_url = f"{self.server_url}/predict"
-
-                response = requests.post(predict_url, json=payload, timeout=6000000)
+                response = requests.post(f"{self.server_url}/predict", json=payload, timeout=6000000)
 
                 self.logger.debug(f"Server response status: {response.status_code}")
                 self.logger.debug(f"Server response text: {response.text}")
