@@ -498,9 +498,11 @@ class EasyEarthPlugin:
             #     loading = subprocess.run([f'{self.docker_path}', 'load', '-i', docker_image_path], capture_output=True, text=True) # loads the docker image into Docker
             #     self.iface.messageBar().pushMessage(f"Loaded Docker image from {docker_image_path}. {loading}", level=Qgis.Info)
 
+            linux_gpu_flags = " --runtime nvidia" if platform.system().lower() == "linux" else ""  # adds GPU support if available and on Linux
+            gpu_flags = " --gpus all" if platform.system().lower() != "darwin" else ""  # adds GPU support if available and not on macOS
             docker_run_cmd = (f"{self.docker_path} rm -f easyearth 2>/dev/null || true && " # removes the container if it already exists
                               f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
-                              f"{self.docker_path} run -d --name easyearth -p 3781:3781 " # runs the container in detached mode and maps port 3781
+                              f"{self.docker_path} run{linux_gpu_flags}{gpu_flags} -d --name easyearth -p 3781:3781 " # runs the container in detached mode and maps port 3781
                               f"-v \"{self.base_dir}\":/usr/src/app/easyearth_base " # mounts the base directory in the container
                               f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
                               f"{self.docker_hub_image_name}")
