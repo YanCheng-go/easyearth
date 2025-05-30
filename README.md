@@ -67,7 +67,7 @@ EasyEarth enables seamless application of cutting-edge computer vision and visio
 - [Documentation](#-documentation)
 - [Roadmap](#-roadmap)
 - [Contributing](#-contributing)
-- [Author](#-author)
+- [Authors](#-authors)
 
 ## 📁 Project Structure
 
@@ -211,7 +211,16 @@ We welcome community contributions! If you'd like to contribute, check out:
 
 ## 🧑‍💻 Authors
 
-Developed by: **Yan Cheng (chengyan2017@gmail.com), Ankit Kariryaa (ankit.ky@gmail.com), Lucia Gordon (luciagordon@g.harvard.edu)**
-[//]: # (🌐 [Website] • [GitHub] • [LinkedIn])
+Developed by: <br>
+**Yan Cheng** ([chengyan2017@gmail.com](mailto:chengyan2017@gmail.com)) – 
+[🌐 Website](https://yancheng-website.com)
+<a href="https://github.com/YanCheng-go" style="margin-left: 0.5em;">
+  <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/github.svg" alt="GitHub" width="20" style="vertical-align: middle;"/> GitHub
+</a>
+<a href="https://www.linkedin.com/in/yancheng" style="margin-left: 0.5em;">
+  <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/linkedin.svg" alt="LinkedIn" width="20" style="vertical-align: middle;"/> LinkedIn
+</a><br>
+**Ankit Kariryaa** ([ankit.ky@gmail.com](mailto:ankit.ky@gmail.com)) – <br> 
+**Lucia Gordon** ([luciagordon@g.harvard.edu](mailto:luciagordon@g.harvard.edu)) – 
 
 ---
