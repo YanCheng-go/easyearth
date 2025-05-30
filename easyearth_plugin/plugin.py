@@ -1350,6 +1350,23 @@ class EasyEarthPlugin:
                                 map_coords.append(map_ring)
                             feature['geometry']['coordinates'] = [[(p.x(), p.y()) for p in ring] for ring in map_coords]
 
+                        elif geom_json and geom_json['type'] == 'MultiPolygon':
+                            map_coords = []
+                            for polygon in geom_json['coordinates']:  # list of polygons
+                                poly_coords = []
+                                for ring in polygon:  # list of rings
+                                    map_ring = []
+                                    for pixel_coord in ring:
+                                        col, row = pixel_coord  # (x, y) = (col, row)
+                                        map_x = extent.xMinimum() + (col * extent.width() / width)
+                                        map_y = extent.yMaximum() - (row * extent.height() / height)
+                                        point = QgsPointXY(map_x, map_y)
+                                        point = transform.transform(point)
+                                        map_ring.append((point.x(), point.y()))
+                                    poly_coords.append(map_ring)
+                                map_coords.append(poly_coords)
+                            feature['geometry']['coordinates'] = map_coords
+
             else:
                 raise ValueError("Invalid layer_type")
 
