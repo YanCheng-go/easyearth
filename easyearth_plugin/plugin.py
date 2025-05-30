@@ -429,7 +429,7 @@ class EasyEarthPlugin:
                     self.server_status.setText(f"Online - Device: {gpu_message}") # adds GPU message to the server status label
                 else:
                     self.iface.messageBar().pushMessage("No device info available", level=Qgis.Info)
-                    self.server_status.setText(f"Online - Device: {gpu_message}")
+                    self.server_status.setText(f"Online - Device: Info not available") # adds GPU message to the server status label
                 if self.base_dir:
                     self.model_group.show()  # Show model selection group when server is online
                     self.image_group.show()  # Show image source group when server is online
@@ -512,6 +512,7 @@ class EasyEarthPlugin:
             
             if result.returncode == 0:
                 self.docker_running = True
+                self.iface.messageBar().pushMessage("SUCCESS", "Docker container started successfully.", level=Qgis.Info)
 
         if self.local_mode_button.isChecked():
             # Download server code
@@ -554,6 +555,9 @@ class EasyEarthPlugin:
                                       text=True,              # decodes output as text, not bytes
                                       start_new_session=True)  # detaches from QGIS
             self.iface.messageBar().pushMessage(f"Starting local server...", level=Qgis.Info)
+
+            if result:
+                self.iface.messageBar().pushMessage("SUCCESS", f"Local server started successfully. Check logs {self.local_server_log_file} for details.", level=Qgis.Info)
 
     def stop_server(self):
         if self.docker_mode_button.isChecked():
@@ -1557,7 +1561,13 @@ class EasyEarthPlugin:
 
             # Show payload in message bar
             if prompts is None or len(prompts) == 0:
-                formatted_payload = "No prompts: running full image prediction\n"
+                formatted_payload = (
+                    f"Sending to server:\n"
+                    f"- Host image path: {container_image_path}\n"
+                    f"- No prompts provided, running prediction without prompts.\n"
+                    f"- Model path: {self.model_path}\n"
+                    f"- Model type: {self.model_type}\n"
+                )
             else:
                 # print prompts to the logger
                 self.logger.debug(f"Prompts: {json.dumps(prompts, indent=2)}")

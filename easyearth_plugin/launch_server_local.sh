@@ -3,7 +3,10 @@
 # Virtual environment
 echo "Using base directory: $BASE_DIR"
 source "$BASE_DIR/easyearth_env/bin/activate"
-export PATH="$BASE_DIR/easyearth_env/bin:$PATH" # Add virtual environment's python to PATH
+# export PATH="$BASE_DIR/easyearth_env/bin:$PATH" # Add virtual environment's python to PATH
+PYTHON_CMD="$BASE_DIR/easyearth_env/bin/python"
+echo "Current Python: $(which python)"
+echo "Python version: $(python --version)"
 
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
   export MODEL_CACHE_DIR="$USERPROFILE/.cache/easyearth/models"
@@ -24,4 +27,5 @@ echo "Created directories"
 
 export PYTORCH_ENABLE_MPS_FALLBACK=1 # enables MPS fallback for PyTorch
 cd "$BASE_DIR"
-python -m easyearth.app --host 0.0.0.0 --port 3781 # runs the application
+# python -m easyearth.app --host 0.0.0.0 --port 3781 # runs the application
+"$PYTHON_CMD" -m easyearth.app --host 0.0.0.0 --port 3781 # runs the application

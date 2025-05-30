@@ -1,20 +1,20 @@
 [general]
 name=EasyEarth
-description=Apply vision models from hugging face for a given prompts created on QGIS canvas
-version=1.0
+description=A plugin for applying vision(-language) models (like segmentation and annotations) on images within QGIS, especially for remote sensing and Earth observations.
+version=0.0.1
 qgisMinimumVersion=3.0
-author=Yan Cheng, Ankit Kariryaa
-email=chengyan2017@gmail.com, ankit.ky@gmail.com
+author=Yan Cheng, Lucia Gordon, Ankit Kariryaa
+email=chengyan2017@gmail.com, luciagordon@g.harvard.edu, ankit.ky@gmail.com
 
-about=This plugin integrates the Segment Anything Model with QGIS for image segmentation.
+about=This plugin integrates multiple vision(-language) models with QGIS for pattern recognition on a given image, such as segmentation.
 
-tracker=https://github.com/ankitkariryaa/easyearth/easyearth_plugin/issues
-repository=https://github.com/ankitkariryaa/easyearth
+tracker=https://github.com/yancheng-go/easyearth/issues
+repository=https://github.com/yancheng-go/easyearth
 
 hasProcessingProvider=no
-tags=segmentation,machine learning,SAM
+tags=segmentation,SAM, deep learning, annotations, image analysis, remote sensing, AI, vision models, hugging face
 
-homepage=https://github.com/ankitkariryaa/easyearth
+homepage=https://github.com/yancheng-go/easyearth
 category=Plugins
 icon=resources/icons/easyearth.png
 

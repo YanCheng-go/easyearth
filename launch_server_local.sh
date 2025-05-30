@@ -10,7 +10,7 @@ fi
 # Virtual environment
 if [ ! -d "easyearth_env" ]; then # checks if easyearth_env already exists
     echo "Creating virtual environment 'easyearth_env'..."
-    python3 -m venv easyearth_env
+    python3 -m venv --copies easyearth_env
     source easyearth_env/bin/activate
     pip install --upgrade pip
     pip install torch torchvision torchaudio
