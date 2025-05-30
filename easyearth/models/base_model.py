@@ -26,7 +26,8 @@ class BaseModel:
         self.device = self._get_device()
 
         # Get environment variables from docker container
-        self.cache_dir = os.environ.get('MODEL_CACHE_DIR', '~/.cache/huggingface/hub')
+        self.cache_dir = os.environ.get('MODEL_CACHE_DIR', os.path.join(os.path.expanduser("~"), ".cache", "easyearth", "models"))
+        self.logger.info(f"Model cache directory: {self.cache_dir}")
 
     # TODO: figure out why GPU is not working on my computer
     def _setup_cuda(self):
