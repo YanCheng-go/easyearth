@@ -3,7 +3,7 @@
 # Virtual environment
 echo "Using base directory: $BASE_DIR"
 source "$BASE_DIR/easyearth_env/bin/activate"
-# export PATH="$BASE_DIR/easyearth_env/bin:$PATH" # Add virtual environment's python to PATH
+export PATH="$BASE_DIR/easyearth_env/bin:$PATH" # Add virtual environment's python to PATH
 PYTHON_CMD="$BASE_DIR/easyearth_env/bin/python"
 echo "Current Python: $(which python)"
 echo "Python version: $(python --version)"
