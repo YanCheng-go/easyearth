@@ -2,20 +2,34 @@ EasyEarth Developer Guide
 =========================
 This guide provides instructions for developers to set up and run the EasyEarth server outside of QGIS, including how to use the model APIs.
 
-## Build the Docker image
+## 🐳 Set Up Docker Server
+This will install Docker, build the image, and launch the EasyEarth server.
 If you make changes to the code, you can rebuild the Docker image using:
 ```bash
 cd easyearth  # go to the directory where docker-compose.yml is located
-./setup.sh  # run the setup.sh script to rebuild the Docker image
+./setup.sh  # run the setup.sh script to rebuild the Docker image, remember to setup the data folder.
 ```
-
-## Start the Server
+stop the server first if it is running:
 ```bash
 cd easyearth  # go to the directory where docker-compose.yml is located
-./setup.sh  # remember to setup the data folder.
+sudo docker-compose down  # stop the docker container
 ```
 
-## ✨ Test server and model APIs
+## Run local server without Docker
+1. Create a local python environment:
+```bash
+cd easyearth  # go to the directory where requirements.txt is located
+python -m venv --copies easyearth_env  # Create a virtual environment, remember to use `--copies` to avoid issues with symlinks
+source easyearth_env/bin/activate  # Activate the virtual environment
+pip install -r requirements.txt  # Install the required packages
+```
+2. Launch the server, this bash also checks if the python environment exists and activates it:
+```bash
+cd easyearth  # go to the directory where requirements.txt is located
+chmod +x ./launch_server_local.sh && ./launch_server_local.sh
+```
+
+## 🧪 Test the Server and model APIs
 ### 📍 Use SAM with Prompts
 
 ```bash
@@ -54,33 +68,27 @@ You can also access the Swagger UI to test the APIs:
 http://localhost:3781/v1/easyearth/ui
 ```
 
-
-## 🔌 Run EasyEarth Outside QGIS
-
-You can also run EasyEarth server headlessly:
-
-1. Start the Docker container
-```bash
-cd easyearth_plugin  # go to the directory where the repo is located
-sudo TEMP_DIR=/custom/temp/data DATA_DIR=/custom/data/path LOG_DIR=/custom/log/path MODEL_DIR=/custom/cache/path docker-compose up -d # start the container while mounting the custom directories.
-```
-2. Use Rest API to send requests to the server, check [Model APIs](#-model-apis) for more details.
-
-
-### ✅ Health Check
-Check if the server is running, the response should be `Server is alive`
-
-```bash
-curl -X GET http://127.0.0.1:3781/v1/easyearth/ping
-```
-
 ---
 
-## Create local environment for running EasyEarth without Docker
-To create a local environment for development, you can use the following steps:
+## 🛠 Useful Docker Commands
+
 ```bash
-cd easyearth  # go to the directory where requirements.txt is located
-python -m venv --copies easyearth_env  # Create a virtual environment, remember to use `--copies` to avoid issues with symlinks
-source easyearth_env/bin/activate  # Activate the virtual environment
-pip install -r requirements.txt  # Install the required packages
+
+# List containers
+docker ps -a
+# List images
+docker images
+# Remove all containers
+docker rm $(docker ps -a -q)
+# Remove all images
+docker rmi $(docker images -q)
+# Remove all volumes
+docker volume rm $(docker volume ls -q)
+# Inspect container
+sudo docker inspect <container_id>
+# Access container shell
+sudo docker exec -it <container_id_or_name> /usr/src/app
+# Run in an interactive mode
+sudo docker run -it --entrypoint /bin/bash --rm -v /path/to/your/easyearth_base:/usr/src/app/data maverickmiaow/easyearth:latest
+
 ```
