@@ -1561,7 +1561,13 @@ class EasyEarthPlugin:
 
             # Show payload in message bar
             if prompts is None or len(prompts) == 0:
-                formatted_payload = "No prompts: running full image prediction\n"
+                formatted_payload = (
+                    f"Sending to server:\n"
+                    f"- Host image path: {container_image_path}\n"
+                    f"- No prompts provided, running prediction without prompts.\n"
+                    f"- Model path: {self.model_path}\n"
+                    f"- Model type: {self.model_type}\n"
+                )
             else:
                 # print prompts to the logger
                 self.logger.debug(f"Prompts: {json.dumps(prompts, indent=2)}")
