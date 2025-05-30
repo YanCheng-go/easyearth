@@ -2,7 +2,6 @@ from flask_cors import CORS
 from flask_marshmallow import Marshmallow
 from easyearth.config.log_config import setup_logger
 import connexion
-import uuid
 
 ma = Marshmallow()
 logger = setup_logger()

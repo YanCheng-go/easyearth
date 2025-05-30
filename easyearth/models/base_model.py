@@ -8,11 +8,9 @@ from rasterio import features
 import logging
 from typing import Optional, Union, List, Dict, Any
 from pathlib import Path
-import os 
-from datetime import datetime
+import os
 import warnings
 import torch.backends.mps
-from easyearth.config.log_config import setup_logger
 
 class BaseModel:
     def __init__(self, model_path: str):
@@ -21,7 +19,7 @@ class BaseModel:
             model_path: Path or name of the model to load
         """
         self.model_path = model_path
-        self.logger = setup_logger(name="easyearth_model")
+        self.logger = logging.getLogger("easyearth")
         
         # Set CUDA device before any other CUDA operations
         self._setup_cuda()
