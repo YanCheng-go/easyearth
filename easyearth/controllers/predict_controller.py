@@ -9,9 +9,9 @@ import requests
 import os
 import json
 from datetime import datetime
-from easyearth.config.log_config import setup_logger
+import logging
 
-logger = setup_logger(name="predict-controller")
+logger = logging.getLogger("easyearth")
 
 def verify_image_path(image_path):
     """Verify the image path and check if it is a valid URL or local file. Remember to convert the image path the path in the docker container"""
