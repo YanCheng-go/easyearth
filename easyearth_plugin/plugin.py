@@ -429,7 +429,7 @@ class EasyEarthPlugin:
                     self.server_status.setText(f"Online - Device: {gpu_message}") # adds GPU message to the server status label
                 else:
                     self.iface.messageBar().pushMessage("No device info available", level=Qgis.Info)
-                    self.server_status.setText(f"Online - Device: {gpu_message}")
+                    self.server_status.setText(f"Online - Device: Info not available") # adds GPU message to the server status label
                 if self.base_dir:
                     self.model_group.show()  # Show model selection group when server is online
                     self.image_group.show()  # Show image source group when server is online
