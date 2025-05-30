@@ -85,13 +85,13 @@ class EasyEarthPlugin:
             
         self.model_path = None
         self.model_type = None
-        self.feature_count = 0 # for generating unique IDs
-        self.prompt_count = 0 # for generating unique IDs
+        self.feature_count = {} # for generating unique IDs
+        self.prompt_count = {} # for generating unique IDs
         self.temp_prompts_geojson = None # temporary file for storing prompts
         self.temp_predictions_geojson = None
         self.last_pred_time = 0  # timestamp when the real-time prediction is unchecked. or the last batch prediction was done
-        self.prompts_layer = None
-        self.predictions_layer = None
+        self.prompts_layer = {}
+        self.predictions_layer = {}
         self.point_tool = QgsMapToolEmitPoint(self.canvas) # captures mouse clicks on the map canvas and gets the coordinates
         self.point_tool.canvasClicked.connect(self.on_point_drawn) # sets the function to be called when the map is clicked
         self.box_tool = BoxMapTool(self.canvas, self.on_box_drawn) # connects the box drawing tool to the function that handles the drawn box
@@ -103,7 +103,6 @@ class EasyEarthPlugin:
         self.temp_rubber_band.setWidth(2) # width of the rubber band for temporary boxes
         self.start_point = None
         self.predictions_geojson = None
-        self.predictions_layer = None
         self.prompts_geojson = None
 
         # initialize image crs and extent
@@ -535,7 +534,7 @@ class EasyEarthPlugin:
                 self.iface.messageBar().pushMessage(f"Moved easyearth folder out of repo to {easyearth_folder_path}", level=Qgis.Info)
 
             # Download env
-            env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/env-v2/easyearth_env.tar.gz'
+            env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/env-v3/easyearth_env.tar.gz'
             zipped_env_path = os.path.join(self.base_dir, 'easyearth_env.tar.gz')
             env_path = os.path.join(self.base_dir, 'easyearth_env')
 
@@ -615,7 +614,7 @@ class EasyEarthPlugin:
                 self.initialize_embedding_path()
                 self.deactivate_embedding_section() if not self.is_sam_model() else None
 
-            self.cleanup_previous_session() # clears any existing layers
+            # self.cleanup_previous_session() # clears any existing layers
 
         except Exception as e:
             self.logger.error(f"Error in image source change: {str(e)}")
@@ -816,9 +815,8 @@ class EasyEarthPlugin:
         for group in QgsProject.instance().layerTreeRoot().children():
             for layer in group.children():
                 if layer.name() == os.path.basename(self.image_path.text()):
-                    selected_layer = layer
+                    selected_layer = layer.layer()
 
-        # selected_layer = QgsProject.instance().mapLayersByName(os.path.basename(self.image_path.text()))[0]
         self.iface.setActiveLayer(selected_layer) # sets the selected layer as the active layer
         self.iface.messageBar().pushMessage(f"Selected layer {selected_layer.name()} with ID {selected_layer.id()}", level=Qgis.Info)
         
@@ -844,18 +842,12 @@ class EasyEarthPlugin:
             self.iface.mapCanvas().setExtent(extent)
             self.iface.mapCanvas().refresh()
         
-        # root = QgsProject.instance().layerTreeRoot()
-        # layer_tree_layer = root.findLayer(selected_layer.id())
-        
-        # if layer_tree_layer:
-        #     clone = layer_tree_layer.clone()
-        #     parent = layer_tree_layer.parent()
-            
-        #     # Remove original and insert clone at top
-        #     parent.insertChildNode(0, clone)
-        #     parent.removeChildNode(layer_tree_layer)
-        
-        # self.iface.mapCanvas().refresh()    
+        # Reorder the group to be at the top
+        root = QgsProject.instance().layerTreeRoot()
+        group = root.findGroup(selected_layer.name())
+        root.insertChildNode(0, group.clone())  # inserts the group at the top of the layer tree
+        group.parent().removeChildNode(group) # removes the original group
+        self.iface.mapCanvas().refresh()
         
     def browse_image(self):
         """Open file dialog for image selection"""
@@ -898,7 +890,8 @@ class EasyEarthPlugin:
             if not image_path:
                 return
 
-            raster_layer = QgsRasterLayer(image_path, os.path.basename(image_path)) # loads the image as a raster layer
+            layer_name = os.path.basename(image_path)
+            raster_layer = QgsRasterLayer(image_path, layer_name) # loads the image as a raster layer
 
             if not raster_layer.isValid():
                 QMessageBox.warning(None, "Error", "Invalid raster layer")
@@ -906,13 +899,13 @@ class EasyEarthPlugin:
 
             instance = QgsProject.instance()
 
-            if len(instance.mapLayersByName(raster_layer.name())) == 0: # checks if the layer already exists
-            # if not self.check_group_exists(raster_layer.name()): # checks if a group with the layer name already exists
-            #     group = instance.layerTreeRoot().addGroup(raster_layer.name()) # creates a group for the layer
-            #     group.addLayer(raster_layer) # adds the layer to the group
-                instance.addMapLayer(raster_layer) # adds raster layer to the project
+            if len(instance.mapLayersByName(raster_layer.name())) == 0:
+                instance.addMapLayer(raster_layer, False) # False = don't auto-add to legend
+                root = instance.layerTreeRoot()
+                group = root.insertGroup(0, layer_name)
+                group.addLayer(raster_layer) # adds the layer to the group
             
-            # self.on_image_selected()
+            self.on_image_selected()
 
             # Get image crs and extent
             self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(raster_layer)
@@ -1067,6 +1060,9 @@ class EasyEarthPlugin:
                 px = max(0, min(px, width - 1))
                 py = max(0, min(py, height - 1))
 
+                if os.path.basename(self.image_path.text()) not in self.prompt_count.keys():
+                    self.prompt_count[os.path.basename(self.image_path.text())] = 0
+
                 # Show coordinates in message bar
                 self.iface.messageBar().pushMessage("Point Info",
                                                     f"Map coordinates: ({point.x():.2f}, {point.y():.2f})\n"
@@ -1082,7 +1078,7 @@ class EasyEarthPlugin:
                         "coordinates": [point.x(), point.y()]
                     },
                     "properties": {
-                        "id": self.prompt_count,
+                        "id": self.prompt_count[os.path.basename(self.image_path.text())],
                         "type": "Point",
                         "pixel_x": px,
                         "pixel_y": py,
@@ -1093,7 +1089,7 @@ class EasyEarthPlugin:
 
                 point_feature["properties"]["timestamp"] = time.time() # adds timestamp to prompt feature
                 self.add_features_to_layer([point_feature], "prompts") # adds point to layer
-                self.prompt_count += + 1 # increments prompt counter
+                self.prompt_count[os.path.basename(self.image_path.text())] += + 1 # increments prompt counter
 
                 # Prepare prompt for server
                 prompt = [{'type': 'Point', 'data': {"points": [[px, py]]}}]
@@ -1112,7 +1108,7 @@ class EasyEarthPlugin:
     def undo_last_drawing(self):
         """Undo the last drawing action by removing the last point or box"""
 
-        if self.prompt_count == 0:
+        if self.prompt_count[os.path.basename(self.image_path.text())] == 0:
             self.iface.messageBar().pushMessage("Undo Last Drawing", "No drawings to undo.", level=Qgis.Warning, duration=3)
             return
 
@@ -1120,12 +1116,12 @@ class EasyEarthPlugin:
         last_prediction_ID = map_id(self.prompts_geojson['features']) # finds the last prediction feature ID using map_id
 
         self.prompts_geojson['features'] = self.prompts_geojson['features'][:-1] # removes the last point from the prompts geojson
-        self.prompt_count = self.prompt_count - 1 if self.prompt_count > 0 else 0  # decrements the prompt counter
+        self.prompt_count[os.path.basename(self.image_path.text())] = self.prompt_count[os.path.basename(self.image_path.text())] - 1 if self.prompt_count[os.path.basename(self.image_path.text())] > 0 else 0  # decrements the prompt counter
         self.add_features_to_layer([], "prompts") # updates the prompts layer
         
         if self.realtime_checkbox.isChecked():
             self.predictions_geojson['features'] = self.predictions_geojson['features'][:-1] # removes the last point from the prompts geojson
-            self.feature_count = self.feature_count - 1 if self.feature_count > 0 else 0
+            self.feature_count[os.path.basename(self.image_path.text())] = self.feature_count[os.path.basename(self.image_path.text())] - 1 if self.feature_count[os.path.basename(self.image_path.text())] > 0 else 0
             self.add_features_to_layer([], "predictions")
         else:
             if self.predictions_geojson:
@@ -1138,7 +1134,7 @@ class EasyEarthPlugin:
                     return
                 
                 self.predictions_geojson['features'] = [f for f in self.predictions_geojson['features'] if f['properties']['id'] != last_prediction_id] # removes the last prediction feature from predictions_geojson
-                self.feature_count = self.feature_count - 1 if self.feature_count > 0 else 0 # updates the feature count
+                self.feature_count[os.path.basename(self.image_path.text())] = self.feature_count[os.path.basename(self.image_path.text())] - 1 if self.feature_count[os.path.basename(self.image_path.text())] > 0 else 0 # updates the feature count
                 self.add_features_to_layer([], "predictions") # updates the predictions layer
 
     def on_box_drawn(self, box_geom, start_point, end_point):
@@ -1200,7 +1196,7 @@ class EasyEarthPlugin:
             "type": "Feature",
             "geometry": json.loads(box_geom.asJson()),
             "properties": {
-                "id": self.prompt_count,
+                "id": self.prompt_count[os.path.basename(self.image_path.text())],
                 "type": "Box",
                 "pixel_x": pixel_x,
                 "pixel_y": pixel_y,
@@ -1211,7 +1207,7 @@ class EasyEarthPlugin:
         }
 
         self.add_features_to_layer([feature], "prompts") # adds prompt feature to layer
-        self.prompt_count += 1 # increments prompt counter
+        self.prompt_count[os.path.basename(self.image_path.text())] += 1 # increments prompt counter
 
         # Prepare prompt for server
         prompt = [{
@@ -1247,8 +1243,8 @@ class EasyEarthPlugin:
             if layer_type == 'prompts':
                 geojson_attr = 'prompts_geojson'
                 temp_geojson = self.temp_prompts_geojson
-                layer_attr = 'prompts_layer'
-                layer_name = "Drawing Prompts"
+                layer_type = 'prompts_layer'
+                layer_name = f"{os.path.basename(self.image_path.text())}_prompts"
                 style_func = self.style_prompts_layer
                 
                 # Ensure 'type' property for styling
@@ -1297,24 +1293,25 @@ class EasyEarthPlugin:
             elif layer_type == 'predictions':
                 geojson_attr = 'predictions_geojson'
                 temp_geojson = self.temp_predictions_geojson
-                layer_attr = 'predictions_layer'
-                layer_name = "SAM Predictions"
+                layer_type = 'predictions_layer'
+                layer_name = f"{os.path.basename(self.image_path.text())}_predictions"
                 style_func = self.style_predictions_layer
 
                 # Assign unique ids
-                if not hasattr(self, 'feature_count'):
-                    self.feature_count = 0
+                if os.path.basename(self.image_path.text()) not in self.feature_count.keys():
+                # if not hasattr(self, 'feature_count'):
+                    self.feature_count[os.path.basename(self.image_path.text())] = 0
 
-                start_id = self.feature_count
+                start_id = self.feature_count[os.path.basename(self.image_path.text())]
                 features = [{
                     "type": "Feature",
                     "properties": {
-                        "id": start_id + i,
+                        "id": start_id + i, # TODO: ID THING IS MESSED UP NOW BECAUSE DIFFERENT IMAGES HAVE DIFFERENT COUNTS
                         # "scores": feat.get('properties', {}).get('scores', 0),  # TODO： if scores are available in the feature properties
                     },
                     "geometry": feat['geometry']
                 } for i, feat in enumerate(features)]
-                self.feature_count += len(features)
+                self.feature_count[os.path.basename(self.image_path.text())] += len(features)
 
                 # TODO: fix no coordinate system input impact to 4326
                 # Transform pixel to map coordinates for polygons if feature_crs is None
@@ -1371,7 +1368,7 @@ class EasyEarthPlugin:
                 json.dump(geojson, f)
 
             # Create or update layer
-            layer = getattr(self, layer_attr, None)
+            layer = getattr(self, layer_type).get(os.path.basename(self.image_path.text()), None)
             
             if not layer:
                 layer = QgsVectorLayer(temp_geojson, layer_name, "ogr")
@@ -1380,8 +1377,13 @@ class EasyEarthPlugin:
 
                 if not layer.isValid():
                     raise ValueError("Failed to create valid vector layer")
-                QgsProject.instance().addMapLayer(layer)
-                setattr(self, layer_attr, layer)
+                
+                instance = QgsProject.instance()
+                instance.addMapLayer(layer, False) # False = don't auto-add to legend
+                instance.layerTreeRoot().findGroup(os.path.basename(self.image_path.text())).insertLayer(0, layer) # adds the layer to the top of the group
+                current_dict = getattr(self, layer_type, {})
+                current_dict[os.path.basename(self.image_path.text())] = layer
+                setattr(self, layer_type, current_dict) # updates the layer dictionary
             else:
                 layer.dataProvider().reloadData()
                 layer.updateExtents()
@@ -1429,7 +1431,7 @@ class EasyEarthPlugin:
         prompts = []
 
         if self.prompts_layer:
-            for feature in self.prompts_layer.getFeatures():
+            for feature in self.prompts_layer[os.path.basename(self.image_path.text())].getFeatures():
                 # Check if the feature is new
                 timestamp = feature.attribute('timestamp')
 
@@ -1725,13 +1727,13 @@ class EasyEarthPlugin:
         """Prepare for prediction and prompt layers"""
         try:
             # Clean up existing layers first
-            if hasattr(self, 'prompts_layer') and self.prompts_layer:
-                QgsProject.instance().removeMapLayer(self.prompts_layer)
-                self.prompts_layer = None
+            # if hasattr(self, 'prompts_layer') and self.prompts_layer:
+            #     QgsProject.instance().removeMapLayer(self.prompts_layer)
+            #     self.prompts_layer = None
 
-            if hasattr(self, 'predictions_layer') and self.predictions_layer:
-                QgsProject.instance().removeMapLayer(self.predictions_layer)
-                self.predictions_layer = None
+            # if hasattr(self, 'predictions_layer') and self.predictions_layer:
+            #     QgsProject.instance().removeMapLayer(self.predictions_layer)
+            #     self.predictions_layer = None
 
             # Reset the GeoJSON data
             self.prompts_geojson = None
@@ -1742,8 +1744,8 @@ class EasyEarthPlugin:
             self.temp_prompts_geojson = os.path.join(self.tmp_dir, f'prompts_{timestamp}.geojson')
             self.temp_predictions_geojson = os.path.join(self.tmp_dir, f'predictions_{timestamp}.geojson')
 
-            self.feature_count = 0 # resets feature counter
-            self.prompt_count = 0 # resets prompt counter
+            # self.feature_count = 0 # resets feature counter
+            # self.prompt_count = 0 # resets prompt counter
 
             self.logger.info(f"Prepared file paths: \n"
                              f"Prompts: {self.temp_prompts_geojson}\n"
