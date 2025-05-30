@@ -75,3 +75,12 @@ curl -X GET http://127.0.0.1:3781/v1/easyearth/ping
 ```
 
 ---
+
+## Create local environment for running EasyEarth without Docker
+To create a local environment for development, you can use the following steps:
+```bash
+cd easyearth  # go to the directory where requirements.txt is located
+python -m venv --copies easyearth_env  # Create a virtual environment, remember to use `--copies` to avoid issues with symlinks
+source easyearth_env/bin/activate  # Activate the virtual environment
+pip install -r requirements.txt  # Install the required packages
+```
