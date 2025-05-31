@@ -1042,30 +1042,6 @@ class EasyEarthPlugin:
             self.draw_button.setChecked(False)
             self.draw_button.setText("Start Drawing")
 
-    def box_to_aoi_feature(self, box_geom):
-        """Convert a box geometry to an Area of Interest (AOI) feature
-        Args:
-            box_geom (QgsGeometry): The geometry of the box to convert
-        Returns:
-            tuple: A tuple representing the AOI feature in pixel coordinates (x_min, y_min, x_max, y_max)
-        """
-        extent, width, height, raster_crs = self.raster_extent, self.raster_width, self.raster_height, self.raster_crs
-        # Convert the box geometry to a polygon and get its coordinates
-        box_coords = box_geom.asPolygon()[0]  # gets the polygon coordinates of the buffer
-        box_coords = (box_coords[0].x(), box_coords[0].y(), box_coords[2].x(), box_coords[2].y())  # converts to tuple
-        # calculate pixel coordinates
-        pixel_x = int((box_coords[0] - extent.xMinimum()) * width / extent.width())
-        pixel_y = int((extent.yMaximum() - box_coords[1]) * height / extent.height())
-        pixel_width = int((box_coords[2] - box_coords[0]) * width / extent.width())
-        pixel_height = int((box_coords[1] - box_coords[3]) * height / extent.height())
-        # Ensure coordinates are within image bounds
-        pixel_x = max(0, min(pixel_x, width - 1))
-        pixel_y = max(0, min(pixel_y, height - 1))
-        pixel_width = max(1, min(pixel_width, width - pixel_x))
-        pixel_height = max(1, min(pixel_height, height - pixel_y))
-        aoi_feature = (pixel_x, pixel_y, pixel_x + pixel_width, pixel_y + pixel_height)
-        return aoi_feature
-
     # TODO: use this generic function to convert any geometry to pixel coordinates
     def map_geom_to_pixel_coords(self, box_geom):
         """
