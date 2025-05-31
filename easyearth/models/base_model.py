@@ -1,5 +1,7 @@
 """Base class for segmentation models"""
+from collections import defaultdict
 
+import shapely
 import torch
 from PIL import Image
 import numpy as np
@@ -26,7 +28,8 @@ class BaseModel:
         self.device = self._get_device()
 
         # Get environment variables from docker container
-        self.cache_dir = os.environ.get('MODEL_CACHE_DIR', '~/.cache/huggingface/hub')
+        self.cache_dir = os.environ.get('MODEL_CACHE_DIR', os.path.join(os.path.expanduser("~"), ".cache", "easyearth", "models"))
+        self.logger.info(f"Model cache directory: {self.cache_dir}")
 
     # TODO: figure out why GPU is not working on my computer
     def _setup_cuda(self):
@@ -112,10 +115,18 @@ class BaseModel:
                 mask=masks > 0,
             )
 
-        geojson = [
-            {"properties": {"uid": value}, "geometry": polygon}
-            for polygon, value in shape_generator
-        ]
+        label_to_polygons = defaultdict(list)
+        for polygon, value in shape_generator:
+            label_to_polygons[value].append(shapely.geometry.shape(polygon))
+
+        geojson = []
+        for value, polygons in label_to_polygons.items():
+            if len(polygons) == 1:
+                geometry = shapely.geometry.mapping(polygons[0])
+            else:
+                multipolygon = shapely.geometry.MultiPolygon([p for p in polygons])
+                geometry = shapely.geometry.mapping(multipolygon)
+            geojson.append({"properties": {"uid": value}, "geometry": geometry})
 
         if filename:
             # save geojson as .geojson file

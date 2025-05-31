@@ -100,9 +100,11 @@ def reproject_prompts(prompts, transform, image_shape):
 
 def reorganize_prompts(prompts):
     transformed_prompts = {'points': [], 'labels': [], 'boxes': [], 'text': []}
+
     for prompt in prompts:
         prompt_type = prompt.get('type')
         prompt_data = prompt.get('data', {})
+
         if prompt_type == 'Point':
             transformed_prompts['points'].append(prompt_data.get('points', []))
             transformed_prompts['labels'].extend(prompt_data.get('labels', []))
@@ -110,12 +112,14 @@ def reorganize_prompts(prompts):
             transformed_prompts['boxes'].extend(prompt_data.get('boxes', []))
         elif prompt_type == 'Text':
             transformed_prompts['text'].extend(prompt_data.get('text', []))
+
     for key in ['points', 'labels', 'boxes', 'text']:
         if len(transformed_prompts[key]) > 0:
             transformed_prompts[key] = [transformed_prompts[key]]
     if len(transformed_prompts['points']) > 0:
         if np.array(transformed_prompts['points']).shape[1] == 1:
             transformed_prompts['points'] = transformed_prompts['points'][0]
+            
     return transformed_prompts
 
 # --- Unified predict endpoint ---
