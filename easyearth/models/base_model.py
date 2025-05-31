@@ -126,6 +126,7 @@ class BaseModel:
             if len(polygons) == 1:
                 geometry = shapely.geometry.mapping(polygons[0])
             else:
+                # If there are multiple polygons, create a MultiPolygon
                 multipolygon = shapely.geometry.MultiPolygon([p for p in polygons])
                 geometry = shapely.geometry.mapping(multipolygon)
                 

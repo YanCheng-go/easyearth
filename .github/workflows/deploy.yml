@@ -1,18 +1,17 @@
 name: Build and Deploy Docker Image
 
 on:
-     push:
-         branches:
-         - yan
-         - lucia
-         paths:
-         - 'Dockerfile'
- #        - 'docker-compose.yml'
-         - 'environment.yml'
-         - 'requirements.txt'
-         - 'easyearth/**'
-         - '.github/workflows/deploy.yml'
-     pull_request:
+#     push:
+#         branches:
+#         - yan
+#         - lucia
+#         paths:
+#         - 'Dockerfile'
+# #        - 'docker-compose.yml'
+#         - 'environment.yml'
+#         - 'requirements.txt'
+#         - 'easyearth/**'
+    pull_request:
         branches:
         - master
         paths:
@@ -21,7 +20,7 @@ on:
         - 'environment.yml'
         - 'requirements.txt'
         - 'easyearth/**'
-        -  '.github/workflows/deploy.yml'
+        - '.github/workflows/deploy.yml'
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -38,24 +37,22 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    - name: Build image with a branch tag
-      if: github.ref_name == 'yan'
+    - name: Build image with test tag
       run: |
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/easyearth:${{ github.ref_name }} .
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/easyearth:test .
 
-    # Tag and push as 'latest' only on master
-    - name: Tag image as latest
-      if: github.ref_name == 'master'
+#    - name: Run server and tests in Docker container
+#      run: |
+#        docker run --rm -p 3781:3781 ${{ secrets.DOCKER_USERNAME }}/easyearth:test sh -c "
+#          python -m easyearth.app --host 0.0.0.0 --port 3781 &
+#          sleep 10
+#          python3 easyearth/tests/test_sam_server.py
+#        "
+
+    - name: Tag as lastest after tests pass
       run: |
-        docker tag ${{ secrets.DOCKER_USERNAME }}/easyearth:master ${{ secrets.DOCKER_USERNAME }}/easyearth:latest
+        docker tag ${{ secrets.DOCKER_USERNAME }}/easyearth:test ${{ secrets.DOCKER_USERNAME }}/easyearth:latest
 
-    # Push branch-tagged image (including master for traceability, optional)
-    - name: Push branch-tagged image
-      if: github.ref_name == 'yan'
-      run: |
-        docker push ${{ secrets.DOCKER_USERNAME }}/easyearth:${{ github.ref_name }}
-
-    - name: Push image as latest
-      if: github.ref_name == 'master'
+    - name: Push latest image
       run: |
         docker push ${{ secrets.DOCKER_USERNAME }}/easyearth:latest
