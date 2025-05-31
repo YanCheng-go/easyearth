@@ -11,11 +11,12 @@
   - **Response**: Returns a simple message indicating the server status.
   - **Example**:
     ```bash
-    curl http://localhost:3781/v1/easyearth/ping
+    curl http://localhost:3781/easyearth/ping
     ```
     ```json
     {
-      "message": "EasyEarth server is running"
+      "message": "Server is alive.",
+      "device":"CUDA" // Indicates the device being used (e.g., "CUDA" for GPU, MPS for Apple Silicon, "CPU" for CPU)
     }
     ```
 - /predict
@@ -34,14 +35,21 @@
           "data": {
             "points": [[x, y]]  // Coordinates for the point prompt
           }
+        },
+        {
+          "type": "Box",       // Type of prompt (e.g., "Box")
+          "data": {
+            "boxes": [[x1, y1, x2, y2]] // Coordinates for the bounding box prompt
+          }
         }
-      ]
+      ],
+      "aoi": (x1, y1, x2, y2), // Optional, area of interest for segmentation models
     }
     ```
     - **Response**: Returns the prediction results.
     - **Example**:
     ```bash
-    curl -X POST http://localhost:3781/v1/easyearth/predict \
+    curl -X POST http://localhost:3781/easyearth/predict \
     -H "Content-Type: application/json" \
     -d '{
       "model_type": "sam",

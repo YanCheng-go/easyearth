@@ -33,13 +33,13 @@ chmod +x ./launch_server_local.sh && ./launch_server_local.sh
 ### 📍 Use SAM with Prompts
 
 ```bash
-curl -X POST http://127.0.0.1:3781/v1/easyearth/predict \
+curl -X POST http://127.0.0.1:3781/easyearth/predict \
 -H "Content-Type: application/json" \
 -d '{
   "model_type": "sam",
   "image_path": "/usr/src/app/data/DJI_0108.JPG",
   "embedding_path": "/usr/src/app/data/embeddings/DJI_0108.pt",
-  "model_path": "facebook/sam-vit-large",
+  "model_path": "facebook/sam-vit-base",
   "prompts": [{
     "type": "Point",
     "data": {
@@ -52,20 +52,21 @@ curl -X POST http://127.0.0.1:3781/v1/easyearth/predict \
 ### 🚫 Use Models Without Prompts
 
 ```bash
-curl -X POST http://127.0.0.1:3781/v1/easyearth/predict \
+curl -X POST http://127.0.0.1:3781/easyearth/predict \
 -H "Content-Type: application/json" \
 -d '{
   "model_type": "segment",
-  "image_path": "/usr/src/app/data//DJI_0108.JPG",
+  "image_path": "/usr/src/app/data/DJI_0108.JPG",
   "model_path": "restor/tcd-segformer-mit-b2",
-  "prompts": []
+  "prompts": [],
+  "aoi": (0, 0, 1000, 1000)
 }'
 ```
 
 ## Swagger UI
 You can also access the Swagger UI to test the APIs:
 ```bash
-http://localhost:3781/v1/easyearth/ui
+http://localhost:3781/easyearth/ui
 ```
 
 ---
