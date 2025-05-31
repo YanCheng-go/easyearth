@@ -1548,8 +1548,11 @@ class EasyEarthPlugin:
             QMessageBox.critical(None, "Error", f"Failed to run prediction: {str(e)}")
 
     def get_prediction(self, prompts):
-        for prompt in prompts:
-            self.get_prediction_per_prompt([prompt])
+        if len(prompts) == 0:
+            self.get_prediction_per_prompt(prompts)
+        else:
+            for prompt in prompts:
+                self.get_prediction_per_prompt([prompt])
 
     def get_prediction_per_prompt(self, prompts):
         """Get prediction from SAM server and add to predictions layer
