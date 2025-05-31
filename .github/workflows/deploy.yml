@@ -11,7 +11,7 @@ on:
          - 'environment.yml'
          - 'requirements.txt'
          - 'easyearth/**'
-    pull_request:
+     pull_request:
         branches:
         - master
         paths:
