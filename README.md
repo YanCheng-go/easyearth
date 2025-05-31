@@ -4,6 +4,33 @@
   <img src="./easyearth_plugin/resources/icons/easyearth.png" alt="EasyEarth Logo" width="200"/>
 </p>
 
+<p align="center">
+  <a href="https://github.com/YanCheng-go/easyearth/actions/workflows/deploy.yml">
+    <img src="https://github.com/YanCheng-go/easyearth/actions/workflows/deploy.yml/badge.svg" alt="CI Status"/>
+  </a>
+  <a href="https://github.com/YanCheng-go/easyearth/releases">
+    <img src="https://img.shields.io/github/v/release/YanCheng-go/easyearth?label=Release&logo=github" alt="GitHub Release"/>
+  </a>
+  <a href="https://github.com/YanCheng-go/easyearth/issues">
+    <img src="https://img.shields.io/github/issues/YanCheng-go/easyearth?logo=github" alt="GitHub Issues"/>
+  </a>
+  <a href="https://github.com/YanCheng-go/easyearth/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/YanCheng-go/easyearth?label=License&logo=github" alt="License"/>
+  </a>
+  <a href="#">
+    <img src="https://img.shields.io/badge/OS-Ubuntu-blue?logo=ubuntu" alt="Ubuntu"/>
+  </a>
+  <a href="#">
+    <img src="https://img.shields.io/badge/OS-macOS-lightgrey?logo=apple" alt="macOS"/>
+  </a>
+
+[//]: # (  <a href="#">)
+
+[//]: # (    <img src="https://img.shields.io/badge/OS-Windows-blue?logo=windows" alt="Windows"/>)
+
+[//]: # (  </a>)
+</p>
+
 EasyEarth enables seamless application of cutting-edge computer vision and vision-language models directly on Earth observation data — without writing code. The platform integrates with [QGIS](https://qgis.org) via a plugin GUI and provides server-side infrastructure for scalable model inference and management.
 
 ---
@@ -33,9 +60,6 @@ EasyEarth enables seamless application of cutting-edge computer vision and visio
     - [Method 1: Manual Installation](#method-1-manual-installation)
     - [Method 2: Terminal Installation](#method-2-terminal-installation)
 - [Available Models](#-available-models-adding)
-- [Model APIs](#-model-apis)
-  - [Use SAM with Prompts](#-use-sam-with-prompts)
-  - [Use Models Without Prompts](#-use-models-without-prompts)
 - [Usage](#-usage)
   - [Run EasyEarth in QGIS](#-run-easyearth-in-qgis)
   - [Run EasyEarth Outside QGIS](#-run-easyearth-outside-qgis)
@@ -43,26 +67,41 @@ EasyEarth enables seamless application of cutting-edge computer vision and visio
 - [Documentation](#-documentation)
 - [Roadmap](#-roadmap)
 - [Contributing](#-contributing)
-- [Author](#-author)
-- [License](#-license)
+- [Authors](#-authors)
 
 ## 📁 Project Structure
 
 ```bash
-easyearth/
-├── easyearth/         # Server app – use this if you're only interested in the backend
-├── easyearth_plugin/  # QGIS plugin – use this folder to install the QGIS interface
-    ├── core/               # Core plugin files
-    ├── resources/          # Plugin resources (icons, images, etc.)
-    ├── ui/                 # Plugin UI files
-├── Dockerfile             # Dockerfile to build the EasyEarth server image
-├── docker-compose.yml # Docker Compose file to set up the server
-├── launch_server_local.sh # Script to run the server locally
-├── setup.sh           # Script to set up the Docker server
-├── requirements.txt   # Python dependencies for the server
-├── README.md          # Project documentation
-└── docs/              # Documentation files
-    ├── DeveloperGuide.md
+.
+├── easyearth  # Server-side code for EasyEarth
+│   ├── app.py  # Main application entry point
+│   ├── config  
+│   ├── controllers  # Controllers for handling requests
+│   ├── models  # Model management and inference logic
+│   ├── openapi  # OpenAPI specification for the API
+│   ├── static  # Static files for the server
+│   ├── tests  # Unit tests for the server
+├── easyearth_plugin  # QGIS plugin for EasyEarth
+│   ├── core  # Core logic for the plugin
+│   ├── data  # Sample data for testing
+│   ├── environment.yml  
+│   ├── launch_server_local.sh  # Script to launch server locally
+│   ├── plugin.py  # Main plugin entry point
+│   ├── requirements.txt  # Python dependencies for the plugin
+│   ├── resources  # Resources for the plugin (icons, images, etc.)
+│   └── ui  # User interface files for the plugin
+├── docs  # Documentation for EasyEarth
+│   ├── APIReference.md  # API reference documentation
+│   └── DeveloperGuide.md  # Developer guide for contributing to EasyEarth
+├── docker-compose.yml  # Docker Compose configuration for EasyEarth
+├── Dockerfile  # Dockerfile for building the EasyEarth server image
+├── environment.yml  # Conda environment file for EasyEarth
+├── launch_server_local.sh  # Script to launch the EasyEarth server locally
+├── README.md  
+├── requirements_mac.txt  # Python dependencies for macOS
+├── requirements.txt  # Python dependencies for EasyEarth
+├── setup.sh  # Script to set up the dockerized EasyEarth server (only needed for building the image from the start)
+
     
 ```
 
@@ -73,62 +112,28 @@ easyearth/
 
 - Docker Compose ≥ 1.21.2 ([install guide](https://docs.docker.com/compose/install/))
 - Python ≥ 3.6
-- [QGIS](https://qgis.org)
 - CUDA ≥ 12.4 ([download](https://developer.nvidia.com/cuda-downloads))  
-  _⚠️ More info on CUDA compatibility coming soon_
+ _⚠️ CUDA is **only required** for GPU inference. CPU-only mode is also available (though slower)_
+- (optional) [QGIS](https://qgis.org) > = 3.22 (tested with 3.38 and 3.40)
+ _⚠️ to use the plugin on QGIS, otherwise, one can use the server side only_
 
-### 📥 Clone Repository
+### 📦 Compatibility
+Currently tested on:<br>
+✅ Ubuntu<br>
+✅ macOS<br>
+⚠️ Windows support:<br>
+We have not yet tested EasyEarth on Windows. If you encounter any issues or would like to help us add Windows support, contributions are welcome!
+
+### 📥 Download Pre-built Plugin
 
 ```bash
 # go to your download directory
 cd ~/Downloads  # Specify your own path where you want to download the code
 git clone https://github.com/YanCheng-go/easyearth.git
-cp -r ./easyearth/easyearth_plugin easyearth_plugin
 ```
 
-### Local mode
-Run in a terminal
-```bash
-chmod +x ./launch_server_local.sh && ./launch_server_local.sh
-```
+You can also download the latest release (.zip) directly from the [Releases Page](https://github.com/YanCheng-go/easyearth/releases).
 
-### 🐳 Set Up Docker Server
-
-This will install Docker, build the image, and launch the EasyEarth server.
-
-```bash
-cd easyearth_plugin  # go to the directory where docker-compose.yml is located
-chmod +x ./setup.sh  # make the setup.sh executable
-./setup.sh  # run the setup.sh script
-```
-
-#### 🛑 Stop the Server
-
-```bash
-cd easyearth_plugin  # go to the directory where docker-compose.yml is located
-sudo docker-compose down  # stop the docker container
-```
-
-#### 🛠 Useful Docker Commands
-
-```bash
-
-# List containers
-docker ps -a
-# List images
-docker images
-# Remove all containers
-docker rm $(docker ps -a -q)
-# Remove all images
-docker rmi $(docker images -q)
-# Remove all volumes
-docker volume rm $(docker volume ls -q)
-# Inspect container
-sudo docker inspect <container_id>
-# Access container shell
-sudo docker exec -it <container_id_or_name> /usr/src/app
-
-```
 
 ### 🧩 Install EasyEarth Plugin in QGIS
 
@@ -141,24 +146,29 @@ sudo docker exec -it <container_id_or_name> /usr/src/app
 #### Method 2: Terminal Installation
 
 ```bash
-cd ~/Downloads/easyearth_plugin  # go to the directory where easyearth_plugin is located
+cd ~/Downloads/easyearth/easyearth_plugin  # go to the directory where easyearth_plugin is located
 cp -r ./easyearth_plugin ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins  # copy the easyearth_plugin folder to the plugins directory
 ```
+After this, Restart QGIS > `Plugins` > `Manage and Install Plugins` > enable **EasyEarth**
 
 ---
 ## 🚀 Usage
 
 ### 🛰️ Run EasyEarth in QGIS
-
-1. Stop external Docker containers:
-   ```bash
-    cd easyearth_plugin  # go to the directory where docker-compose.yml is located
-    sudo docker-compose down  # stop the docker container
-   ```
-2. Open QGIS, click **Start Docker**
-3. Load an image using **Browse Image**
-4. Click **Start Drawing**
-
+1. Click on the **EasyEarth** icon in the toolbar
+2. Select a project directory, some folders will be created in the project directory, the structure is as follows:
+   - `easyearth_base/images`<br>_⚠️images to be processed need to be placed here_
+   - `easyearth_base/embeddings` - for storing embeddings
+   - `easyearth_base/logs` - for storing logs
+   - `easyearth_base/tmp` - for storing temporary files
+   - `easyearth_base/predictions ` - for storing predictions
+3. Click **Docker** to launch the EasyEarth server dockerized container, or **Local** to run the non-dockerized server
+4. Then you will see the Server Status as **Online - Device: <DEVICE INFO>** in the Server section
+5. Click **Browse Image** to select an image from the `easyearth_base/images` folder
+6. Select a model from the dropdown menu
+7. Click **Start Drawing** to draw points or boxes on the image <br>_⚠️when the real time mode is checked, the prediction of each drawing prompt will be shown in real time, so no need to go step 8_
+8. Click **Predict** to run the model inference
+9. Prediction results will be saved in the easyearth_base/tmp folder and can be moved to the easyearth_base/predictions folder as desired.
 ![QGIS Plugin GUI](https://github.com/user-attachments/assets/7233c11c-cc7f-4fd8-8dc5-196db4a4220b)
 
 ---
@@ -175,29 +185,21 @@ cp -r ./easyearth_plugin ~/.local/share/QGIS/QGIS3/profiles/default/python/plugi
 
 ---
 
-## 📚 Documentation (TO BE UPDATED)
+## 📚 Documentation
 Check out our User Guide and Developer Guide for more.
-- [User Guide](docs/UserGuide.md)
-- [Developer Guide](docs/DeveloperGuide.md)
-- [API Reference](docs/APIReference.md)
-- [Model Management](docs/ModelManagement.md)
-- [QGIS Plugin](docs/QGISPlugin.md)
-- [Docker Setup](docs/DockerSetup.md)
-
+- [Developer Guide](docs/DeveloperGuide.md)  # for developers to contribute and extend EasyEarth
+- [API Reference](docs/APIReference.md)  # for developers to use the EasyEarth APIs
 ---
 
 ## ✅ Roadmap
-
 - [x] EasyEarth server for model inference
 - [x] QGIS plugin for model application
 - [x] Dockerized server for scalable model inference
 - [x] Advanced prompt-guided segmentation
-- [ ] Compelet documentation
 - [ ] Editing tools for segmentation
 - [ ] Model Manager for uploading/updating/tracking models
 - [ ] Chatbot integration for model management and reporting
 - [ ] Cloud deployment templates
-
 
 ---
 
@@ -205,15 +207,20 @@ Check out our User Guide and Developer Guide for more.
 
 We welcome community contributions! If you'd like to contribute, check out:
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)
-
-[//]: # (- [`docs/DeveloperGuide.md`]&#40;docs/DeveloperGuide.md&#41;)
-
 ---
 
-## 🧑‍💻 Author
+## 🧑‍💻 Authors
 
-Developed by: **Yan Cheng (chengyan2017@gmail.com), Ankit Kariryaa (ankit.ky@gmail.com), Lucia Gordon (luciagordon@g.harvard.edu)**
-
-[//]: # (🌐 [Website] • [GitHub] • [LinkedIn])
+Developed by: <br>
+**Yan Cheng** ([chengyan2017@gmail.com](mailto:chengyan2017@gmail.com)) – 
+[🌐 Website](https://yancheng-website.com)
+<a href="https://github.com/YanCheng-go" style="margin-left: 0.5em;">
+  <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/github.svg" alt="GitHub" width="20" style="vertical-align: middle;"/> GitHub
+</a>
+<a href="https://www.linkedin.com/in/yancheng" style="margin-left: 0.5em;">
+  <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/linkedin.svg" alt="LinkedIn" width="20" style="vertical-align: middle;"/> LinkedIn
+</a><br>
+**Ankit Kariryaa** ([ankit.ky@gmail.com](mailto:ankit.ky@gmail.com)) – <br> 
+**Lucia Gordon** ([luciagordon@g.harvard.edu](mailto:luciagordon@g.harvard.edu)) – 
 
 ---

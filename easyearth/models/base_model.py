@@ -1,5 +1,7 @@
 """Base class for segmentation models"""
+from collections import defaultdict
 
+import shapely
 import torch
 from PIL import Image
 import numpy as np
@@ -8,11 +10,9 @@ from rasterio import features
 import logging
 from typing import Optional, Union, List, Dict, Any
 from pathlib import Path
-import os 
-from datetime import datetime
+import os
 import warnings
 import torch.backends.mps
-from easyearth.config.log_config import setup_logger
 
 class BaseModel:
     def __init__(self, model_path: str):
@@ -21,14 +21,15 @@ class BaseModel:
             model_path: Path or name of the model to load
         """
         self.model_path = model_path
-        self.logger = setup_logger(name="easyearth_model")
+        self.logger = logging.getLogger("easyearth")
         
         # Set CUDA device before any other CUDA operations
         self._setup_cuda()
         self.device = self._get_device()
 
         # Get environment variables from docker container
-        self.cache_dir = os.environ.get('MODEL_CACHE_DIR', '~/.cache/huggingface/hub')
+        self.cache_dir = os.environ.get('MODEL_CACHE_DIR', os.path.join(os.path.expanduser("~"), ".cache", "easyearth", "models"))
+        self.logger.info(f"Model cache directory: {self.cache_dir}")
 
     # TODO: figure out why GPU is not working on my computer
     def _setup_cuda(self):
@@ -114,10 +115,18 @@ class BaseModel:
                 mask=masks > 0,
             )
 
-        geojson = [
-            {"properties": {"uid": value}, "geometry": polygon}
-            for polygon, value in shape_generator
-        ]
+        label_to_polygons = defaultdict(list)
+        for polygon, value in shape_generator:
+            label_to_polygons[value].append(shapely.geometry.shape(polygon))
+
+        geojson = []
+        for value, polygons in label_to_polygons.items():
+            if len(polygons) == 1:
+                geometry = shapely.geometry.mapping(polygons[0])
+            else:
+                multipolygon = shapely.geometry.MultiPolygon([p for p in polygons])
+                geometry = shapely.geometry.mapping(multipolygon)
+            geojson.append({"properties": {"uid": value}, "geometry": geometry})
 
         if filename:
             # save geojson as .geojson file

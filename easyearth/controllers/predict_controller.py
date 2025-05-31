@@ -9,9 +9,9 @@ import requests
 import os
 import json
 from datetime import datetime
-from easyearth.config.log_config import setup_logger
+import logging
 
-logger = setup_logger(name="predict-controller")
+logger = logging.getLogger("easyearth")
 
 def verify_image_path(image_path):
     """Verify the image path and check if it is a valid URL or local file. Remember to convert the image path the path in the docker container"""
@@ -125,7 +125,7 @@ def predict():
 
     try:
         data = request.get_json()
-        model_type = data.get('model_type', 'sam')  # 'sam' or 'segmentation'
+        model_type = data.get('model_type', 'sam')  # 'sam' or 'segment'
         image_path = data.get('image_path')
         model_path = data.get('model_path')
         TEMP_DIR = os.path.join(os.environ['BASE_DIR'], 'tmp')
@@ -246,7 +246,7 @@ def predict():
             geojson = sam.raster_to_vector(masks, scores, transform, filename=geojson_path)
 
         # --- Segmentation branch ---
-        elif model_type == 'segmentation':
+        elif model_type == 'segment':
             # Initialize Segmentation model
             logger.debug("Initializing Segmentation model")
             segformer = Segmentation(model_path or 'restor/tcd-segformer-mit-b5')
