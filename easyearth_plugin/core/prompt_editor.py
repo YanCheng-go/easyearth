@@ -66,6 +66,8 @@ def create_point_box(point, layer, width=500, height=500):
         QgsGeometry or tuple: If CRS exists, returns QgsGeometry; else, returns (xmin, ymin, xmax, ymax) pixel box.
     """
     if layer.crs().isValid():
+        width = 200
+        height = 200
         # The layer has a valid CRS -> create box in map units
         layer_crs = layer.crs()
         if layer_crs.mapUnits() == QgsUnitTypes.DistanceMeters:
