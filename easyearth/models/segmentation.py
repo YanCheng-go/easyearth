@@ -57,6 +57,19 @@ class Segmentation(BaseModel):
             target_size = [(raw_image.size[1], raw_image.size[0])]
             masks = self.processor.post_process_semantic_segmentation(preds, target_sizes=target_size)
         return masks
+
+    @staticmethod
+    def focus_on_region(image: Union[Image.Image, np.ndarray], region: tuple):
+        """Focus on a specific region of the image
+        Args:
+            image: The image to process
+            region: A tuple (left, upper, right, lower) defining the region to focus on
+        Returns:
+            A cropped image focused on the specified region
+        """
+        if isinstance(image, np.ndarray):
+            image = Image.fromarray(image)
+        return image.crop(region)
     
 
 if __name__=='__main__':    

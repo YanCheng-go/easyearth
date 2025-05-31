@@ -167,6 +167,8 @@ def predict():
             logger.error("Error loading image", exc_info=True)
             return jsonify({'status': 'error', 'message': f'Failed to load image: {str(e)}'}), 500
 
+        original_height, original_width = image_array.shape[:2]
+
         # --- SAM branch ---
         if model_type == 'sam':
             prompts = data.get('prompts', [])
@@ -255,8 +257,28 @@ def predict():
             logger.debug("Initializing Segmentation model")
             segformer = Segmentation(model_path or 'restor/tcd-segformer-mit-b5')
 
+            aoi = data.get('aoi', None)
+            if aoi:
+                image_array = segformer.focus_on_region(image_array, aoi["coordinates"])
+
             # Get masks from Segmentation model
             masks = segformer.get_masks(image_array)
+
+            # If the image is cropped, we need to reproject the masks back to the original image size
+            if aoi:
+                if isinstance(masks, list):
+                    masks = masks[0]  # Get the first mask if multiple masks are returned
+                # Create an empty canvas the size of the original image
+                if isinstance(masks, torch.Tensor):
+                    pseudo_image = torch.zeros((original_height, original_width), dtype=masks.dtype)
+                else:
+                    pseudo_image = np.zeros((original_height, original_width), dtype=masks.dtype)
+
+                x_min, y_min, x_max, y_max = aoi["coordinates"]
+                pseudo_image[y_min:y_max, x_min:x_max] = masks
+
+                # Wrap in a list to match expected format
+                masks = [pseudo_image]
 
             if masks is None:
                 return jsonify({'status': 'error', 'message': 'No valid masks generated'}), 400
