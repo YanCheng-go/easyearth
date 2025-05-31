@@ -1542,7 +1542,7 @@ class EasyEarthPlugin:
     def collect_all_prompts(self):
         """Collect new prompts added after the last_pred_time
         Returns:
-            list of dicts with prompt data
+            list of dicts with prompt data, list of tuples of AOI coordinates
         """
         try:
             prompts = []
@@ -1639,8 +1639,11 @@ class EasyEarthPlugin:
 
     def get_prediction(self, prompts, aoi_features=None):
         if len(prompts) == 0:
-            for aoi in aoi_features:
-                self.get_prediction_per_prompt(prompts, aoi_features=aoi)
+            if len(aoi_features) > 0:
+                for aoi in aoi_features:
+                    self.get_prediction_per_prompt(prompts, aoi_features=aoi)
+            else:
+                self.get_prediction_per_prompt(prompts)
         else:
             for prompt in prompts:
                 self.get_prediction_per_prompt([prompt])
@@ -1648,7 +1651,9 @@ class EasyEarthPlugin:
     def get_prediction_per_prompt(self, prompts, aoi_features=None):
         """Get prediction from SAM server and add to predictions layer
         Args:
-            prompts: list of dicts with prompt data"""
+            prompts: list of dicts with prompt data
+            aoi_features (Optional): list of tuples with AOI features in pixel coordinates.
+        """
 
         try:
             # Show loading indicator
