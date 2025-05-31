@@ -515,7 +515,7 @@ class EasyEarthPlugin:
             
             if result.returncode == 0:
                 self.docker_running = True
-                self.iface.messageBar().pushMessage("SUCCESS", "Docker container started successfully.", level=Qgis.Info)
+                self.iface.messageBar().pushMessage("Docker container started successfully.", level=Qgis.Info)
 
         if self.local_mode_button.isChecked():
             # Download server code
@@ -812,7 +812,6 @@ class EasyEarthPlugin:
             QMessageBox.critical(None, "Error", f"Failed to update embeddings: {str(e)}")
 
     def on_image_selected(self):
-        self.iface.messageBar().pushMessage('Function called', level=Qgis.Info)
         selected_layer = None
 
         for group in QgsProject.instance().layerTreeRoot().children():
