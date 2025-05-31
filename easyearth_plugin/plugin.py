@@ -487,29 +487,38 @@ class EasyEarthPlugin:
             self.docker_mode_button.setChecked(False)
             self.docker_mode = False
 
+    # def get_confirm_token(self, response):
+    #     for key, value in response.cookies.items():
+    #         if key.startswith('download_warning'):
+    #             return value
+    #     return None
+
+    # def save_response_content(self, response, destination, chunk_size=32768):
+    #     with open(destination, "wb") as f:
+    #         for chunk in response.iter_content(chunk_size):
+    #             if chunk:
+    #                 f.write(chunk)
+
     def start_server(self):
         if self.docker_mode_button.isChecked():
-            # docker_image_url = 'https://github.com/YanCheng-go/easyearth/releases/download/latest/easyearth.tar.gz'
-            # zipped_docker_image_path = os.path.join(self.base_dir, 'easyearth.tar.gz')
-            # docker_image_path = os.path.join(self.base_dir, 'easyearth.tar')
-
-            # if not os.path.exists(docker_image_path):
-            #     urllib.request.urlretrieve(docker_image_url, zipped_docker_image_path) # downloads the docker image from the URL
-            #     self.iface.messageBar().pushMessage(f"Downloaded Docker image from {docker_image_url} to {zipped_docker_image_path}", level=Qgis.Info)
-            #     subprocess.run(['gunzip', '-f', zipped_docker_image_path]) # unzips the downloaded file
-            #     self.iface.messageBar().pushMessage(f"Unzipped Docker image to {docker_image_path}", level=Qgis.Info)
-            #     loading = subprocess.run([f'{self.docker_path}', 'load', '-i', docker_image_path], capture_output=True, text=True) # loads the docker image into Docker
-            #     self.iface.messageBar().pushMessage(f"Loaded Docker image from {docker_image_path}. {loading}", level=Qgis.Info)
-
             linux_gpu_flags = " --runtime nvidia" if platform.system().lower() == "linux" else ""  # adds GPU support if available and on Linux
             gpu_flags = " --gpus all" if platform.system().lower() != "darwin" else ""  # adds GPU support if available and not on macOS
-            docker_run_cmd = (f"{self.docker_path} rm -f easyearth 2>/dev/null || true && " # removes the container if it already exists
-                              f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
+            self.iface.messageBar().pushMessage('Removing the docker container if it already exists', level=Qgis.Info)
+            QApplication.processEvents()
+            subprocess.run(f"{self.docker_path} rm -f easyearth 2>/dev/null || true", capture_output=True, text=True, shell=True)  # removes the container if it already exists
+            self.iface.messageBar().pushMessage('Pulling the latest image from Docker Hub', level=Qgis.Info)
+            QApplication.processEvents()
+            subprocess.run(f"{self.docker_path} pull {self.docker_hub_image_name}", capture_output=True, text=True, shell=True)  # removes the container if it already exists
+            self.iface.messageBar().pushMessage('Starting the Docker container', level=Qgis.Info)
+            QApplication.processEvents()
+
+            docker_run_cmd = (
+                # f"{self.docker_path} rm -f easyearth 2>/dev/null || true && " # removes the container if it already exists
+                #               f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
                               f"{self.docker_path} run{linux_gpu_flags}{gpu_flags} -d --name easyearth -p 3781:3781 " # runs the container in detached mode and maps port 3781
                               f"-v \"{self.base_dir}\":/usr/src/app/easyearth_base " # mounts the base directory in the container
                               f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
                               f"{self.docker_hub_image_name}")
-                            #   "easyearth")
             result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
             self.iface.messageBar().pushMessage(f"Starting server...\nRunning command: {result}", level=Qgis.Info)
             
@@ -525,55 +534,47 @@ class EasyEarthPlugin:
             easyearth_folder_path = os.path.join(self.base_dir, 'easyearth')
 
             if not os.path.exists(easyearth_folder_path):
+                self.iface.messageBar().pushMessage(f"Downloading easyearth repo from {repo_url} to {zipped_repo_path}", level=Qgis.Info)
+                QApplication.processEvents()
                 urllib.request.urlretrieve(repo_url, zipped_repo_path)
-                self.iface.messageBar().pushMessage(f"Downloaded easyearth repo from {repo_url} to {zipped_repo_path}", level=Qgis.Info)
+                
+                self.iface.messageBar().pushMessage(f"Unzipping repo to {repo_path}", level=Qgis.Info)
+                QApplication.processEvents()
 
                 with zipfile.ZipFile(zipped_repo_path, 'r') as zip_ref:
                     zip_ref.extractall(self.base_dir)
 
-                self.iface.messageBar().pushMessage(f"Unzipped repo to {repo_path}", level=Qgis.Info)
+                self.iface.messageBar().pushMessage(f"Moving easyearth folder out of repo to {easyearth_folder_path}", level=Qgis.Info)
+                QApplication.processEvents()
                 shutil.move(os.path.join(repo_path, "easyearth"), easyearth_folder_path)
                 shutil.rmtree(repo_path)
                 os.remove(zipped_repo_path)
-                self.iface.messageBar().pushMessage(f"Moved easyearth folder out of repo to {easyearth_folder_path}", level=Qgis.Info)
 
             # Download env
             env_path = os.path.join(self.base_dir, 'easyearth_env')
 
-            if platform.system.lower() == 'darwin':  # macOS
-                env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/env-v3/easyearth_env.tar.gz'
-                zipped_env_path = os.path.join(self.base_dir, 'easyearth_env.tar.gz')
-
-                if not os.path.exists(env_path):
+            if not os.path.exists(env_path):
+                if platform.system().lower() == 'darwin':  # macOS
+                    env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/env-v3/easyearth_env.tar.gz'
+                    zipped_env_path = os.path.join(self.base_dir, 'easyearth_env.tar.gz')
+                    self.iface.messageBar().pushMessage(f"Downloading environment from {env_url} to {zipped_env_path}", level=Qgis.Info)
+                    QApplication.processEvents()
                     urllib.request.urlretrieve(env_url, zipped_env_path)
-                    self.iface.messageBar().pushMessage(f"Downloaded environment from {env_url} to {zipped_env_path}", level=Qgis.Info)
-                    
-                    unzipping = subprocess.run(f'tar -xzf \"{zipped_env_path}\" -C \"{self.base_dir}\"', capture_output=True, text=True, shell=True)  # unzips the environment tar.gz file
+                    self.iface.messageBar().pushMessage(f"Unzipping environment to {env_path}", level=Qgis.Info)
+                    QApplication.processEvents()
+                    subprocess.run(f'tar -xzf \"{zipped_env_path}\" -C \"{self.base_dir}\"', capture_output=True, text=True, shell=True)  # unzips the environment tar.gz file
                     os.remove(zipped_env_path)  # remove the zip file after extraction
-                    self.iface.messageBar().pushMessage(f"Unzipped environment to {env_path}: {unzipping}", level=Qgis.Info)
+                else:
+                    self.iface.messageBar().pushMessage(f"Local mode only works on MacOS right now", level=Qgis.Info)
 
-                self.local_server_log_file = open(f"{self.logs_dir}/launch_server_local.log", "w")  # log file for the local server launch
-                result = subprocess.Popen(f'chmod +x \"{self.plugin_dir}\"/launch_server_local.sh && \"{self.plugin_dir}\"/launch_server_local.sh',
-                                        shell=True,
-                                        stdout=self.local_server_log_file,  # redirects stdout to a log file
-                                        stderr=subprocess.STDOUT,  # redirects stderr to the same log file
-                                        text=True,              # decodes output as text, not bytes
-                                        start_new_session=True)  # detaches from QGIS
-            else:
-                env_url = 'https://drive.google.com/uc?export=download&id=1FXmE_R1ZRoH3IHzv139stxNywB3HfgXo'
-                zipped_env_path = os.path.join(self.base_dir, 'easyearth_env.zip')
-                result = subprocess.run(f'wget --no-check-certificate {env_url} -O {zipped_env_path}', capture_output=True, text=True, shell=True)
-                self.iface.messageBar().pushMessage(f"Downloaded environment from {env_url} to {zipped_env_path}: {result}", level=Qgis.Info)
-
-                with zipfile.ZipFile(zipped_env_path, 'r') as zip_ref:
-                    zip_ref.extractall(self.base_dir)
-
-                self.iface.messageBar().pushMessage(f"Unzipped repo to {env_path}", level=Qgis.Info)
-
+            self.local_server_log_file = open(f"{self.logs_dir}/launch_server_local.log", "w")  # log file for the local server launch
             self.iface.messageBar().pushMessage(f"Starting local server...", level=Qgis.Info)
-
-            if result:
-                self.iface.messageBar().pushMessage("SUCCESS", f"Local server started successfully. Check logs {self.local_server_log_file} for details.", level=Qgis.Info)
+            result = subprocess.Popen(f'chmod +x \"{self.plugin_dir}\"/launch_server_local.sh && \"{self.plugin_dir}\"/launch_server_local.sh',
+                                    shell=True,
+                                    stdout=self.local_server_log_file,  # redirects stdout to a log file
+                                    stderr=subprocess.STDOUT,  # redirects stderr to the same log file
+                                    text=True,              # decodes output as text, not bytes
+                                    start_new_session=True)  # detaches from QGIS
 
     def stop_server(self):
         if self.docker_mode_button.isChecked():
@@ -1533,16 +1534,9 @@ class EasyEarthPlugin:
                     self.iface.messageBar().pushMessage("No prompts found. Please draw points or boxes.", level=Qgis.Info)
                     return
                 else:
-<<<<<<< HEAD
-                    # # Check if there are both points and boxes
-                    # has_points = any(p['type'] == 'Point' for p in prompts)
-                    # has_boxes = any(p['type'] == 'Box' for p in prompts)
-
-=======
                 #     # Check if there are both points and boxes
                 #     has_points = any(p['type'] == 'Point' for p in prompts)
                 #     has_boxes = any(p['type'] == 'Box' for p in prompts)
->>>>>>> master
                     # if not (has_points and has_boxes):
                     #     # Run prediction for all prompts if only one type is present
                     #     self.get_prediction(prompts)
