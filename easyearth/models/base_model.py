@@ -129,8 +129,16 @@ class BaseModel:
                 geometry = shapely.geometry.mapping(multipolygon)
             geojson.append({"properties": {"uid": value}, "geometry": geometry})
 
+        # Fallback in case no geometries were found
+        if len(geojson) == 0:
+            self.logger.warning("No polygons found; creating empty fallback GeoJSON.")
+            empty_geom = shapely.geometry.mapping(shapely.geometry.MultiPolygon([]))
+            geojson.append({
+                "properties": {"uid": -1},
+                "geometry": empty_geom
+            })
+
         if filename:
-            # save geojson as .geojson file
             gdf = gpd.GeoDataFrame.from_features(geojson)
             gdf.to_file(filename=filename, driver="GeoJSON")
 

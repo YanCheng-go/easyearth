@@ -265,7 +265,7 @@ def predict():
             masks = segformer.get_masks(image_array)
 
             # If the image is cropped, we need to reproject the masks back to the original image size
-            if aoi:
+            if aoi and len(aoi) > 0 and isinstance(aoi["coordinates"], list) and len(aoi["coordinates"]) == 4:
                 if isinstance(masks, list):
                     masks = masks[0]  # Get the first mask if multiple masks are returned
                 # Create an empty canvas the size of the original image
