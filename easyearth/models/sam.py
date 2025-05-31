@@ -133,6 +133,7 @@ class Sam(BaseModel):
             masks_list = []
             for obj, sco in enumerate(highes_score_idx[0].tolist()):
                 masks_list.append(masks_id[obj, sco, :, :])
+                
             masks_highest = torch.stack(masks_list, dim=0)
 
             # Convert to the dimensions suitable for super().raster_to_vector

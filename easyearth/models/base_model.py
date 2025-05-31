@@ -116,16 +116,19 @@ class BaseModel:
             )
 
         label_to_polygons = defaultdict(list)
+
         for polygon, value in shape_generator:
             label_to_polygons[value].append(shapely.geometry.shape(polygon))
 
         geojson = []
+
         for value, polygons in label_to_polygons.items():
             if len(polygons) == 1:
                 geometry = shapely.geometry.mapping(polygons[0])
             else:
                 multipolygon = shapely.geometry.MultiPolygon([p for p in polygons])
                 geometry = shapely.geometry.mapping(multipolygon)
+                
             geojson.append({"properties": {"uid": value}, "geometry": geometry})
 
         if filename:
