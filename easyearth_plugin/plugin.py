@@ -62,7 +62,6 @@ class EasyEarthPlugin:
         self.server_running = False
         self.action = None
         self.dock_widget = None
-        self.point_counter = None
         self.point_layer = None
         self.total_steps = 0
         self.current_step = 0
@@ -998,9 +997,6 @@ class EasyEarthPlugin:
         """Clear all selected points"""
 
         self.points = []
-
-        if hasattr(self, 'point_counter'):
-            self.point_counter.setText("Points: 0")
 
         if self.point_layer:
             try:
