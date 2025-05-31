@@ -43,11 +43,10 @@ jobs:
       run: |
         docker build -t ${{ secrets.DOCKER_USERNAME }}/easyearth:${{ github.ref_name }} .
 
-    # Tag and push as 'latest' only on master
-    - name: Tag image as latest
+    - name: Build image with latest tag for master branch
       if: github.ref_name == 'master'
       run: |
-        docker tag ${{ secrets.DOCKER_USERNAME }}/easyearth:master ${{ secrets.DOCKER_USERNAME }}/easyearth:latest
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/easyearth:latest .
 
     # Push branch-tagged image (including master for traceability, optional)
     - name: Push branch-tagged image
