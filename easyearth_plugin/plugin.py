@@ -1214,7 +1214,8 @@ class EasyEarthPlugin:
 
         last_prompt_id = self.prompts_geojson[self.get_image_name()]['features'][-1]['properties']['id'] # gets the last prompt ID from prompts_geojson
         self.iface.messageBar().pushMessage(f'Last prompt ID: {last_prompt_id}', level=Qgis.Info)
-        last_prediction_ID = map_id(self.prompts_geojson[self.get_image_name()]['features']) # finds the last prediction feature ID using map_id
+        # last_prediction_ID = map_id(self.prompts_geojson[self.get_image_name()]['features']) # finds the last prediction feature ID using map_id
+        last_prediction_ID = dict((f['properties']['id'], i) for i, f in enumerate(self.prompts_geojson[self.get_image_name()]['features']))
         self.iface.messageBar().pushMessage(f'Last prediction ID: {last_prediction_ID}', level=Qgis.Info)
 
         self.prompts_geojson[self.get_image_name()]['features'] = self.prompts_geojson[self.get_image_name()]['features'][:-1] # removes the last point from the prompts geojson
@@ -1521,25 +1522,25 @@ class EasyEarthPlugin:
                     self.iface.messageBar().pushMessage("No prompts found. Please draw points or boxes.", level=Qgis.Info)
                     return
                 else:
-                    # Check if there are both points and boxes
-                    has_points = any(p['type'] == 'Point' for p in prompts)
-                    has_boxes = any(p['type'] == 'Box' for p in prompts)
-
-                    if not (has_points and has_boxes):
-                        # Run prediction for all prompts if only one type is present
-                        self.get_prediction(prompts)
-                    else:
-                        # Run prediction for points and boxes separately
-                        self.iface.messageBar().pushMessage(
-                            "Info",
-                            f"Running prediction for box and point prompts separatly.",
-                            level=Qgis.Info,
-                            duration=3
-                        )
-                        points = [p for p in prompts if p['type'] == 'Point']
-                        self.get_prediction(points)
-                        boxes = [p for p in prompts if p['type'] == 'Box']
-                        self.get_prediction(boxes)
+                #     # Check if there are both points and boxes
+                #     has_points = any(p['type'] == 'Point' for p in prompts)
+                #     has_boxes = any(p['type'] == 'Box' for p in prompts)
+                    # if not (has_points and has_boxes):
+                    #     # Run prediction for all prompts if only one type is present
+                    #     self.get_prediction(prompts)
+                    # else:
+                    #     # Run prediction for points and boxes separately
+                    #     self.iface.messageBar().pushMessage(
+                    #         "Info",
+                    #         f"Running prediction for box and point prompts separatly.",
+                    #         level=Qgis.Info,
+                    #         duration=3
+                    #     )
+                    #     points = [p for p in prompts if p['type'] == 'Point']
+                    #     self.get_prediction(points)
+                    #     boxes = [p for p in prompts if p['type'] == 'Box']
+                    #     self.get_prediction(boxes)
+                    self.get_prediction(prompts)
             else:
                 # For other models, run prediction without prompts
                 self.iface.messageBar().pushMessage("Running prediction without prompts.", level=Qgis.Info, duration=3)
