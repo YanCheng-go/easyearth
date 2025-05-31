@@ -538,25 +538,38 @@ class EasyEarthPlugin:
                 self.iface.messageBar().pushMessage(f"Moved easyearth folder out of repo to {easyearth_folder_path}", level=Qgis.Info)
 
             # Download env
-            env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/env-v3/easyearth_env.tar.gz'
-            zipped_env_path = os.path.join(self.base_dir, 'easyearth_env.tar.gz')
             env_path = os.path.join(self.base_dir, 'easyearth_env')
 
-            if not os.path.exists(env_path):
-                urllib.request.urlretrieve(env_url, zipped_env_path)
-                self.iface.messageBar().pushMessage(f"Downloaded environment from {env_url} to {zipped_env_path}", level=Qgis.Info)
-                
-                unzipping = subprocess.run(f'tar -xzf \"{zipped_env_path}\" -C \"{self.base_dir}\"', capture_output=True, text=True, shell=True)  # unzips the environment tar.gz file
-                os.remove(zipped_env_path)  # remove the zip file after extraction
-                self.iface.messageBar().pushMessage(f"Unzipped environment to {env_path}: {unzipping}", level=Qgis.Info)
+            if platform.system.lower() == 'darwin':  # macOS
+                env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/env-v3/easyearth_env.tar.gz'
+                zipped_env_path = os.path.join(self.base_dir, 'easyearth_env.tar.gz')
 
-            self.local_server_log_file = open(f"{self.logs_dir}/launch_server_local.log", "w")  # log file for the local server launch
-            result = subprocess.Popen(f'chmod +x \"{self.plugin_dir}\"/launch_server_local.sh && \"{self.plugin_dir}\"/launch_server_local.sh',
-                                      shell=True,
-                                      stdout=self.local_server_log_file,  # redirects stdout to a log file
-                                      stderr=subprocess.STDOUT,  # redirects stderr to the same log file
-                                      text=True,              # decodes output as text, not bytes
-                                      start_new_session=True)  # detaches from QGIS
+                if not os.path.exists(env_path):
+                    urllib.request.urlretrieve(env_url, zipped_env_path)
+                    self.iface.messageBar().pushMessage(f"Downloaded environment from {env_url} to {zipped_env_path}", level=Qgis.Info)
+                    
+                    unzipping = subprocess.run(f'tar -xzf \"{zipped_env_path}\" -C \"{self.base_dir}\"', capture_output=True, text=True, shell=True)  # unzips the environment tar.gz file
+                    os.remove(zipped_env_path)  # remove the zip file after extraction
+                    self.iface.messageBar().pushMessage(f"Unzipped environment to {env_path}: {unzipping}", level=Qgis.Info)
+
+                self.local_server_log_file = open(f"{self.logs_dir}/launch_server_local.log", "w")  # log file for the local server launch
+                result = subprocess.Popen(f'chmod +x \"{self.plugin_dir}\"/launch_server_local.sh && \"{self.plugin_dir}\"/launch_server_local.sh',
+                                        shell=True,
+                                        stdout=self.local_server_log_file,  # redirects stdout to a log file
+                                        stderr=subprocess.STDOUT,  # redirects stderr to the same log file
+                                        text=True,              # decodes output as text, not bytes
+                                        start_new_session=True)  # detaches from QGIS
+            else:
+                env_url = 'https://drive.google.com/uc?export=download&id=1FXmE_R1ZRoH3IHzv139stxNywB3HfgXo'
+                zipped_env_path = os.path.join(self.base_dir, 'easyearth_env.zip')
+                result = subprocess.run(f'wget --no-check-certificate {env_url} -O {zipped_env_path}', capture_output=True, text=True, shell=True)
+                self.iface.messageBar().pushMessage(f"Downloaded environment from {env_url} to {zipped_env_path}: {result}", level=Qgis.Info)
+
+                with zipfile.ZipFile(zipped_env_path, 'r') as zip_ref:
+                    zip_ref.extractall(self.base_dir)
+
+                self.iface.messageBar().pushMessage(f"Unzipped repo to {env_path}", level=Qgis.Info)
+
             self.iface.messageBar().pushMessage(f"Starting local server...", level=Qgis.Info)
 
             if result:
@@ -782,8 +795,6 @@ class EasyEarthPlugin:
                     self.load_embedding_radio.setChecked(True)
                     self.embedding_path_edit.setEnabled(True)
                     self.embedding_browse_btn.setEnabled(True)
-
-                    # Set the embedding path in the text box
                     self.embedding_path_edit.setText(embedding_path)
 
                     self.iface.messageBar().pushMessage(
@@ -1213,9 +1224,10 @@ class EasyEarthPlugin:
             return
 
         last_prompt_id = self.prompts_geojson[self.get_image_name()]['features'][-1]['properties']['id'] # gets the last prompt ID from prompts_geojson
-        self.iface.messageBar().pushMessage(f'Last prompt ID: {last_prompt_id}', level=Qgis.Info)
+        # self.iface.messageBar().pushMessage(f'Last prompt ID: {last_prompt_id}', level=Qgis.Info)
         last_prediction_ID = map_id(self.prompts_geojson[self.get_image_name()]['features']) # finds the last prediction feature ID using map_id
-        self.iface.messageBar().pushMessage(f'Last prediction ID: {last_prediction_ID}', level=Qgis.Info)
+        # last_prediction_ID = dict((f['properties']['id'], i) for i, f in enumerate(self.prompts_geojson[self.get_image_name()]['features']))
+        # self.iface.messageBar().pushMessage(f'Last prediction ID: {last_prediction_ID}', level=Qgis.Info)
 
         self.prompts_geojson[self.get_image_name()]['features'] = self.prompts_geojson[self.get_image_name()]['features'][:-1] # removes the last point from the prompts geojson
         self.prompt_count[self.get_image_name()] = self.prompt_count[self.get_image_name()] - 1 if self.prompt_count[self.get_image_name()] > 0 else 0  # decrements the prompt counter
@@ -1229,7 +1241,7 @@ class EasyEarthPlugin:
             if self.predictions_geojson:
                 # Get the last prediction ID from predictions_geojson
                 last_prediction_index = last_prediction_ID.get(last_prompt_id, None)
-                self.iface.messageBar().pushMessage(f'Last prediction index: {last_prediction_index}', level=Qgis.Info)
+                # self.iface.messageBar().pushMessage(f'Last prediction index: {last_prediction_index}', level=Qgis.Info)
                 last_prediction_id = self.predictions_geojson[self.get_image_name()]['features'][last_prediction_index]['properties']['id']
                 # self.iface.messageBar().pushMessage(f'Last prediction id: {last_prediction_id}', level=Qgis.Info)
                 # self.iface.messageBar().pushMessage(f"{self.predictions_geojson[self.get_image_name()]['features']}", level=Qgis.Info)
@@ -1521,25 +1533,26 @@ class EasyEarthPlugin:
                     self.iface.messageBar().pushMessage("No prompts found. Please draw points or boxes.", level=Qgis.Info)
                     return
                 else:
-                    # Check if there are both points and boxes
-                    has_points = any(p['type'] == 'Point' for p in prompts)
-                    has_boxes = any(p['type'] == 'Box' for p in prompts)
+                    # # Check if there are both points and boxes
+                    # has_points = any(p['type'] == 'Point' for p in prompts)
+                    # has_boxes = any(p['type'] == 'Box' for p in prompts)
 
-                    if not (has_points and has_boxes):
-                        # Run prediction for all prompts if only one type is present
-                        self.get_prediction(prompts)
-                    else:
-                        # Run prediction for points and boxes separately
-                        self.iface.messageBar().pushMessage(
-                            "Info",
-                            f"Running prediction for box and point prompts separatly.",
-                            level=Qgis.Info,
-                            duration=3
-                        )
-                        points = [p for p in prompts if p['type'] == 'Point']
-                        self.get_prediction(points)
-                        boxes = [p for p in prompts if p['type'] == 'Box']
-                        self.get_prediction(boxes)
+                    # if not (has_points and has_boxes):
+                    #     # Run prediction for all prompts if only one type is present
+                    #     self.get_prediction(prompts)
+                    # else:
+                    #     # Run prediction for points and boxes separately
+                    #     self.iface.messageBar().pushMessage(
+                    #         "Info",
+                    #         f"Running prediction for box and point prompts separatly.",
+                    #         level=Qgis.Info,
+                    #         duration=3
+                    #     )
+                    #     points = [p for p in prompts if p['type'] == 'Point']
+                    #     self.get_prediction(points)
+                    #     boxes = [p for p in prompts if p['type'] == 'Box']
+                    #     self.get_prediction(boxes)
+                    self.get_prediction(prompts)
             else:
                 # For other models, run prediction without prompts
                 self.iface.messageBar().pushMessage("Running prediction without prompts.", level=Qgis.Info, duration=3)
