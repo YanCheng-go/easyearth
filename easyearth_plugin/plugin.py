@@ -433,7 +433,7 @@ class EasyEarthPlugin:
                 else:
                     self.iface.messageBar().pushMessage("No device info available", level=Qgis.Info)
                     self.server_status.setText(f"Online - Device: Info not available") # adds GPU message to the server status label
-                if self.base_dir:
+                if self.base_dir and (self.docker_mode_button.isChecked() or self.local_mode_button.isChecked()):
                     self.model_group.show()  # Show model selection group when server is online
                     self.image_group.show()  # Show image source group when server is online
             else:
@@ -831,8 +831,8 @@ class EasyEarthPlugin:
         )
         self.iface.messageBar().pushMessage(msg, level=Qgis.Info,)
         
-        # if selected_layer.crs() != self.project_crs:
-        #     selected_layer.setCrs(self.project_crs)  # Set the layer CRS to match the project CRS
+        if selected_layer.crs() != self.project_crs:
+            QgsProject.instance().setCrs(selected_layer.crs())  # Set the layer CRS to match the project CRS
         
         extent = selected_layer.extent()
 
@@ -1213,7 +1213,9 @@ class EasyEarthPlugin:
             return
 
         last_prompt_id = self.prompts_geojson[self.get_image_name()]['features'][-1]['properties']['id'] # gets the last prompt ID from prompts_geojson
+        self.iface.messageBar().pushMessage(f'Last prompt ID: {last_prompt_id}', level=Qgis.Info)
         last_prediction_ID = map_id(self.prompts_geojson[self.get_image_name()]['features']) # finds the last prediction feature ID using map_id
+        self.iface.messageBar().pushMessage(f'Last prediction ID: {last_prediction_ID}', level=Qgis.Info)
 
         self.prompts_geojson[self.get_image_name()]['features'] = self.prompts_geojson[self.get_image_name()]['features'][:-1] # removes the last point from the prompts geojson
         self.prompt_count[self.get_image_name()] = self.prompt_count[self.get_image_name()] - 1 if self.prompt_count[self.get_image_name()] > 0 else 0  # decrements the prompt counter
@@ -1227,8 +1229,10 @@ class EasyEarthPlugin:
             if self.predictions_geojson:
                 # Get the last prediction ID from predictions_geojson
                 last_prediction_index = last_prediction_ID.get(last_prompt_id, None)
+                self.iface.messageBar().pushMessage(f'Last prediction index: {last_prediction_index}', level=Qgis.Info)
                 last_prediction_id = self.predictions_geojson[self.get_image_name()]['features'][last_prediction_index]['properties']['id']
-
+                # self.iface.messageBar().pushMessage(f'Last prediction id: {last_prediction_id}', level=Qgis.Info)
+                # self.iface.messageBar().pushMessage(f"{self.predictions_geojson[self.get_image_name()]['features']}", level=Qgis.Info)
                 if last_prediction_id is None:
                     self.iface.messageBar().pushMessage("Error", "No matching prediction found for the last prompt.", level=Qgis.Critical, duration=3)
                     return
@@ -1426,15 +1430,6 @@ class EasyEarthPlugin:
             layer.updateExtents()
             layer.triggerRepaint()
 
-
-        # Reorder the group to be at the top
-        # root = QgsProject.instance().layerTreeRoot()
-        # group = root.findGroup(selected_layer.name())
-        # root.insertChildNode(0, group.clone())  # inserts the group at the top of the layer tree
-        # group.parent().removeChildNode(group) # removes the original group
-        # self.iface.mapCanvas().refresh()
-
-
             # Apply styling
             style_func(layer)
 
@@ -1479,7 +1474,7 @@ class EasyEarthPlugin:
 
             if self.prompts_layer:
                 for feature in self.prompts_layer[self.get_image_name()].getFeatures():
-
+                    # self.iface.messageBar().pushMessage(f'Feature: {feature.id()}', level=Qgis.Info)
                     # Check if the feature is new
                     timestamp = feature.attribute('timestamp')
 
@@ -1556,6 +1551,10 @@ class EasyEarthPlugin:
             QMessageBox.critical(None, "Error", f"Failed to run prediction: {str(e)}")
 
     def get_prediction(self, prompts):
+        for prompt in prompts:
+            self.get_prediction_per_prompt([prompt])
+
+    def get_prediction_per_prompt(self, prompts):
         """Get prediction from SAM server and add to predictions layer
         Args:
             prompts: list of dicts with prompt data"""
@@ -1700,7 +1699,9 @@ class EasyEarthPlugin:
         except Exception as e:
             self.logger.error(f"Error getting prediction: {str(e)}")
             self.logger.exception("Full traceback:")
-            QMessageBox.critical(None, "Error", f"Failed to get prediction: {str(e)}")
+            # QMessageBox.critical(None, "Error", f"Failed to get prediction: {str(e)}")
+            tb = traceback.format_exc()
+            self.iface.messageBar().pushMessage(f'{tb}', level=Qgis.Info)
         finally:
             QApplication.restoreOverrideCursor()
 
