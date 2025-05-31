@@ -62,7 +62,6 @@ class EasyEarthPlugin:
         self.server_running = False
         self.action = None
         self.dock_widget = None
-        self.point_counter = None
         self.point_layer = None
         self.total_steps = 0
         self.current_step = 0
@@ -999,9 +998,6 @@ class EasyEarthPlugin:
 
         self.points = []
 
-        if hasattr(self, 'point_counter'):
-            self.point_counter.setText("Points: 0")
-
         if self.point_layer:
             try:
                 # Remove features from the point layer
@@ -1552,8 +1548,11 @@ class EasyEarthPlugin:
             QMessageBox.critical(None, "Error", f"Failed to run prediction: {str(e)}")
 
     def get_prediction(self, prompts):
-        for prompt in prompts:
-            self.get_prediction_per_prompt([prompt])
+        if len(prompts) == 0:
+            self.get_prediction_per_prompt(prompts)
+        else:
+            for prompt in prompts:
+                self.get_prediction_per_prompt([prompt])
 
     def get_prediction_per_prompt(self, prompts):
         """Get prediction from SAM server and add to predictions layer
