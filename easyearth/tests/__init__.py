@@ -14,4 +14,4 @@ class BaseTestCase(TestCase):
 
     @staticmethod
     def base_url(url):
-        return f"/easyearth/{url}"
+        return f"/v1/basic/{url}"

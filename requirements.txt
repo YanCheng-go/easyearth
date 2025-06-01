@@ -18,4 +18,3 @@ pytest
 ipdb
 PyYAML>=5.1
 matplotlib
-gdown
