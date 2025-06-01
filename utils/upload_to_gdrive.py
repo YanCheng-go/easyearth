@@ -37,6 +37,8 @@ def main(FILE_ID=None, shareable: bool = True, VERSION='', format='.zip') -> (st
     mimetype = 'application/zip' if format == '.zip' else 'application/gzip'
     media = MediaFileUpload(filename, mimetype=mimetype)
 
+    file_metadata = {'name': filename}  # <-- Add this here!
+
     if FILE_ID is None:
         # Create a new file
         file = drive_service.files().create(
