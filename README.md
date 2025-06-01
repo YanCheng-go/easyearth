@@ -113,17 +113,18 @@ EasyEarth enables seamless application of cutting-edge computer vision and visio
 
 ### ✅ Requirements
 
-- Docker Compose ≥ 1.21.2 ([install guide](https://docs.docker.com/compose/install/))
+
 - Python ≥ 3.6
-- CUDA ≥ 12.4 ([download](https://developer.nvidia.com/cuda-downloads))  
- _⚠️ CUDA is **only required** for GPU inference. CPU-only mode is also available (though slower)_
 - (optional) [QGIS](https://qgis.org) > = 3.22 (tested with 3.38 and 3.40)
- _⚠️ to use the plugin on QGIS, otherwise, one can use the server side only_
+ _⚠️ required to use the plugin on QGIS, otherwise, one can use the server side only_
+- (optional) CUDA ≥ 12.4 ([download](https://developer.nvidia.com/cuda-downloads))  
+ _⚠️ CUDA is **only required** for GPU inference on Linux. CPU-only mode is also available (though slower)_
+- (optional) Docker Compose ≥ 1.21.2 ([install guide](https://docs.docker.com/compose/install/))
 
 ### 📦 Compatibility
 Currently tested on:<br>
 ✅ Ubuntu<br>
-✅ macOS<br>
+✅ MacOS<br>
 ⚠️ Windows support:<br>
 We have not yet tested EasyEarth on Windows. If you encounter any issues or would like to help us add Windows support, contributions are welcome!
 
@@ -150,7 +151,8 @@ You can also download the latest release (.zip) directly from the [Releases Page
 
 ```bash
 cd ~/Downloads/easyearth/easyearth_plugin  # go to the directory where easyearth_plugin is located
-cp -r ./easyearth_plugin ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins  # copy the easyearth_plugin folder to the plugins directory
+cp -r ./easyearth_plugin ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins  # copy the easyearth_plugin folder to the plugins directory on Linux
+cp -r easyearth_plugin /Users/USERNAME/Library/Application\ Support/QGIS/QGIS3/profiles/default/python/plugins # copy the easyearth_plugin folder to the plugins directory on Mac
 ```
 After this, Restart QGIS > `Plugins` > `Manage and Install Plugins` > enable **EasyEarth**
 
@@ -169,7 +171,7 @@ After this, Restart QGIS > `Plugins` > `Manage and Install Plugins` > enable **E
 4. Then you will see the Server Status as **Online - Device: <DEVICE INFO>** in the Server section
 5. Click **Browse Image** to select an image from the `easyearth_base/images` folder
 6. Select a model from the dropdown menu
-7. Click **Start Drawing** to draw points or boxes on the image <br>_⚠️when the real time mode is checked, the prediction of each drawing prompt will be shown in real time, so no need to go step 8_
+7. Click **Start Drawing** to draw points or boxes on the image <br>_⚠️when the real-time mode is checked, the prediction of each drawing prompt will be shown in real time, so no need to go step 8_
 8. Click **Predict** to run the model inference
 9. Prediction results will be saved in the easyearth_base/tmp folder and can be moved to the easyearth_base/predictions folder as desired.
 ![QGIS Plugin GUI](https://github.com/user-attachments/assets/7233c11c-cc7f-4fd8-8dc5-196db4a4220b)
@@ -214,8 +216,9 @@ We welcome community contributions! If you'd like to contribute, check out:
 
 ## 🧑‍💻 Authors
 
-Developed by: <br>
-**Yan Cheng** ([chengyan2017@gmail.com](mailto:chengyan2017@gmail.com)) – 
+Developed by:
+
+Yan Cheng ([chengyan2017@gmail.com](mailto:chengyan2017@gmail.com)) – 
 [🌐 Website](https://yancheng-website.com)
 <a href="https://github.com/YanCheng-go" style="margin-left: 0.5em;">
   <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/github.svg" alt="GitHub" width="20" style="vertical-align: middle;"/> GitHub
@@ -223,7 +226,14 @@ Developed by: <br>
 <a href="https://www.linkedin.com/in/yancheng" style="margin-left: 0.5em;">
   <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/linkedin.svg" alt="LinkedIn" width="20" style="vertical-align: middle;"/> LinkedIn
 </a><br>
-**Ankit Kariryaa** ([ankit.ky@gmail.com](mailto:ankit.ky@gmail.com)) – <br> 
-**Lucia Gordon** ([luciagordon@g.harvard.edu](mailto:luciagordon@g.harvard.edu)) – 
+Lucia Gordon ([luciagordon@g.harvard.edu](mailto:luciagordon@g.harvard.edu)) – 
+[🌐 Website](https://lgordon99.github.io)
+<a href="https://github.com/lgordon99" style="margin-left: 0.5em;">
+  <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/github.svg" alt="GitHub" width="20" style="vertical-align: middle;"/> GitHub
+</a>
+<a href="http://www.linkedin.com/in/lucia-gordon-187069225" style="margin-left: 0.5em;">
+  <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/linkedin.svg" alt="LinkedIn" width="20" style="vertical-align: middle;"/> LinkedIn
+</a><br>
+Ankit Kariryaa ([ankit.ky@gmail.com](mailto:ankit.ky@gmail.com))
 
 ---
