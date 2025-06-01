@@ -7,7 +7,7 @@ on:
     paths:
       - requirements.txt
       - utils/upload_to_gdrive.py
-      - .github/workflows/upload_linux_env.yml
+#      - .github/workflows/upload_linux_env.yml
       - tests/test_alive_controller.py
   pull_request:
     branches:
