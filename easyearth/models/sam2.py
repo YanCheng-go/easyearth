@@ -8,6 +8,8 @@ import numpy as np
 import requests
 from PIL import Image
 from ultralytics import SAM
+from typing import Union, List
+from pathlib import Path
 
 try:
     from .base_model import BaseModel
@@ -35,12 +37,16 @@ class SAM2(BaseModel):
         self.logger.info(f"Using SAM2 model from {model_path}")
         self.logger.debug(f"Cache directory: {self.cache_dir}")
 
-    def get_masks(self, image_path: str, bboxes=None, points=None, labels=None):
+    def get_masks(self, image: Union[str, Image.Image, np.ndarray],
+                  bboxes: List[Union[List[float], List[List[float]]]] = None,
+                  points: List[Union[List[float], List[List[float]]]] = None,
+                  labels: List[int] = None,
+                  timeout: int = 900) -> List[np.ndarray]:
         """
         Run inference on the given image with optional prompts.
 
         Args:
-            image_path (str): Path to the input image.
+            image (str | PIL.Image | numpy.ndarray): Path to the image file, or a PIL Image, or a numpy array.
             bboxes (list, optional): List of bounding boxes [x1, y1, x2, y2] or list of such boxes.
             points (list, optional): List of points or list of list of points.
             labels (list, optional): Labels for the points.
@@ -48,7 +54,7 @@ class SAM2(BaseModel):
         Returns:
             list: List of masks (numpy arrays) for the segmented objects.
         """
-        results = self.model(image_path, bboxes=bboxes, points=points, labels=labels)
+        results = self.model(image, bboxes=bboxes, points=points, labels=labels)
 
         masks = []
         for result in results:
