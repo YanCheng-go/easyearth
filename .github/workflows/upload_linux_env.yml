@@ -1,17 +1,17 @@
-name: Python Env (Linux)
+name: Upload zipped environment to Google Drive for Linux
 
 on:
-#  push:
-#    branches:
-#      - yan
-#    paths:
-#      - requirements.txt
-#      - ytils/upload_to_gdrive.py
-#      - .github/workflows/upload_linux_env.yml
-#      - tests/test_alive_controller.py
+  push:
+    branches:
+      - yan
+    paths:
+      - requirements.txt
+      - utils/upload_to_gdrive.py
+      - .github/workflows/upload_linux_env.yml
+      - tests/test_alive_controller.py
   pull_request:
     branches:
-      - master
+      - master  # Run on pull requests to the master branch
     paths:
       - requirements.txt
       - utils/upload_to_gdrive.py
@@ -20,6 +20,7 @@ on:
 
 jobs:
   upload-env:
+    timeout-minutes: 30
     runs-on: ubuntu-latest
 
     steps:
@@ -55,14 +56,11 @@ jobs:
           zip -r easyearth_env.zip easyearth_env
 
       - name: Install Google API client
-        run: |
-          source easyearth_env/bin/activate
-          pip install google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib
+        run: pip install google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib
 
       - name: Upload zipped environment to Google Drive
         working-directory: ${{ github.workspace }}
         env:
           GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
         run: |
-          source easyearth_env/bin/activate
           python utils/upload_to_gdrive.py
