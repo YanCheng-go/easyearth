@@ -499,6 +499,8 @@ class EasyEarthPlugin:
             subprocess.run(f"{self.docker_path} rm -f easyearth 2>/dev/null || true", capture_output=True, text=True, shell=True)  # removes the container if it already exists
             self.iface.messageBar().pushMessage('Pulling the latest image from Docker Hub', level=Qgis.Info)
             QApplication.processEvents()
+            warning_box = QMessageBox.warning(None, "Update Docker Image", "Downloading or updating Docker image from Docker Hub. This may take a while for the first time,&nbsp;please wait...") # shows a warning message that the Docker image is being downloaded
+            warning_box.setTextFormat(Qt.RichText)
             subprocess.run(f"{self.docker_path} pull {self.docker_hub_image_name}", capture_output=True, text=True, shell=True)  # removes the container if it already exists
             self.iface.messageBar().pushMessage('Starting the Docker container', level=Qgis.Info)
             QApplication.processEvents()
@@ -507,7 +509,6 @@ class EasyEarthPlugin:
                               f"-v \"{self.base_dir}\":/usr/src/app/easyearth_base " # mounts the base directory in the container
                               f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
                               f"{self.docker_hub_image_name}")
-            QMessageBox.warning(None, "Update Docker Image", "Downloading or updating Docker image from Docker Hub. This may take a while for the first time,&nbsp;please wait...") # shows a warning message that the Docker image is being downloaded
             result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
             self.iface.messageBar().pushMessage(f"Starting server...\nRunning command: {result}", level=Qgis.Info)
             
@@ -543,7 +544,7 @@ class EasyEarthPlugin:
             env_path = os.path.join(self.base_dir, 'easyearth_env')
 
             if not os.path.exists(env_path):
-                QMessageBox.warning(None, "Local Python Environment Not Found", "Downloading EasyEarth Python environment. This may take a while, please wait...")
+                QMessageBox.warning(None, "Local Python Environment Not Found", "Downloading EasyEarth Python environment. This may take a while,&nbsp;please wait...")
                 self.iface.messageBar().pushMessage(f"Downloading EasyEarth Python environment for {platform.system().lower()} system",level=Qgis.Info)
 
                 if platform.system().lower() == 'darwin':  # macOS
@@ -1143,13 +1144,13 @@ class EasyEarthPlugin:
                 py = max(0, min(py, height - 1))
 
                 if self.get_image_name() not in self.prompt_count.keys():
-                    self.iface.messageBar().pushMessage(f'No prompts found for {self.get_image_name()}', level=Qgis.Info)
+                    # self.iface.messageBar().pushMessage(f'No prompts found for {self.get_image_name()}', level=Qgis.Info)
                     self.prompt_count[self.get_image_name()] = 0
 
                 self.iface.messageBar().pushMessage(f"Image name: {self.get_image_name()}\n"
                                                     f"Map coordinates: ({point.x():.2f}, {point.y():.2f})\n"
                                                     f"Pixel coordinates: ({px}, {py})\n"
-                                                    f"Prompt count: {self.prompt_count[self.get_image_name()]}",
+                                                    # f"Prompt count: {self.prompt_count[self.get_image_name()]}",
                                                     level=Qgis.Info)
 
                 # Create prompt feature
