@@ -30,8 +30,12 @@ def main(FILE_ID=None, shareable: bool = True, VERSION='', format='.zip') -> (st
 
     drive_service = build('drive', 'v3', credentials=credentials)
 
-    file_metadata = {'name': f'easyearth_env{VERSION}{format}',}
-    media = MediaFileUpload(f'easyearth_env{VERSION}{format}', mimetype='application/gzip' if format == '.zip' else 'application/zip')
+    filename = f'easyearth_env{VERSION}{format}'
+    if not os.path.exists(filename):
+        raise FileNotFoundError(f"File {filename} does not exist. Please generate it before uploading.")
+
+    mimetype = 'application/zip' if format == '.zip' else 'application/gzip'
+    media = MediaFileUpload(filename, mimetype=mimetype)
 
     if FILE_ID is None:
         # Create a new file
