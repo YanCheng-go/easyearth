@@ -1,0 +1,69 @@
+name: Upload zipped environment to Google Drive for Linux
+
+on:
+  push:
+    branches:
+      - yan  # Run on pushes to the master branch
+    paths:
+      - requirements.txt  # Only run if requirements.txt changes
+      - upload_to_gdrive.py  # Ensure the script is present
+      - .github/workflows/upload_linux_env.yml  # Ensure the workflow file is present
+      - tests/test_alive_controller.py  # Ensure the alive test is present
+  pull_request:
+    branches:
+      - master  # Run on pull requests to the master branch
+    paths:
+      - requirements.txt  # Only run if requirements.txt changes
+      - upload_to_gdrive.py  # Ensure the script is present
+      - .github/workflows/upload_linux_env.yml  # Ensure the workflow file is present
+      - tests/test_alive_controller.py  # Ensure the alive test is present
+
+jobs:
+  upload-env:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10.12' # Specify the Python version you need
+
+      - name: Create virtual environment & install dependencies
+        run: |
+          python -m venv --copies easyearth_env
+          source easyearth_env/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Back to repo root
+        run: cd ${{ github.workspace }}
+
+      - name: Start EasyEarth app & run alive test
+        working-directory: ${{ github.workspace }}
+        run: |
+          source easyearth_env/bin/activate
+          python -m easyearth.app --host 0.0.0.0 --port 3781 &
+          sleep 10  # Wait for the app to start
+          python -m unittest easyearth.tests.test_alive_controller
+
+      - name: Test the environment
+        working-directory: ${{ github.workspace }}  # default is already the repo root!
+        run: |
+          source easyearth_env/bin/activate
+          python -c "import easyearth; print('EasyEarth environment is set up successfully!')"
+
+
+      - name: Zip the environment
+        run: |
+          zip -r easyearth_env.zip easyearth_env
+
+      - name: Install Google API client
+        run: pip install google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib
+
+      - name: Upload zipped environment to Google Drive
+        env:
+          GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
+        run: python upload_to_gdrive.py
