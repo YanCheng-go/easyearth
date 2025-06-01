@@ -3,6 +3,7 @@ import subprocess
 from qgis.core import Qgis
 from qgis.PyQt.QtWidgets import QMessageBox
 import logging
+from datetime import datetime
 
 class EnvManager:
     """
@@ -28,9 +29,10 @@ class EnvManager:
         This method runs a shell script to download the environment setup for Linux.
         It logs the output to a file and provides feedback to the user.
         """
+        suffix = datetime.now().strftime("%Y%m%d_%H%M%S")
+
         self.download_env_log_file = open(
-            os.path.join(self.logs_dir, "download_linux_env.log"), "w"
-        )
+            os.path.join(self.logs_dir, f"download_linux_env_{suffix}.log"), "w")
 
         download_script = os.path.join(self.plugin_dir, "download_linux_env.sh")
         if not os.path.exists(download_script):
