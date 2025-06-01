@@ -509,7 +509,7 @@ class EasyEarthPlugin:
                               f"-v \"{self.base_dir}\":/usr/src/app/easyearth_base " # mounts the base directory in the container
                               f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
                               f"{self.docker_hub_image_name}")
-            result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
+            result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True, timeout=1800)
             self.iface.messageBar().pushMessage(f"Starting server...\nRunning command: {result}", level=Qgis.Info)
             
             if result.returncode == 0:
@@ -580,7 +580,7 @@ class EasyEarthPlugin:
             self.docker_hub_process = None
             self.docker_running = False
         else:
-            result = subprocess.run('kill $(lsof -t -i:3781)', capture_output=True, text=True, shell=True) # kills the process running on port 3781
+            result = subprocess.run('kill $(lsof -t -i:3781)', capture_output=True, text=True, shell=True, timeout=1800) # kills the process running on port 3781
 
         self.iface.messageBar().pushMessage(f"Stopping server with command: {result}", level=Qgis.Info)
 

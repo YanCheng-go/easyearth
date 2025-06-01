@@ -12,7 +12,8 @@ on:
 #         - 'environment.yml'
 #         - 'requirements.txt'
 #         - 'easyearth/**'
-    pull_request:
+#         - '.github/workflows/deploy.yml'
+     pull_request:
         branches:
         - master
         paths:
@@ -21,7 +22,7 @@ on:
         - 'environment.yml'
         - 'requirements.txt'
         - 'easyearth/**'
-        - '.github/workflows/deploy.yml'
+#        - '.github/workflows/deploy.yml'
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest

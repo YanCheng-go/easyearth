@@ -181,7 +181,7 @@ def predict():
 
             # Get masks from SAM2
             masks = sam2.get_masks(
-                image_path,
+                image_array,
                 bboxes=transformed_prompts['boxes'] if len(transformed_prompts['boxes']) > 0 else None,
                 points=transformed_prompts['points'] if len(transformed_prompts['points']) > 0 else None,
                 labels=transformed_prompts['labels'] if len(transformed_prompts['labels']) > 0 else None,
