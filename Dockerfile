@@ -2,8 +2,9 @@ FROM python:3.10-slim
 
 # Install system dependencies
 RUN apt-get update \
-    && apt-get install -y \
+    && apt-get install -y libgl1-mesa-glx \
     libexpat1 \
+    libglib2.0-0 \
     libgdal-dev \
     gdal-bin --no-install-recommends \
     build-essential \
