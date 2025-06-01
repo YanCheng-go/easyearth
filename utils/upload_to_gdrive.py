@@ -3,6 +3,7 @@ import json
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+import sys
 
 
 def main(FILE_ID=None, shareable: bool = True, VERSION='', format='.zip') -> (str, bool):
@@ -18,77 +19,83 @@ def main(FILE_ID=None, shareable: bool = True, VERSION='', format='.zip') -> (st
         is_shareable (bool): Whether the file is shareable after this operation.
     """
 
-    if VERSION != '':
-        FILE_ID = None  # Reset FILE_ID for testing or new uploads
+    print(f"Starting upload script with FILE_ID={FILE_ID}, shareable={shareable}, VERSION={VERSION}, format={format}")
+    try:
+        if VERSION != '':
+            FILE_ID = None  # Reset FILE_ID for testing or new uploads
 
-    # Load credentials from environment variable
-    creds_json = os.environ['GDRIVE_CREDENTIALS']
-    creds_dict = json.loads(creds_json)
+        # Load credentials from environment variable
+        creds_json = os.environ['GDRIVE_CREDENTIALS']
+        creds_dict = json.loads(creds_json)
 
-    SCOPES = ['https://www.googleapis.com/auth/drive']
-    credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+        SCOPES = ['https://www.googleapis.com/auth/drive']
+        credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
 
-    drive_service = build('drive', 'v3', credentials=credentials)
+        drive_service = build('drive', 'v3', credentials=credentials)
 
-    filename = f'easyearth_env{VERSION}{format}'
-    if not os.path.exists(filename):
-        raise FileNotFoundError(f"File {filename} does not exist. Please generate it before uploading.")
+        filename = f'easyearth_env{VERSION}{format}'
+        if not os.path.exists(filename):
+            raise FileNotFoundError(f"File {filename} does not exist. Please generate it before uploading.")
 
-    mimetype = 'application/zip' if format == '.zip' else 'application/gzip'
-    media = MediaFileUpload(filename, mimetype=mimetype)
+        mimetype = 'application/zip' if format == '.zip' else 'application/gzip'
+        media = MediaFileUpload(filename, mimetype=mimetype)
 
-    file_metadata = {'name': filename}  # <-- Add this here!
+        file_metadata = {'name': filename}  # <-- Add this here!
 
-    if FILE_ID is None:
-        # Create a new file
-        file = drive_service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id'
-        ).execute()
-        FILE_ID = file.get('id')
-        print(f'Uploaded new ZIP file to Google Drive! File ID: {FILE_ID}')
-    else:
-        # Update existing file
-        file = drive_service.files().update(
+        if FILE_ID is None:
+            # Create a new file
+            file = drive_service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields='id'
+            ).execute()
+            FILE_ID = file.get('id')
+            print(f'Uploaded new ZIP file to Google Drive! File ID: {FILE_ID}')
+        else:
+            # Update existing file
+            file = drive_service.files().update(
+                fileId=FILE_ID,
+                body=file_metadata,
+                media_body=media,
+                fields='id'
+            ).execute()
+            print(f'Updated ZIP file in Google Drive! File ID: {FILE_ID}')
+
+        # Check if the file is already shareable
+        permissions = drive_service.permissions().list(fileId=FILE_ID).execute()
+        is_shareable = any(
+            perm.get('role') == 'reader' and perm.get('type') == 'anyone'
+            for perm in permissions.get('permissions', [])
+        )
+        print(f'File {FILE_ID} is currently {"shareable" if is_shareable else "not shareable"}.')
+
+        # If not shareable and requested, make it shareable
+        if shareable and not is_shareable:
+            drive_service.permissions().create(
+                fileId=FILE_ID,
+                body={'role': 'reader', 'type': 'anyone'}
+            ).execute()
+            print(f'File {FILE_ID} is now shareable.')
+
+        # Generate the shareable link
+        shareable_link = f"https://drive.google.com/file/d/{FILE_ID}/view?usp=sharing"
+        print(f'Shareable link: {shareable_link}')
+
+        # Move to a folder in Google Drive if needed
+        # Uncomment and modify the following lines if you want to move the file to a specific folder
+        folder_id = '14TvSQRmXqWgawIJoCTWplWrZAgNDTmgL'  # Replace with your folder ID
+        drive_service.files().update(
             fileId=FILE_ID,
-            body=file_metadata,
-            media_body=media,
-            fields='id'
+            addParents=folder_id,
+            removeParents='root',  # Optional: remove from root folder
+            fields='id, parents'
         ).execute()
-        print(f'Updated ZIP file in Google Drive! File ID: {FILE_ID}')
 
-    # Check if the file is already shareable
-    permissions = drive_service.permissions().list(fileId=FILE_ID).execute()
-    is_shareable = any(
-        perm.get('role') == 'reader' and perm.get('type') == 'anyone'
-        for perm in permissions.get('permissions', [])
-    )
-    print(f'File {FILE_ID} is currently {"shareable" if is_shareable else "not shareable"}.')
+        return FILE_ID, is_shareable or shareable
 
-    # If not shareable and requested, make it shareable
-    if shareable and not is_shareable:
-        drive_service.permissions().create(
-            fileId=FILE_ID,
-            body={'role': 'reader', 'type': 'anyone'}
-        ).execute()
-        print(f'File {FILE_ID} is now shareable.')
-
-    # Generate the shareable link
-    shareable_link = f"https://drive.google.com/file/d/{FILE_ID}/view?usp=sharing"
-    print(f'Shareable link: {shareable_link}')
-
-    # Move to a folder in Google Drive if needed
-    # Uncomment and modify the following lines if you want to move the file to a specific folder
-    folder_id = '14TvSQRmXqWgawIJoCTWplWrZAgNDTmgL'  # Replace with your folder ID
-    drive_service.files().update(
-        fileId=FILE_ID,
-        addParents=folder_id,
-        removeParents='root',  # Optional: remove from root folder
-        fields='id, parents'
-    ).execute()
-
-    return FILE_ID, is_shareable or shareable
+    except Exception as e:
+        print(f"Upload script failed with exception: {e}", file=sys.stderr)
+        raise
 
 
 if __name__ == '__main__':
