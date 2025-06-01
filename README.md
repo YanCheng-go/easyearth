@@ -216,8 +216,9 @@ We welcome community contributions! If you'd like to contribute, check out:
 
 ## 🧑‍💻 Authors
 
-Developed by: <br>
-**Yan Cheng** ([chengyan2017@gmail.com](mailto:chengyan2017@gmail.com)) – 
+Developed by:
+
+Yan Cheng ([chengyan2017@gmail.com](mailto:chengyan2017@gmail.com)) – 
 [🌐 Website](https://yancheng-website.com)
 <a href="https://github.com/YanCheng-go" style="margin-left: 0.5em;">
   <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/github.svg" alt="GitHub" width="20" style="vertical-align: middle;"/> GitHub
@@ -225,8 +226,7 @@ Developed by: <br>
 <a href="https://www.linkedin.com/in/yancheng" style="margin-left: 0.5em;">
   <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/linkedin.svg" alt="LinkedIn" width="20" style="vertical-align: middle;"/> LinkedIn
 </a><br>
-**Ankit Kariryaa** ([ankit.ky@gmail.com](mailto:ankit.ky@gmail.com)) – <br> 
-**Lucia Gordon** ([luciagordon@g.harvard.edu](mailto:luciagordon@g.harvard.edu)) – 
+Lucia Gordon ([luciagordon@g.harvard.edu](mailto:luciagordon@g.harvard.edu)) – 
 [🌐 Website](https://lgordon99.github.io)
 <a href="https://github.com/lgordon99" style="margin-left: 0.5em;">
   <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/github.svg" alt="GitHub" width="20" style="vertical-align: middle;"/> GitHub
@@ -234,4 +234,6 @@ Developed by: <br>
 <a href="http://www.linkedin.com/in/lucia-gordon-187069225" style="margin-left: 0.5em;">
   <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/linkedin.svg" alt="LinkedIn" width="20" style="vertical-align: middle;"/> LinkedIn
 </a><br>
+Ankit Kariryaa ([ankit.ky@gmail.com](mailto:ankit.ky@gmail.com))
+
 ---
