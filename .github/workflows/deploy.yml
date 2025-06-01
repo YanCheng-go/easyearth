@@ -1,4 +1,5 @@
-name: Build and Deploy Docker Image
+name: Docker Image
+# This workflow builds a Docker image for EasyEarth App and pushes it to Docker Hub.
 
 on:
 #     push:

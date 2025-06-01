@@ -11,7 +11,7 @@ from qgis.core import (QgsVectorLayer, QgsGeometry, QgsRectangle,
                       QgsWkbTypes, QgsRasterLayer, Qgis, QgsLayerTreeGroup, QgsCategorizedSymbolRenderer,
                       QgsRendererCategory, QgsMarkerSymbol, QgsFillSymbol, QgsCoordinateTransform, QgsSingleSymbolRenderer)
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
-from .core import BoxMapTool, setup_logger, map_id, create_point_box
+from .core import BoxMapTool, setup_logger, map_id, create_point_box, EnvManager
 import json
 import logging
 import os
@@ -510,6 +510,7 @@ class EasyEarthPlugin:
                               f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
                               f"{self.docker_hub_image_name}")
                             #   "easyearth")
+            QMessageBox.warning(None, "Update Docker Image", "Downloading or Updating Docker image from Docker Hub. This may take a while for the first time, please wait...") # shows a warning message that the Docker image is being downloaded
             result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
             self.iface.messageBar().pushMessage(f"Starting server...\nRunning command: {result}", level=Qgis.Info)
             
@@ -538,17 +539,19 @@ class EasyEarthPlugin:
                 self.iface.messageBar().pushMessage(f"Moved easyearth folder out of repo to {easyearth_folder_path}", level=Qgis.Info)
 
             # Download env
-            env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/env-v3/easyearth_env.tar.gz'
-            zipped_env_path = os.path.join(self.base_dir, 'easyearth_env.tar.gz')
             env_path = os.path.join(self.base_dir, 'easyearth_env')
-
             if not os.path.exists(env_path):
-                urllib.request.urlretrieve(env_url, zipped_env_path)
-                self.iface.messageBar().pushMessage(f"Downloaded environment from {env_url} to {zipped_env_path}", level=Qgis.Info)
-                
-                unzipping = subprocess.run(f'tar -xzf \"{zipped_env_path}\" -C \"{self.base_dir}\"', capture_output=True, text=True, shell=True)  # unzips the environment tar.gz file
-                os.remove(zipped_env_path)  # remove the zip file after extraction
-                self.iface.messageBar().pushMessage(f"Unzipped environment to {env_path}: {unzipping}", level=Qgis.Info)
+                QMessageBox.warning(None, "Local Python Environment Not Found", "Downloading EasyEarth Python environment. This may take a while, please wait...")
+                self.iface.messageBar().pushMessage(f"Downloading EasyEarth Python environment for {platform.system().lower()} system",level=Qgis.Info)
+                if platform.system().lower() == "darwin":
+                    env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/env-v3/easyearth_env.tar.gz'
+                    zipped_env_path = os.path.join(self.base_dir, 'easyearth_env.tar.gz')
+                    urllib.request.urlretrieve(env_url, zipped_env_path)
+                    unzipping = subprocess.run(f'tar -xzf \"{zipped_env_path}\" -C \"{self.base_dir}\"', capture_output=True, text=True, shell=True)  # unzips the environment tar.gz file
+                    os.remove(zipped_env_path)  # remove the zip file after extraction
+                else:
+                    EnvManager(self.iface, self.logs_dir, self.plugin_dir).download_linux_env() # Use EnvManager to download (internally calls download_linux_env.sh)
+                self.iface.messageBar().pushMessage(f"Unzipped environment to {env_path}", level=Qgis.Info)
 
             self.local_server_log_file = open(f"{self.logs_dir}/launch_server_local.log", "w")  # log file for the local server launch
             result = subprocess.Popen(f'chmod +x \"{self.plugin_dir}\"/launch_server_local.sh && \"{self.plugin_dir}\"/launch_server_local.sh',

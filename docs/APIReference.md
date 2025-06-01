@@ -1,10 +1,7 @@
 # API Reference for EasyEarth
-# From sawgger ui
-#
-# This document provides an overview of the API endpoints available in the EasyEarth project.
-# It includes details on how to use the endpoints, the expected request and response formats, and examples of usage.
-#
-# ## API Endpoints
+This document provides an overview of the API endpoints available in the EasyEarth project.
+It includes details on how to use the endpoints, the expected request and response formats, and examples of usage.
+## API Endpoints
 - /ping
   - **Method**: GET
   - **Description**: Check if the server is running.
