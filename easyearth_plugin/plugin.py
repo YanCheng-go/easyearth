@@ -6,12 +6,12 @@ from qgis.PyQt.QtWidgets import (QAction, QDockWidget, QPushButton, QVBoxLayout,
                                 QLineEdit, QFileDialog, QComboBox, QGroupBox, QShortcut, QProgressBar, QCheckBox, QButtonGroup, QRadioButton, QApplication, QScrollArea)
 from qgis.PyQt.QtCore import Qt, QTimer
 from qgis.PyQt.QtGui import QIcon, QKeySequence, QColor
-from qgis.core import (QgsVectorLayer, QgsGeometry,
+from qgis.core import (QgsVectorLayer, QgsGeometry, QgsRectangle,
                       QgsPointXY, QgsProject,
                       QgsWkbTypes, QgsRasterLayer, Qgis, QgsLayerTreeGroup, QgsCategorizedSymbolRenderer,
                       QgsRendererCategory, QgsMarkerSymbol, QgsFillSymbol, QgsCoordinateTransform, QgsSingleSymbolRenderer)
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
-from .core import BoxMapTool, setup_logger, map_id
+from .core import BoxMapTool, setup_logger, map_id, create_point_box, EnvManager
 import json
 import logging
 import os
@@ -62,7 +62,6 @@ class EasyEarthPlugin:
         self.server_running = False
         self.action = None
         self.dock_widget = None
-        self.point_counter = None
         self.point_layer = None
         self.total_steps = 0
         self.current_step = 0
@@ -112,6 +111,7 @@ class EasyEarthPlugin:
         self.raster_width = None
         self.raster_height = None
         self.project_crs = QgsProject.instance().crs()
+        self.selected_layer = None  # currently selected raster layer
 
         QgsProject.instance().crsChanged.connect(self.on_project_crs_changed)
 
@@ -221,6 +221,9 @@ class EasyEarthPlugin:
                 "facebook/sam-vit-base",
                 "facebook/sam-vit-large",
                 "facebook/sam-vit-huge",
+                "ultralytics/sam2.1_b",
+                "ultralytics/sam2.1_l",
+                "ultralytics/sam2.1_x",
                 "restor/tcd-segformer-mit-b5",
             ])
             self.model_dropdown.setEditText("facebook/sam-vit-base") # default
@@ -487,18 +490,6 @@ class EasyEarthPlugin:
             self.docker_mode_button.setChecked(False)
             self.docker_mode = False
 
-    # def get_confirm_token(self, response):
-    #     for key, value in response.cookies.items():
-    #         if key.startswith('download_warning'):
-    #             return value
-    #     return None
-
-    # def save_response_content(self, response, destination, chunk_size=32768):
-    #     with open(destination, "wb") as f:
-    #         for chunk in response.iter_content(chunk_size):
-    #             if chunk:
-    #                 f.write(chunk)
-
     def start_server(self):
         if self.docker_mode_button.isChecked():
             linux_gpu_flags = " --runtime nvidia" if platform.system().lower() == "linux" else ""  # adds GPU support if available and on Linux
@@ -511,20 +502,18 @@ class EasyEarthPlugin:
             subprocess.run(f"{self.docker_path} pull {self.docker_hub_image_name}", capture_output=True, text=True, shell=True)  # removes the container if it already exists
             self.iface.messageBar().pushMessage('Starting the Docker container', level=Qgis.Info)
             QApplication.processEvents()
-
             docker_run_cmd = (
-                # f"{self.docker_path} rm -f easyearth 2>/dev/null || true && " # removes the container if it already exists
-                #               f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
                               f"{self.docker_path} run{linux_gpu_flags}{gpu_flags} -d --name easyearth -p 3781:3781 " # runs the container in detached mode and maps port 3781
                               f"-v \"{self.base_dir}\":/usr/src/app/easyearth_base " # mounts the base directory in the container
                               f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
                               f"{self.docker_hub_image_name}")
+            QMessageBox.warning(None, "Update Docker Image", "Downloading or Updating Docker image from Docker Hub. This may take a while for the first time, please wait...") # shows a warning message that the Docker image is being downloaded
             result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
             self.iface.messageBar().pushMessage(f"Starting server...\nRunning command: {result}", level=Qgis.Info)
             
             if result.returncode == 0:
                 self.docker_running = True
-                self.iface.messageBar().pushMessage("Docker container started successfully.", level=Qgis.Info)
+                self.iface.messageBar().pushMessage("Docker container started successfully.", level=Qgis.Success)
 
         if self.local_mode_button.isChecked():
             # Download server code
@@ -554,6 +543,9 @@ class EasyEarthPlugin:
             env_path = os.path.join(self.base_dir, 'easyearth_env')
 
             if not os.path.exists(env_path):
+                QMessageBox.warning(None, "Local Python Environment Not Found", "Downloading EasyEarth Python environment. This may take a while, please wait...")
+                self.iface.messageBar().pushMessage(f"Downloading EasyEarth Python environment for {platform.system().lower()} system",level=Qgis.Info)
+
                 if platform.system().lower() == 'darwin':  # macOS
                     env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/env-v3/easyearth_env.tar.gz'
                     zipped_env_path = os.path.join(self.base_dir, 'easyearth_env.tar.gz')
@@ -565,7 +557,9 @@ class EasyEarthPlugin:
                     subprocess.run(f'tar -xzf \"{zipped_env_path}\" -C \"{self.base_dir}\"', capture_output=True, text=True, shell=True)  # unzips the environment tar.gz file
                     os.remove(zipped_env_path)  # remove the zip file after extraction
                 else:
-                    self.iface.messageBar().pushMessage(f"Local mode only works on MacOS right now", level=Qgis.Info)
+                    EnvManager(self.iface, self.logs_dir, self.plugin_dir).download_linux_env() # Use EnvManager to download (internally calls download_linux_env.sh)
+                
+                self.iface.messageBar().pushMessage(f"Unzipped environment to {env_path}", level=Qgis.Info)
 
             self.local_server_log_file = open(f"{self.logs_dir}/launch_server_local.log", "w")  # log file for the local server launch
             self.iface.messageBar().pushMessage(f"Starting local server...", level=Qgis.Info)
@@ -575,6 +569,9 @@ class EasyEarthPlugin:
                                     stderr=subprocess.STDOUT,  # redirects stderr to the same log file
                                     text=True,              # decodes output as text, not bytes
                                     start_new_session=True)  # detaches from QGIS
+            
+            if result:
+                self.iface.messageBar().pushMessage(f"Local server started successfully. Check logs {self.local_server_log_file} for details.", level=Qgis.Success)
 
     def stop_server(self):
         if self.docker_mode_button.isChecked():
@@ -604,6 +601,7 @@ class EasyEarthPlugin:
         """Handle image source selection change"""
 
         try:
+            is_sam = self.is_sam_model()  # check if the selected model is a SAM model
             if text == "File":
                 self.image_path.show()
                 self.image_path.setReadOnly(True)
@@ -613,14 +611,14 @@ class EasyEarthPlugin:
                 self.image_path.clear()
                 self.image_path.setPlaceholderText("No image selected")
                 self.initialize_embedding_path()
-                self.deactivate_embedding_section() if not self.is_sam_model() else None
+                self.deactivate_embedding_section() if not is_sam else None
             elif text == "Layer":
                 self.image_path.hide()
                 self.browse_button.hide()
                 self.download_button.hide()
                 self.layer_dropdown.show()
                 self.update_layer_dropdown()
-                self.embedding_group.setVisible(self.is_sam_model()) # show embedding section if SAM model is selected
+                self.embedding_group.setVisible(is_sam) # show embedding section if SAM model is selected
             elif text == "Link":
                 self.image_path.show()
                 self.image_path.setReadOnly(False)
@@ -630,7 +628,7 @@ class EasyEarthPlugin:
                 self.image_path.setPlaceholderText("Enter image URL (http/https...)")
                 self.image_path.clear()
                 self.initialize_embedding_path()
-                self.deactivate_embedding_section() if not self.is_sam_model() else None
+                self.deactivate_embedding_section() if not is_sam else None
 
             # self.cleanup_previous_session() # clears any existing layers
 
@@ -721,8 +719,12 @@ class EasyEarthPlugin:
             self.logger.error(f"Error updating layer combo: {str(e)}")
 
     def is_sam_model(self):
-        is_sam = self.model_path.startswith("facebook/sam-")
+        is_sam = self.model_path.startswith("facebook/sam-") or self.model_path.startswith("ultralytics/sam2")
         return is_sam
+
+    def is_sam2_model(self):
+        """Check if the selected model is a SAM2 model."""
+        return self.model_path.startswith("ultralytics/sam2")
 
     def on_model_changed(self, text=None):
         """1. Enable drawing and embedding only if a SAM model is selected.
@@ -735,14 +737,14 @@ class EasyEarthPlugin:
 
         is_sam = self.is_sam_model()
 
-        # Drawing section
-        self.draw_button.setEnabled(is_sam)
-        self.draw_type_dropdown.setEnabled(is_sam)
-        self.realtime_checkbox.setEnabled(is_sam)
+        # # Drawing section
+        # self.draw_button.setEnabled(is_sam)
+        # self.draw_type_dropdown.setEnabled(is_sam)
+        # self.realtime_checkbox.setEnabled(is_sam)
 
-        if not is_sam:
-            self.draw_button.setChecked(False)
-            self.draw_button.setText("Start drawing")
+        # if not is_sam:
+        #     self.draw_button.setChecked(False)
+        #     self.draw_button.setText("Start drawing")
 
         # Embedding section
         self.embedding_path_edit.setEnabled(is_sam and not self.no_embedding_radio.isChecked())
@@ -824,16 +826,16 @@ class EasyEarthPlugin:
             QMessageBox.critical(None, "Error", f"Failed to update embeddings: {str(e)}")
 
     def on_image_selected(self):
-        selected_layer = None
+        """Handle image selection from file."""
 
         for group in QgsProject.instance().layerTreeRoot().children():
             for layer in group.children():
                 if layer.name() == self.get_image_name():
-                    selected_layer = layer.layer()
+                    self.selected_layer = layer.layer()
 
-        self.iface.setActiveLayer(selected_layer) # sets the selected layer as the active layer
-        self.iface.messageBar().pushMessage(f"Selected layer {selected_layer.name()}", level=Qgis.Info)
-        self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(selected_layer)
+        self.iface.setActiveLayer(self.selected_layer) # sets the selected layer as the active layer
+        self.iface.messageBar().pushMessage(f"Selected layer {self.selected_layer.name()}", level=Qgis.Info)
+        self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(self.selected_layer)
         msg = (
             f"Extent: X min: {self.raster_extent.xMinimum()}, X max: {self.raster_extent.xMaximum()}, "
             f"Y min: {self.raster_extent.yMinimum()}, Y max: {self.raster_extent.yMaximum()}; "
@@ -843,10 +845,10 @@ class EasyEarthPlugin:
         )
         self.iface.messageBar().pushMessage(msg, level=Qgis.Info,)
         
-        if selected_layer.crs() != self.project_crs:
-            QgsProject.instance().setCrs(selected_layer.crs())  # Set the layer CRS to match the project CRS
+        if self.selected_layer.crs() != self.project_crs:
+            QgsProject.instance().setCrs(self.selected_layer.crs())  # Set the layer CRS to match the project CRS
         
-        extent = selected_layer.extent()
+        extent = self.selected_layer.extent()
 
         if not extent.isEmpty():
             # Add small buffer around the layer (5%)
@@ -867,7 +869,7 @@ class EasyEarthPlugin:
         
         # Reorder the group to be at the top
         root = QgsProject.instance().layerTreeRoot()
-        group = root.findGroup(selected_layer.name())
+        group = root.findGroup(self.selected_layer.name())
         root.insertChildNode(0, group.clone())  # inserts the group at the top of the layer tree
         group.parent().removeChildNode(group) # removes the original group
         self.iface.mapCanvas().refresh()
@@ -909,6 +911,7 @@ class EasyEarthPlugin:
         try:
             # Get the image path
             image_path = self.image_path.text()
+            is_sam = self.is_sam_model()  # check if the selected model is a SAM model
 
             if not image_path:
                 return
@@ -929,21 +932,12 @@ class EasyEarthPlugin:
                 group.addLayer(raster_layer) # adds the layer to the group
             
             self.on_image_selected()
-
-            # Get image crs and extent
-            # self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(raster_layer)
-            # raster_properties = (f"Extent: X min: {self.raster_extent.xMinimum()}, X max: {self.raster_extent.xMaximum()}, "
-            #                      f"Y min: {self.raster_extent.yMinimum()}, Y max: {self.raster_extent.yMaximum()}; "
-            #                      f"Width: {self.raster_width}; "
-            #                      f"Height: {self.raster_height}; "
-            #                      f"CRS: {self.raster_crs.authid()}")
-            # self.iface.messageBar().pushMessage("Selected raster CRS and dimensions", raster_properties, level=Qgis.Info, duration=5)
             self.create_prediction_layers()
 
-            if self.is_sam_model():
+            if is_sam:
                 self.update_embeddings()
 
-            self.embedding_group.setVisible(self.is_sam_model())  # Show embedding section if SAM model is selected
+            self.embedding_group.setVisible(is_sam)  # Show embedding section if SAM model is selected
             self.drawing_group.setVisible(True)  # Show drawing section when image is loaded
             self.predict_group.setVisible(True)  # Show prediction section when image is loaded
         except Exception as e:
@@ -1011,9 +1005,6 @@ class EasyEarthPlugin:
 
         self.points = []
 
-        if hasattr(self, 'point_counter'):
-            self.point_counter.setText("Points: 0")
-
         if self.point_layer:
             try:
                 # Remove features from the point layer
@@ -1055,17 +1046,77 @@ class EasyEarthPlugin:
             self.draw_button.setChecked(False)
             self.draw_button.setText("Start Drawing")
 
+    # TODO: use this generic function to convert any geometry to pixel coordinates
+    def map_geom_to_pixel_coords(self, box_geom):
+        """
+        Convert a geometry in map coordinates to pixel coordinates (top-left (0,0)).
+        Args:
+            box_geom (QgsGeometry): Geometry in map coordinates (like from create_point_box).
+        Returns:
+            tuple: (xmin, ymin, xmax, ymax) in pixel coordinates.
+        """
+
+        raster_extent, raster_width, raster_height = self.raster_extent, self.raster_width, self.raster_height
+
+        bbox = box_geom.boundingBox()
+
+        # Ensure bbox is within raster extent
+        if not raster_extent.contains(bbox):
+            QMessageBox.critical(None, "Error", "Bounding box is outside the raster extent. Please ensure the geometry is within the raster bounds.")
+            return None
+
+        # Map extent
+        xmin_map, xmax_map = raster_extent.xMinimum(), raster_extent.xMaximum()
+        ymin_map, ymax_map = raster_extent.yMinimum(), raster_extent.yMaximum()
+
+        # Map to pixel conversion (image coords: (0,0) at top-left)
+        pixel_xmin = int((bbox.xMinimum() - xmin_map) * raster_width / raster_extent.width())
+        pixel_xmax = int((bbox.xMaximum() - xmin_map) * raster_width / raster_extent.width())
+        pixel_ymin = int((ymax_map - bbox.yMaximum()) * raster_height / raster_extent.height())
+        pixel_ymax = int((ymax_map - bbox.yMinimum()) * raster_height / raster_extent.height())
+
+        # Clamp to image boundaries
+        pixel_xmin = max(0, min(pixel_xmin, raster_width - 1))
+        pixel_xmax = max(0, min(pixel_xmax, raster_width - 1))
+        pixel_ymin = max(0, min(pixel_ymin, raster_height - 1))
+        pixel_ymax = max(0, min(pixel_ymax, raster_height - 1))
+
+        return (pixel_xmin, pixel_ymin, pixel_xmax, pixel_ymax)
+
+    def show_aoi_on_map(self, geom):
+        """Display the Area of Interest (AOI) on the map canvas."""
+        # Check if self.aoi_rubber_band already exists; if not, create it
+        if not hasattr(self, 'aoi_rubber_band') or self.aoi_rubber_band is None:
+            self.aoi_rubber_band = QgsRubberBand(self.canvas, QgsWkbTypes.PolygonGeometry)
+            self.aoi_rubber_band.setColor(QColor(0, 0, 255, 100))  # Blue, semi-transparent
+            self.aoi_rubber_band.setWidth(2)
+
+        # Clear previous geometry and set the new one
+        self.aoi_rubber_band.reset(QgsWkbTypes.PolygonGeometry)
+        self.aoi_rubber_band.addGeometry(geom, None)
+        self.aoi_rubber_band.show()  # Show the rubber band on the map canvas
+
+        # # Zoom to extent
+        # extent = geom.boundingBox()
+        # self.canvas.setExtent(extent)
+        # self.canvas.refresh()
+
+    def clear_aoi(self):
+        """Clear the Area of Interest (AOI) from the map canvas."""
+        if hasattr(self, 'aoi_rubber_band') and self.aoi_rubber_band is not None:
+            self.aoi_rubber_band.reset(QgsWkbTypes.PolygonGeometry)
+            self.aoi_rubber_band.hide()
+
     def on_point_drawn(self, point, button):
         """Handle canvas clicks for drawing points or boxes
         Args:
             point (QgsPointXY): The clicked point in map coordinates
             button (Qt.MouseButton): The mouse button that was clicked
         """
-
         try:            
             if not self.draw_button.isChecked() or button != Qt.LeftButton:
                 return None
-
+            is_sam = self.is_sam_model()
             draw_type = self.draw_type_dropdown.currentText()
             extent, width, height, raster_crs = self.raster_extent, self.raster_width, self.raster_height, self.raster_crs
 
@@ -1074,7 +1125,15 @@ class EasyEarthPlugin:
             #     transform = QgsCoordinateTransform(self.project_crs, raster_crs, QgsProject.instance())
             #     point = transform.transform(point)
 
+            prompt = []
+            aoi_feature = None
+            point_feature = None
+
             if draw_type == "Point":
+                # Check if the point is within the raster extent
+                if not extent.contains(point):
+                    QMessageBox.critical(None, "Error", "Point coordinates are outside the image bounds. Please make sure you selected the right image and draw a valid point within the image.")
+                    return None
                 # Calculate pixel coordinates
                 px = int((point.x() - extent.xMinimum()) * width / extent.width())
                 py = int((extent.yMaximum() - point.y()) * height / extent.height())
@@ -1111,15 +1170,23 @@ class EasyEarthPlugin:
                 }
 
                 point_feature["properties"]["timestamp"] = time.time() # adds timestamp to prompt feature
-                self.add_features_to_layer([point_feature], "prompts") # adds point to layer
-                self.prompt_count[self.get_image_name()] += 1 # increments prompt counter
 
-                prompt = [{'type': 'Point', 'data': {"points": [[px, py]]}}]
+                if is_sam:
+                    prompt = [{'type': 'Point', 'data': {"points": [[px, py]]}}]
+                    aoi_feature = None
+                else:
+                    # If not SAM model, create a box around the point, with a buffer of 500 pixels or 500 meters
+                    box_geom = create_point_box(point, self.selected_layer)
+                    self.show_aoi_on_map(box_geom)
+                    aoi_feature = self.map_geom_to_pixel_coords(box_geom)
+                    prompt = []
 
-                if self.realtime_checkbox.isChecked():
-                    self.get_prediction(prompt)
-                return point
-            return None
+            self.add_features_to_layer([point_feature], "prompts")  # adds point to layer
+            self.prompt_count[self.get_image_name()] += 1  # increments prompt counter
+
+            if self.realtime_checkbox.isChecked():
+                self.get_prediction(prompt, [aoi_feature])
+            return point
 
         except Exception as e:
             self.logger.error(f"Error handling draw click: {str(e)}")
@@ -1155,6 +1222,11 @@ class EasyEarthPlugin:
                 QgsPointXY(start_point.x(), end_point.y()),
                 start_point
             ]])
+
+        # check if within image bounds
+        if not extent.contains(start_point) or not extent.contains(end_point):
+            QMessageBox.critical(None, "Error", "Box coordinates are outside the image bounds. Please make sure you selected the right image and draw a valid box within the image.")
+            return
 
         # Calculate pixel coordinates based on start and end points
         pixel_x = int((start_point.x() - extent.xMinimum()) * width / extent.width())
@@ -1211,9 +1283,14 @@ class EasyEarthPlugin:
             }
         }]
 
+        aoi_feature = (pixel_x, pixel_y, pixel_x + pixel_width, pixel_y + pixel_height) # creates a tuple with 4 coordinates (x_min, y_min, x_max, y_max)
+
+        if not self.is_sam_model():
+            prompt = []  # if not SAM model, set prompt to empty list
+
         # Send prediction request if realtime checkbox is checked
         if self.realtime_checkbox.isChecked():
-            self.get_prediction(prompt)
+            self.get_prediction(prompt, [aoi_feature]) # sends prediction request if real-time mode is checked
 
         return box_geom
 
@@ -1233,13 +1310,15 @@ class EasyEarthPlugin:
         self.prompts_geojson[self.get_image_name()]['features'] = self.prompts_geojson[self.get_image_name()]['features'][:-1] # removes the last point from the prompts geojson
         self.prompt_count[self.get_image_name()] = self.prompt_count[self.get_image_name()] - 1 if self.prompt_count[self.get_image_name()] > 0 else 0  # decrements the prompt counter
         self.add_features_to_layer([], "prompts") # updates the prompts layer
-        
-        if self.realtime_checkbox.isChecked():
-            self.predictions_geojson[self.get_image_name()]['features'] = self.predictions_geojson[self.get_image_name()]['features'][:-1] # removes the last point from the prompts geojson
-            self.prediction_count[self.get_image_name()] = self.prediction_count[self.get_image_name()] - 1 if self.prediction_count[self.get_image_name()] > 0 else 0
-            self.add_features_to_layer([], "predictions")
-        else:
-            if self.predictions_geojson:
+
+        self.clear_aoi()
+
+        if self.predictions_geojson:
+            if self.realtime_checkbox.isChecked():
+                self.predictions_geojson[self.get_image_name()]['features'] = self.predictions_geojson[self.get_image_name()]['features'][:-1] # removes the last point from the prompts geojson
+                self.prediction_count[self.get_image_name()] = self.prediction_count[self.get_image_name()] - 1 if self.prediction_count[self.get_image_name()] > 0 else 0
+                self.add_features_to_layer([], "predictions")
+            else:
                 # Get the last prediction ID from predictions_geojson
                 last_prediction_index = last_prediction_ID.get(last_prompt_id, None)
                 # self.iface.messageBar().pushMessage(f'Last prediction index: {last_prediction_index}', level=Qgis.Info)
@@ -1249,12 +1328,12 @@ class EasyEarthPlugin:
                 if last_prediction_id is None:
                     self.iface.messageBar().pushMessage("Error", "No matching prediction found for the last prompt.", level=Qgis.Critical, duration=3)
                     return
-                
+
                 self.predictions_geojson[self.get_image_name()]['features'] = [f for f in self.predictions_geojson[self.get_image_name()]['features'] if f['properties']['id'] != last_prediction_id] # removes the last prediction feature from predictions_geojson
                 self.prediction_count[self.get_image_name()] = self.prediction_count[self.get_image_name()] - 1 if self.prediction_count[self.get_image_name()] > 0 else 0 # updates the feature count
                 self.add_features_to_layer([], "predictions") # updates the predictions layer
 
-    def add_features_to_layer(self, features, layer_type='prompts', crs=None):
+    def add_features_to_layer(self, features, layer_type='prompts', crs=None, model_path=None):
         """
         Add or append features to the specified layer (prompts or predictions).
         Args:
@@ -1332,6 +1411,7 @@ class EasyEarthPlugin:
                     "type": "Feature",
                     "properties": {
                         "id": start_id + i,
+                        "model_path": model_path,
                         # "scores": feat.get('properties', {}).get('scores', 0),  # TODO： if scores are available in the feature properties
                     },
                     "geometry": feat['geometry']
@@ -1480,10 +1560,11 @@ class EasyEarthPlugin:
     def collect_all_prompts(self):
         """Collect new prompts added after the last_pred_time
         Returns:
-            list of dicts with prompt data
+            list of dicts with prompt data, list of tuples of AOI coordinates
         """
         try:
             prompts = []
+            aoi_features = []
 
             if self.prompts_layer:
                 for feature in self.prompts_layer[self.get_image_name()].getFeatures():
@@ -1494,7 +1575,7 @@ class EasyEarthPlugin:
                     if self.get_image_name() not in self.last_pred_time.keys():
                         self.last_pred_time[self.get_image_name()] = 0
                     
-                    self.iface.messageBar().pushMessage(f'{timestamp}', level=Qgis.Info)
+                    # self.iface.messageBar().pushMessage(f'{timestamp}', level=Qgis.Info)
 
                     if timestamp is None or timestamp < self.last_pred_time[self.get_image_name()]:
                         self.iface.messageBar().pushMessage(f'continued', level=Qgis.Info)
@@ -1506,31 +1587,43 @@ class EasyEarthPlugin:
                         x = feature['pixel_x']
                         y = feature['pixel_y']
                         prompts.append({'type': 'Point', 'data': {'points': [[x, y]]}}) # TODO: figure out labels for points, when used together with bounding boxes to remove part of the prediction masks
+
+                        if not self.is_sam_model():
+                            # Create a box geometry around the point
+                            point = feature.geometry().asPoint()
+                            box_geom = create_point_box(point, self.selected_layer)
+                            self.show_aoi_on_map(box_geom) # show the AOI on the map canvas
+                            one_aoi = self.map_geom_to_pixel_coords(box_geom)  # convert into pixel coordinates
+                            aoi_features.append(one_aoi)
+
                     elif prompt_type == 'Box':
                         x1 = feature['pixel_x']
                         y1 = feature['pixel_y']
                         x2 = feature['pixel_x'] + feature['pixel_width']
                         y2 = feature['pixel_y'] + feature['pixel_height']
                         prompts.append({'type': 'Box', 'data': {'boxes': [[x1, y1, x2, y2]]}})
+                        aoi_features.append((x1, y1, x2, y2))  # adds the box coordinates to AOI features
                     else:
                         self.iface.messageBar().pushMessage('Unknown prompt type', level=Qgis.Info)
                         self.logger.error(f"Unknown prompt type: {prompt_type}")
                         raise ValueError(f"Unknown prompt type: {prompt_type}")
 
-            return prompts
+            return prompts, aoi_features
         except Exception as e:
             tb = traceback.format_exc()
             self.iface.messageBar().pushMessage(f'tb: {tb}', level=Qgis.Info)
-            return []
+            return [], []
 
     def on_predict_button_clicked(self):
         """Run prediction: batch if prompts exist, else no-prompts prediction."""
         try:
-            prompts = self.collect_all_prompts()  # Implement this to gather all drawn prompts
+            prompts, aoi_features = self.collect_all_prompts()  # Implement this to gather all drawn prompts
             self.iface.messageBar().pushMessage(f'prompts: {prompts}', level=Qgis.Info)
+            self.iface.messageBar().pushMessage(f'aoi_features: {aoi_features}', level=Qgis.Info)
             # if there are boxes and points in the prompts, we need to run the prediction for both
             if self.is_sam_model():
                 if len(prompts) == 0:
+                    QMessageBox.critical(None, "Error", "No prompts found. Please draw points or boxes or use a different model.")
                     self.iface.messageBar().pushMessage("No prompts found. Please draw points or boxes.", level=Qgis.Info)
                     return
                 else:
@@ -1556,21 +1649,30 @@ class EasyEarthPlugin:
             else:
                 # For other models, run prediction without prompts
                 self.iface.messageBar().pushMessage("Running prediction without prompts.", level=Qgis.Info, duration=3)
-                self.get_prediction(prompts)
+                self.get_prediction([], aoi_features)
             
             self.last_pred_time[self.get_image_name()] = time.time()  # Update last prediction time
         except Exception as e:
             self.logger.error(f"Error running prediction: {str(e)}")
             QMessageBox.critical(None, "Error", f"Failed to run prediction: {str(e)}")
 
-    def get_prediction(self, prompts):
-        for prompt in prompts:
-            self.get_prediction_per_prompt([prompt])
+    def get_prediction(self, prompts, aoi_features=None):
+        if len(prompts) == 0:
+            if len(aoi_features) > 0:
+                for aoi in aoi_features:
+                    self.get_prediction_per_prompt(prompts, aoi_features=aoi)
+            else:
+                self.get_prediction_per_prompt(prompts)
+        else:
+            for prompt in prompts:
+                self.get_prediction_per_prompt([prompt])
 
-    def get_prediction_per_prompt(self, prompts):
+    def get_prediction_per_prompt(self, prompts, aoi_features=None):
         """Get prediction from SAM server and add to predictions layer
         Args:
-            prompts: list of dicts with prompt data"""
+            prompts: list of dicts with prompt data
+            aoi_features (Optional): list of tuples with AOI features in pixel coordinates.
+        """
 
         try:
             # Show loading indicator
@@ -1624,11 +1726,36 @@ class EasyEarthPlugin:
 
             # add the model path to the payload if not empty
             self.model_path = self.model_dropdown.currentText().strip()
-            self.model_type = "sam" if self.is_sam_model() else "segment"
+
+            model_conditions = [
+                (self.is_sam_model(), "sam"),
+                (self.is_sam2_model(), "sam2"),
+            ]
+
+            self.model_type = "segment"
+            for condition, model_type in model_conditions:
+                if condition:
+                    self.model_type = model_type
 
             if self.model_path:
                 payload["model_path"] = self.model_path
                 payload["model_type"] = self.model_type
+
+            if aoi_features:
+                payload["aoi"] = {
+                    "type": "Rectangle",  # Must include the type field
+                    "coordinates": []
+                }
+                if isinstance(aoi_features, tuple) and len(aoi_features) == 4:
+                    # change tuple to list
+                    payload["aoi"]["coordinates"] = list(aoi_features)
+                elif isinstance(aoi_features, QgsGeometry):
+                    # Convert QgsGeometry to a tuple with 4 coordinates
+                    coords = aoi_features.boundingBox().toRectF()
+                    payload["aoi"]["coordinates"] = [coords.xMinimum(), coords.yMinimum(), coords.xMaximum(), coords.yMaximum()]
+                else:
+                    QMessageBox.critical(None, "Error", "Invalid AOI feature format. Expected tuple with 4 coordinates or QgsGeometry.")
+                    return
 
             # Show payload in message bar
             if prompts is None or len(prompts) == 0:
@@ -1638,6 +1765,7 @@ class EasyEarthPlugin:
                     f"- No prompts provided, running prediction without prompts.\n"
                     f"- Model path: {self.model_path}\n"
                     f"- Model type: {self.model_type}\n"
+                    f"- AOI: {aoi_features}\n"
                 )
             else:
                 # print prompts to the logger
@@ -1690,7 +1818,7 @@ class EasyEarthPlugin:
                             self.iface.messageBar().pushMessage("Warning", "No predictions returned from server", level=Qgis.Warning, duration=3)
                             return
 
-                        self.add_features_to_layer(features, "predictions", crs=feature_crs) # adds the predictions as a layer
+                        self.add_features_to_layer(features, "predictions", crs=feature_crs, model_path=self.model_path) # adds the predictions as a layer
 
                     except json.JSONDecodeError as e:
                         raise ValueError(f"Invalid JSON response: {str(e)}")
@@ -1797,34 +1925,17 @@ class EasyEarthPlugin:
     def create_prediction_layers(self):
         """Prepare for prediction and prompt layers"""
         try:
-            # Clean up existing layers first
-            # if hasattr(self, 'prompts_layer') and self.prompts_layer:
-            #     QgsProject.instance().removeMapLayer(self.prompts_layer)
-            #     self.prompts_layer = None
-
-            # if hasattr(self, 'predictions_layer') and self.predictions_layer:
-            #     QgsProject.instance().removeMapLayer(self.predictions_layer)
-            #     self.predictions_layer = None
-
-            # Reset the GeoJSON data
-            # self.prompts_geojson = None
-            # self.predictions_geojson = None
-
             # Create temporary file paths
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             self.temp_prompts_geojson = os.path.join(self.tmp_dir, f'prompts_{timestamp}.geojson')
             self.temp_predictions_geojson = os.path.join(self.tmp_dir, f'predictions_{timestamp}.geojson')
-
-            # self.prediction_count = 0 # resets feature counter
-            # self.prompt_count = 0 # resets prompt counter
-
             self.logger.info(f"Prepared file paths: \n"
                              f"Prompts: {self.temp_prompts_geojson}\n"
                              f"Predictions: {self.temp_predictions_geojson}")
 
             # Enable drawing controls
-            if self.is_sam_model():
-                self.draw_button.setEnabled(True)
+            # if self.is_sam_model():
+            self.draw_button.setEnabled(True)
 
             # Enable prediction (no prompts) controls
             self.predict_button.setEnabled(True)
@@ -1839,33 +1950,17 @@ class EasyEarthPlugin:
         try:
             if index > 0: # 0th index is "Select a layer..."
                 layer_id = self.layer_dropdown.itemData(index)
-                selected_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
+                self.selected_layer = QgsProject.instance().mapLayer(layer_id) if layer_id else None
 
-                if not selected_layer:
+                if not self.selected_layer:
                     return
 
-                # Get image crs and extent
-                # self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(selected_layer)
-                # msg = (
-                #     f"Extent: X min: {self.raster_extent.xMinimum()}, X max: {self.raster_extent.xMaximum()}, "
-                #     f"Y min: {self.raster_extent.yMinimum()}, Y max: {self.raster_extent.yMaximum()}; "
-                #     f"Width: {self.raster_width}; "
-                #     f"Height: {self.raster_height}; "
-                #     f"CRS: {self.raster_crs.authid()}"
-                # )
-                # self.iface.messageBar().pushMessage(
-                #     "Selected raster CRS and dimensions",
-                #     msg,
-                #     level=Qgis.Info,
-                #     duration=5
-                # )
-
-                self.image_path.setText(selected_layer.source())
+                self.image_path.setText(self.selected_layer.source())
                 self.on_image_selected()
                 self.create_prediction_layers()
 
                 # Check for existing embedding
-                layer_source = selected_layer.source()
+                layer_source = self.selected_layer.source()
                 image_name = os.path.splitext(os.path.basename(layer_source))[0]
                 self.update_embeddings(image_name)
         except Exception as e:

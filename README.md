@@ -5,8 +5,11 @@
 </p>
 
 <p align="center">
+    <a href="https://github.com/YanCheng-go/easyearth/actions/workflows/upload_linux_env.yml">
+    <img src="https://github.com/YanCheng-go/easyearth/actions/workflows/upload_linux_env.yml/badge.svg" alt="Upload Env"/>
+  </a>
   <a href="https://github.com/YanCheng-go/easyearth/actions/workflows/deploy.yml">
-    <img src="https://github.com/YanCheng-go/easyearth/actions/workflows/deploy.yml/badge.svg" alt="CI Status"/>
+    <img src="https://github.com/YanCheng-go/easyearth/actions/workflows/deploy.yml/badge.svg" alt="Deploy Dokcer"/>
   </a>
   <a href="https://github.com/YanCheng-go/easyearth/releases">
     <img src="https://img.shields.io/github/v/release/YanCheng-go/easyearth?label=Release&logo=github" alt="GitHub Release"/>

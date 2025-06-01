@@ -22,7 +22,7 @@ class Segmentation(BaseModel):
             model_path: Model identifier or path
         """
         super().__init__(model_path)
-        self.processor = AutoImageProcessor.from_pretrained(model_path, cache_dir=self.cache_dir)
+        self.processor = AutoImageProcessor.from_pretrained(model_path, cache_dir=self.cache_dir, use_fast=True)
         self.logger.debug(f"Loading model from {model_path}")
         self.model = AutoModelForSemanticSegmentation.from_pretrained(model_path, cache_dir=self.cache_dir)
         self.logger.debug(f"Model loaded successfully")
@@ -47,28 +47,48 @@ class Segmentation(BaseModel):
         else:
             raw_image = image
 
+        # get the type of raw_image
+        if isinstance(raw_image, np.ndarray):
+            raw_image = Image.fromarray(raw_image)
+
         with torch.no_grad():
             inputs = self.processor(raw_image, return_tensors='pt')
             preds = self.model(pixel_values=inputs.pixel_values)
             target_size = [(raw_image.size[1], raw_image.size[0])]
             masks = self.processor.post_process_semantic_segmentation(preds, target_sizes=target_size)
         return masks
+
+    @staticmethod
+    def focus_on_region(image: Union[Image.Image, np.ndarray], region: tuple):
+        """Focus on a specific region of the image
+        Args:
+            image: The image to process
+            region: A tuple (left, upper, right, lower) defining the region to focus on
+        Returns:
+            A cropped image focused on the specified region
+        """
+        if isinstance(image, np.ndarray):
+            image = Image.fromarray(image)
+        return image.crop(region)
     
 
 if __name__=='__main__':    
     segformer = Segmentation(model_path="restor/tcd-segformer-mit-b5")
     # # Handle local GeoTIFF files
-    image_path = "/home/yan/Downloads/data/DJI_0108.JPG"
+    image_path = "/home/yan/Downloads/easyearth_data/easyearth_base/images/DJI_0108.JPG"
     image = Image.open(image_path).convert('RGB')
+    # choose a small region of the image
+    image = image.crop((0, 0, 1000, 1000))  # Crop to a smaller region for testing
     masks = segformer.get_masks(image)
     geojson = segformer.raster_to_vector(masks, img_transform=None, filename="/tmp/masks.geojson")
 
-    import matplotlib.pyplot as plt
-    plt.figure(figsize=(10,5))
-    plt.subplot(121)
-    plt.title("RGB")
-    plt.imshow(np.array(image[0].numpy()))
-    plt.subplot(122)
-    plt.title("Prediction")
-    plt.imshow(masks, interpolation='nearest')
-    plt.show() 
+    # # Uncomment below to visualize the results
+    # import matplotlib.pyplot as plt
+    # plt.figure(figsize=(10,5))
+    # plt.subplot(121)
+    # plt.title("RGB")
+    # plt.imshow(np.array(image), interpolation='nearest')
+    # plt.subplot(122)
+    # plt.title("Prediction")
+    # plt.imshow(masks, interpolation='nearest')
+    # plt.show()

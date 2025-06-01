@@ -4,8 +4,10 @@ from qgis.gui import QgsRubberBand
 from qgis.core import QgsWkbTypes, QgsGeometry, QgsPointXY
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt
+from qgis.core import QgsUnitTypes
 from qgis.gui import QgsMapTool
 from itertools import chain
+from qgis.core import QgsRectangle, QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsProject
 
 class BoxMapTool(QgsMapTool):
     def __init__(self, canvas, on_box_drawn):
@@ -49,6 +51,78 @@ class BoxMapTool(QgsMapTool):
                 self.start_point
             ]
             self.temp_rubber_band.setToGeometry(QgsGeometry.fromPolygonXY([points]), None)
+
+def create_point_box(point, layer, width=500, height=500):
+    """
+    Create a box geometry in map units (meters) if CRS exists, otherwise in pixel units.
+
+    Args:
+        point (QgsPointXY): Center point (map units if CRS exists).
+        layer (QgsMapLayer): Layer to determine if CRS is available.
+        width (float): Width of the box in meters if CRS exists, or in pixels if no CRS.
+        height (float): Height of the box in meters if CRS exists, or in pixels if no CRS.
+
+    Returns:
+        QgsGeometry or tuple: If CRS exists, returns QgsGeometry; else, returns (xmin, ymin, xmax, ymax) pixel box.
+    """
+    if layer.crs().isValid():
+        width = 200
+        height = 200
+        # The layer has a valid CRS -> create box in map units
+        layer_crs = layer.crs()
+        if layer_crs.mapUnits() == QgsUnitTypes.DistanceMeters:
+            proj_crs = layer_crs
+        else:
+            # Compute UTM zone for accuracy
+            import math
+            lon = point.x()
+            lat = point.y()
+            utm_zone = math.floor((lon + 180) / 6) + 1
+            if lat >= 0:
+                epsg = 32600 + utm_zone
+            else:
+                epsg = 32700 + utm_zone
+            proj_crs = QgsCoordinateReferenceSystem.fromEpsgId(epsg)
+
+        # Transform point to projected CRS
+        transform = QgsCoordinateTransform(layer_crs, proj_crs, QgsProject.instance())
+        point_proj = transform.transform(point)
+
+        # Create rectangle
+        half_w = width / 2
+        half_h = height / 2
+        rect = QgsRectangle(
+            point_proj.x() - half_w, point_proj.y() - half_h,
+            point_proj.x() + half_w, point_proj.y() + half_h
+        )
+
+        box_geom = QgsGeometry.fromRect(rect)
+
+        # Transform back to layer CRS if needed
+        if proj_crs != layer_crs:
+            transform_back = QgsCoordinateTransform(proj_crs, layer_crs, QgsProject.instance())
+            box_geom.transform(transform_back)
+
+        return box_geom
+    else:
+        # No valid CRS -> fallback to pixel-based box
+        center_x = int(point.x())
+        center_y = int(point.y())
+        half_w = width // 2
+        half_h = height // 2
+
+        # Compute pixel AOI in image coordinates (y downward)
+        xmin = center_x - half_w
+        xmax = center_x + half_w
+        ymin = center_y - half_h
+        ymax = center_y + half_h
+
+        # Create a rectangle in pixel coordinates
+        rect = QgsRectangle(xmin, ymin, xmax, ymax)
+        # Create a QgsGeometry from the rectangle
+        box_geom = QgsGeometry.fromRect(rect)
+
+    return box_geom
 
 def map_id(prompts):
     """Map IDs of predictions to their corresponding prompts.

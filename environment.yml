@@ -22,6 +22,7 @@ dependencies:
   - pyyaml>=5.1
   - matplotlib
   - pip
+  - ultralytics
   - pip:
       - connexion[swagger-ui]
       - connexion[flask]

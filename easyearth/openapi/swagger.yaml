@@ -50,7 +50,7 @@ paths:
                 model_type:
                   type: string
                   description: Type of the model to use for analysis, which will call the corresponding predictor under the models directory.
-                  example: "sam" # Or "segment"  #  TODO: add more model types such as "clip" and "local" etc.
+                  example: "sam" # Or "segment" or sam2 #  TODO: add more model types such as "clip" and "local" etc.
                   nullable: false
                 model_path:
                   type: string
@@ -86,7 +86,23 @@ paths:
                         type: object
                         description: Prompt-specific data
                         nullable: true
-                        example: { "points": [[100, 200]], "boxes": [[50, 50, 150, 150]], "text": "trees" }
+                        example: { "points": [[100, 200]], "boxes": [[50, 50, 150, 150]], "text": "trees" } # pixel coordinates
+                aoi:
+                  type: object
+                  description: Area of interest for the analysis (optional), for now only for non-prompt based models
+                  nullable: true
+                  properties:
+                    type:
+                      type: string
+                      enum: [ "Polygon", "Rectangle" ]
+                    coordinates:
+                      type: array
+                      minItems: 4
+                      maxItems: 4
+                      items:
+                        type: number
+                      description: Coordinates defining the area of interest
+                      example: [0, 0, 1000, 1000] # top-left x, top-left y, bottom-right x, bottom-right y, pixel coordinates
               required:
                 - image_path
                 - model_type
