@@ -519,7 +519,7 @@ class EasyEarthPlugin:
             
             if result.returncode == 0:
                 self.docker_running = True
-                self.iface.messageBar().pushMessage("Docker container started successfully.", level=Qgis.Info)
+                self.iface.messageBar().pushMessage("Docker container started successfully.", level=Qgis.Success)
 
         if self.local_mode_button.isChecked():
             # Download server code
@@ -564,9 +564,8 @@ class EasyEarthPlugin:
                                       text=True,              # decodes output as text, not bytes
                                       start_new_session=True)  # detaches from QGIS
             self.iface.messageBar().pushMessage(f"Starting local server...", level=Qgis.Info)
-
             if result:
-                self.iface.messageBar().pushMessage("SUCCESS", f"Local server started successfully. Check logs {self.local_server_log_file} for details.", level=Qgis.Info)
+                self.iface.messageBar().pushMessage(f"Local server started successfully. Check logs {self.local_server_log_file} for details.", level=Qgis.Success)
 
     def stop_server(self):
         if self.docker_mode_button.isChecked():
