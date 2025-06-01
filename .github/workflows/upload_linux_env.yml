@@ -1,23 +1,22 @@
 name: Python Env (Linux)
-# This workflow rebuilds and uploads the Python environment to Google Drive, which can be used to run the EasyEarth app locally on Linux system.
 
 on:
   push:
     branches:
-      - yan  # Run on pushes to the master branch
+      - yan
     paths:
-      - requirements.txt  # Only run if requirements.txt changes
-      - upload_to_gdrive.py  # Ensure the script is present
-      - .github/workflows/upload_linux_env.yml  # Ensure the workflow file is present
-      - tests/test_alive_controller.py  # Ensure the alive test is present
+      - requirements.txt
+      - upload_to_gdrive.py
+      - .github/workflows/upload_linux_env.yml
+      - tests/test_alive_controller.py
   pull_request:
     branches:
-      - master  # Run on pull requests to the master branch
+      - master
     paths:
-      - requirements.txt  # Only run if requirements.txt changes
-      - upload_to_gdrive.py  # Ensure the script is present
-      - .github/workflows/upload_linux_env.yml  # Ensure the workflow file is present
-      - tests/test_alive_controller.py  # Ensure the alive test is present
+      - requirements.txt
+      - upload_to_gdrive.py
+      - .github/workflows/upload_linux_env.yml
+      - tests/test_alive_controller.py
 
 jobs:
   upload-env:
@@ -53,14 +52,17 @@ jobs:
       - name: zip the environment
         run: |
           source easyearth_env/bin/activate
-          tar -czf easyearth_env.tar.gz easyearth_env
+          zip -r easyearth_env.zip easyearth_env
 
       - name: Install Google API client
-        run: pip install google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib
+        run: |
+          source easyearth_env/bin/activate
+          pip install google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib
 
       - name: Upload zipped environment to Google Drive
         working-directory: ${{ github.workspace }}
         env:
           GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
         run: |
+          source easyearth_env/bin/activate
           python utils/upload_to_gdrive.py
