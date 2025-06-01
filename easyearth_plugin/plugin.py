@@ -507,7 +507,7 @@ class EasyEarthPlugin:
                               f"-v \"{self.base_dir}\":/usr/src/app/easyearth_base " # mounts the base directory in the container
                               f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
                               f"{self.docker_hub_image_name}")
-            QMessageBox.warning(None, "Update Docker Image", "Downloading or Updating Docker image from Docker Hub. This may take a while for the first time, please wait...") # shows a warning message that the Docker image is being downloaded
+            QMessageBox.warning(None, "Update Docker Image", "Downloading or updating Docker image from Docker Hub. This may take a while for the first time,&nbsp;please wait...") # shows a warning message that the Docker image is being downloaded
             result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
             self.iface.messageBar().pushMessage(f"Starting server...\nRunning command: {result}", level=Qgis.Info)
             
