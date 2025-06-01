@@ -50,7 +50,7 @@ paths:
                 model_type:
                   type: string
                   description: Type of the model to use for analysis, which will call the corresponding predictor under the models directory.
-                  example: "sam" # Or "segment"  #  TODO: add more model types such as "clip" and "local" etc.
+                  example: "sam" # Or "segment" or sam2 #  TODO: add more model types such as "clip" and "local" etc.
                   nullable: false
                 model_path:
                   type: string
