@@ -514,7 +514,7 @@ class EasyEarthPlugin:
                               f"{self.docker_hub_image_name}")
                             #   "easyearth")
             QMessageBox.warning(None, "Update Docker Image", "Downloading or Updating Docker image from Docker Hub. This may take a while for the first time, please wait...") # shows a warning message that the Docker image is being downloaded
-            result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True)
+            result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True, timeout=1800)
             self.iface.messageBar().pushMessage(f"Starting server...\nRunning command: {result}", level=Qgis.Info)
             
             if result.returncode == 0:
@@ -550,7 +550,7 @@ class EasyEarthPlugin:
                     env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/env-v3/easyearth_env.tar.gz'
                     zipped_env_path = os.path.join(self.base_dir, 'easyearth_env.tar.gz')
                     urllib.request.urlretrieve(env_url, zipped_env_path)
-                    unzipping = subprocess.run(f'tar -xzf \"{zipped_env_path}\" -C \"{self.base_dir}\"', capture_output=True, text=True, shell=True)  # unzips the environment tar.gz file
+                    unzipping = subprocess.run(f'tar -xzf \"{zipped_env_path}\" -C \"{self.base_dir}\"', capture_output=True, text=True, shell=True, timeout=1800)  # unzips the environment tar.gz file
                     os.remove(zipped_env_path)  # remove the zip file after extraction
                 else:
                     EnvManager(self.iface, self.logs_dir, self.plugin_dir).download_linux_env() # Use EnvManager to download (internally calls download_linux_env.sh)
@@ -562,7 +562,7 @@ class EasyEarthPlugin:
                                       stdout=self.local_server_log_file,  # redirects stdout to a log file
                                       stderr=subprocess.STDOUT,  # redirects stderr to the same log file
                                       text=True,              # decodes output as text, not bytes
-                                      start_new_session=True)  # detaches from QGIS
+                                      start_new_session=True, timeout=1800)  # detaches from QGIS
             self.iface.messageBar().pushMessage(f"Starting local server...", level=Qgis.Info)
             if result:
                 self.iface.messageBar().pushMessage(f"Local server started successfully. Check logs {self.local_server_log_file} for details.", level=Qgis.Success)
@@ -573,7 +573,7 @@ class EasyEarthPlugin:
             self.docker_hub_process = None
             self.docker_running = False
         else:
-            result = subprocess.run('kill $(lsof -t -i:3781)', capture_output=True, text=True, shell=True) # kills the process running on port 3781
+            result = subprocess.run('kill $(lsof -t -i:3781)', capture_output=True, text=True, shell=True, timeout=1800) # kills the process running on port 3781
 
         self.iface.messageBar().pushMessage(f"Stopping server with command: {result}", level=Qgis.Info)
 
