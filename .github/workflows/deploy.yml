@@ -2,17 +2,17 @@ name: Docker Image
 # This workflow builds a Docker image for EasyEarth App and pushes it to Docker Hub.
 
 on:
-#     push:
-#         branches:
-#         - yan
-#         - lucia
-#         paths:
-#         - 'Dockerfile'
-# #        - 'docker-compose.yml'
-#         - 'environment.yml'
-#         - 'requirements.txt'
-#         - 'easyearth/**'
-    pull_request:
+     push:
+         branches:
+         - yan
+         - lucia
+         paths:
+         - 'Dockerfile'
+ #        - 'docker-compose.yml'
+         - 'environment.yml'
+         - 'requirements.txt'
+         - 'easyearth/**'
+     pull_request:
         branches:
         - master
         paths:
