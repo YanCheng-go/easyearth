@@ -20,9 +20,10 @@ class SAM2(BaseModel):
     """SAM2 model for Earth Observation tasks."""
 
     map_model_path = {
+        'ultralytics/sam2.1_t': 'sam2.1_t.pt',
+        'ultralytics/sam2.1_s': 'sam2.1_s.pt',
         'ultralytics/sam2.1_b': 'sam2.1_b.pt',
         'ultralytics/sam2.1_l': 'sam2.1_l.pt',
-        'ultralytics/sam2.1_x': 'sam2.1_x.pt'
     }
 
     def __init__(self, model_path: str = "ultralytics/sam2.1_b"):
