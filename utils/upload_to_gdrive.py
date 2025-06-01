@@ -72,6 +72,16 @@ def main(FILE_ID=None, shareable: bool = True, VERSION='', format='.zip') -> (st
     shareable_link = f"https://drive.google.com/file/d/{FILE_ID}/view?usp=sharing"
     print(f'Shareable link: {shareable_link}')
 
+    # Move to a folder in Google Drive if needed
+    # Uncomment and modify the following lines if you want to move the file to a specific folder
+    folder_id = '14TvSQRmXqWgawIJoCTWplWrZAgNDTmgL'  # Replace with your folder ID
+    drive_service.files().update(
+        fileId=FILE_ID,
+        addParents=folder_id,
+        removeParents='root',  # Optional: remove from root folder
+        fields='id, parents'
+    ).execute()
+
     return FILE_ID, is_shareable or shareable
 
 
