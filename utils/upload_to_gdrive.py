@@ -86,6 +86,6 @@ def main(FILE_ID=None, shareable: bool = True, VERSION='', format='.zip') -> (st
 
 
 if __name__ == '__main__':
-    # main(FILE_ID='1FXmE_R1ZRoH3IHzv139stxNywB3HfgXo', shareable=True, VERSION='_test', format='.zip')  # Replace with your Google Drive file ID if updating an existing file
-    main(FILE_ID=None, shareable=True, VERSION='', format='.tar.gz')  # For testing or new uploads
+    main(FILE_ID='1FXmE_R1ZRoH3IHzv139stxNywB3HfgXo', shareable=True, VERSION='', format='.zip')  # Replace with your Google Drive file ID if updating an existing file
+    # main(FILE_ID=None, shareable=True, VERSION='', format='.tar.gz')  # For testing or new uploads
 
