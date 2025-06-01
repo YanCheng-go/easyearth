@@ -221,6 +221,9 @@ class EasyEarthPlugin:
                 "facebook/sam-vit-base",
                 "facebook/sam-vit-large",
                 "facebook/sam-vit-huge",
+                "ultralytics/sam2.1_b",
+                "ultralytics/sam2.1_l",
+                "ultralytics/sam2.1_x",
                 "restor/tcd-segformer-mit-b5",
             ])
             self.model_dropdown.setEditText("facebook/sam-vit-base") # default
@@ -711,8 +714,12 @@ class EasyEarthPlugin:
             self.logger.error(f"Error updating layer combo: {str(e)}")
 
     def is_sam_model(self):
-        is_sam = self.model_path.startswith("facebook/sam-")
+        is_sam = self.model_path.startswith("facebook/sam-") or self.model_path.startswith("ultralytics/sam2")
         return is_sam
+
+    def is_sam2_model(self):
+        """Check if the selected model is a SAM2 model."""
+        return self.model_path.startswith("ultralytics/sam2")
 
     def on_model_changed(self, text=None):
         """1. Enable drawing and embedding only if a SAM model is selected.
@@ -1725,7 +1732,16 @@ class EasyEarthPlugin:
 
             # add the model path to the payload if not empty
             self.model_path = self.model_dropdown.currentText().strip()
-            self.model_type = "sam" if self.is_sam_model() else "segment"
+
+            model_conditions = [
+                (self.is_sam_model(), "sam"),
+                (self.is_sam2_model(), "sam2"),
+            ]
+
+            self.model_type = "segment"
+            for condition, model_type in model_conditions:
+                if condition:
+                    self.model_type = model_type
 
             if self.model_path:
                 payload["model_path"] = self.model_path

@@ -22,7 +22,7 @@ dependencies:
   - pyyaml>=5.1
   - matplotlib
   - pip
-  - gdown
+  - ultralytics
   - pip:
       - connexion[swagger-ui]
       - connexion[flask]

@@ -3,6 +3,7 @@ import numpy as np
 import rasterio
 import torch
 from easyearth.models.sam import Sam
+from easyearth.models.sam2 import SAM2
 from easyearth.models.segmentation import Segmentation
 from PIL import Image
 import requests
@@ -169,8 +170,32 @@ def predict():
 
         original_height, original_width = image_array.shape[:2]
 
+        # --- SAM2 branch ---
+        if model_type == 'sam2' and model_path.startswith('ultralytics/sam2'):
+            prompts = data.get('prompts', [])
+            transformed_prompts = reorganize_prompts(prompts)
+
+            # Initialize SAM2
+            logger.debug("Initializing SAM2 model")
+            sam2 = SAM2(model_path or 'ultralytics/sam2.1_b')
+
+            # Get masks from SAM2
+            masks = sam2.get_masks(
+                image_path,
+                bboxes=transformed_prompts['boxes'] if len(transformed_prompts['boxes']) > 0 else None,
+                points=transformed_prompts['points'] if len(transformed_prompts['points']) > 0 else None,
+                labels=transformed_prompts['labels'] if len(transformed_prompts['labels']) > 0 else None,
+            )
+
+            if masks is None:
+                return jsonify({'status': 'error', 'message': 'No valid masks generated'}), 400
+
+            # Convert masks to GeoJSON
+            geojson_path = f"{TEMP_DIR}/predict-sam2_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson"
+            geojson = sam2.raster_to_vector(masks, transform, filename=geojson_path)
+
         # --- SAM branch ---
-        if model_type == 'sam':
+        elif model_type == 'sam' and model_path.startswith('facebook/sam-'):
             prompts = data.get('prompts', [])
             transformed_prompts = reorganize_prompts(prompts)
 
