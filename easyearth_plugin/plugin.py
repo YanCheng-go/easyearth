@@ -1056,6 +1056,11 @@ class EasyEarthPlugin:
 
         bbox = box_geom.boundingBox()
 
+        # Ensure bbox is within raster extent
+        if not raster_extent.contains(bbox):
+            QMessageBox.critical(None, "Error", "Bounding box is outside the raster extent. Please ensure the geometry is within the raster bounds.")
+            return None
+
         # Map extent
         xmin_map, xmax_map = raster_extent.xMinimum(), raster_extent.xMaximum()
         ymin_map, ymax_map = raster_extent.yMinimum(), raster_extent.yMaximum()
@@ -1121,6 +1126,10 @@ class EasyEarthPlugin:
             point_feature = None
 
             if draw_type == "Point":
+                # Check if the point is within the raster extent
+                if not extent.contains(point):
+                    QMessageBox.critical(None, "Error", "Point coordinates are outside the image bounds. Please make sure you selected the right image and draw a valid point within the image.")
+                    return None
                 # Calculate pixel coordinates
                 px = int((point.x() - extent.xMinimum()) * width / extent.width())
                 py = int((extent.yMaximum() - point.y()) * height / extent.height())
@@ -1209,6 +1218,11 @@ class EasyEarthPlugin:
                 QgsPointXY(start_point.x(), end_point.y()),
                 start_point
             ]])
+
+        # check if within image bounds
+        if not extent.contains(start_point) or not extent.contains(end_point):
+            QMessageBox.critical(None, "Error", "Box coordinates are outside the image bounds. Please make sure you selected the right image and draw a valid box within the image.")
+            return
 
         # Calculate pixel coordinates based on start and end points
         pixel_x = int((start_point.x() - extent.xMinimum()) * width / extent.width())
