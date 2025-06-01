@@ -1,14 +1,14 @@
 name: Python Env (Linux)
 
 on:
-  push:
-    branches:
-      - yan
-    paths:
-      - requirements.txt
-      - upload_to_gdrive.py
-      - .github/workflows/upload_linux_env.yml
-      - tests/test_alive_controller.py
+#  push:
+#    branches:
+#      - yan
+#    paths:
+#      - requirements.txt
+#      - upload_to_gdrive.py
+#      - .github/workflows/upload_linux_env.yml
+#      - tests/test_alive_controller.py
   pull_request:
     branches:
       - master
