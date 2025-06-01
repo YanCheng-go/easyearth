@@ -1584,12 +1584,13 @@ class EasyEarthPlugin:
                         y = feature['pixel_y']
                         prompts.append({'type': 'Point', 'data': {'points': [[x, y]]}}) # TODO: figure out labels for points, when used together with bounding boxes to remove part of the prediction masks
 
-                        # Create a box geometry around the point
-                        point = feature.geometry().asPoint()
-                        box_geom = create_point_box(point, self.selected_layer)
-                        self.show_aoi_on_map(box_geom) # show the AOI on the map canvas
-                        one_aoi = self.map_geom_to_pixel_coords(box_geom)  # convert into pixel coordinates
-                        aoi_features.append(one_aoi)
+                        if not self.is_sam_model():
+                            # Create a box geometry around the point
+                            point = feature.geometry().asPoint()
+                            box_geom = create_point_box(point, self.selected_layer)
+                            self.show_aoi_on_map(box_geom) # show the AOI on the map canvas
+                            one_aoi = self.map_geom_to_pixel_coords(box_geom)  # convert into pixel coordinates
+                            aoi_features.append(one_aoi)
 
                     elif prompt_type == 'Box':
                         x1 = feature['pixel_x']
