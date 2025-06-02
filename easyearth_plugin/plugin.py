@@ -554,12 +554,12 @@ class EasyEarthPlugin:
                 warning_box.setTextFormat(Qt.RichText)
                 warning_box.setText("Downloading the EasyEarth Python environment.&nbsp;This may take a while for the first time,&nbsp;please wait...")
                 warning_box.exec_()
-
                 self.iface.messageBar().pushMessage(f"Downloading EasyEarth Python environment for {platform.system().lower()} system",level=Qgis.Info)
+                QApplication.processEvents()
 
                 if platform.system().lower() == 'darwin':  # macOS
-                    env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/env-v3/easyearth_env.tar.gz'
-                    zipped_env_path = os.path.join(self.base_dir, 'easyearth_env.tar.gz')
+                    env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/mac-env/easyearth_env_mac.tar.gz'
+                    zipped_env_path = os.path.join(self.base_dir, 'easyearth_env_mac.tar.gz')
                     self.iface.messageBar().pushMessage(f"Downloading environment from {env_url} to {zipped_env_path}", level=Qgis.Info)
                     QApplication.processEvents()
                     urllib.request.urlretrieve(env_url, zipped_env_path)
@@ -732,11 +732,16 @@ class EasyEarthPlugin:
 
     def is_sam_model(self):
         is_sam = self.model_path.startswith("facebook/sam-") or self.model_path.startswith("ultralytics/sam2")
+
         return is_sam
 
     def is_sam2_model(self):
         """Check if the selected model is a SAM2 model."""
         return self.model_path.startswith("ultralytics/sam2")
+    
+    def is_segformer_model(self):
+        """Check if the selected model is a SegFormer model."""
+        return self.model_path.startswith("restor/tcd-segformer")
 
     def on_model_changed(self, text=None):
         """1. Enable drawing and embedding only if a SAM model is selected.
@@ -748,15 +753,6 @@ class EasyEarthPlugin:
             self.model_path = self.model_dropdown.currentText().strip()
 
         is_sam = self.is_sam_model()
-
-        # # Drawing section
-        # self.draw_button.setEnabled(is_sam)
-        # self.draw_type_dropdown.setEnabled(is_sam)
-        # self.realtime_checkbox.setEnabled(is_sam)
-
-        # if not is_sam:
-        #     self.draw_button.setChecked(False)
-        #     self.draw_button.setText("Start drawing")
 
         # Embedding section
         self.embedding_path_edit.setEnabled(is_sam and not self.no_embedding_radio.isChecked())
@@ -771,7 +767,7 @@ class EasyEarthPlugin:
         # Update embedding path
         if is_sam:
             self.update_embeddings()
-
+        
     def update_embeddings(self, image_name=None):
         """Update the embedding path based on the selected model and image"""
         try:
@@ -951,7 +947,6 @@ class EasyEarthPlugin:
 
             self.embedding_group.setVisible(is_sam)  # Show embedding section if SAM model is selected
             self.drawing_group.setVisible(True)  # Show drawing section when image is loaded
-            self.predict_group.setVisible(True)  # Show prediction section when image is loaded
         except Exception as e:
             self.logger.error(f"Error loading image: {str(e)}")
             self.logger.exception("Full traceback:")
@@ -1198,6 +1193,9 @@ class EasyEarthPlugin:
 
             if self.realtime_checkbox.isChecked():
                 self.get_prediction(prompt, [aoi_feature])
+            
+            self.predict_group.show()
+
             return point
 
         except Exception as e:
@@ -1303,6 +1301,8 @@ class EasyEarthPlugin:
         # Send prediction request if realtime checkbox is checked
         if self.realtime_checkbox.isChecked():
             self.get_prediction(prompt, [aoi_feature]) # sends prediction request if real-time mode is checked
+
+        self.predict_group.show()
 
         return box_geom
 
