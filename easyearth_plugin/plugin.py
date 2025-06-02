@@ -355,14 +355,6 @@ class EasyEarthPlugin:
             self.draw_button.clicked.connect(self.toggle_drawing)
             self.draw_button.setEnabled(False) # enabled after image is loaded
             button_layout.addWidget(self.draw_button)
-            
-            self.undo_button = QPushButton("Undo last drawing")
-            self.undo_button.clicked.connect(self.undo_last_drawing)
-            # self.undo_button.setEnabled(False) # enable after drawing starts
-            self.undo_shortcut = QShortcut(QKeySequence.Undo, self.iface.mainWindow())
-            self.undo_shortcut.activated.connect(self.undo_last_drawing)  # Connect shortcut to undo function
-            button_layout.addWidget(self.undo_button)
-            settings_layout.addLayout(button_layout)
 
             # Text input in drawing group -> later change to prompt input
             text_input_layout = QHBoxLayout()
@@ -380,6 +372,14 @@ class EasyEarthPlugin:
             text_input_layout.addWidget(self.text_input)
             text_input_layout.addWidget(self.enter_button)
             settings_layout.addLayout(text_input_layout)
+
+            self.undo_button = QPushButton("Undo last drawing")
+            self.undo_button.clicked.connect(self.undo_last_drawing)
+            # self.undo_button.setEnabled(False) # enable after drawing starts
+            self.undo_shortcut = QShortcut(QKeySequence.Undo, self.iface.mainWindow())
+            self.undo_shortcut.activated.connect(self.undo_last_drawing)  # Connect shortcut to undo function
+            button_layout.addWidget(self.undo_button)
+            settings_layout.addLayout(button_layout)
 
             self.drawing_group.setLayout(settings_layout)
             main_layout.addWidget(self.drawing_group)
@@ -1337,6 +1337,7 @@ class EasyEarthPlugin:
 
         if self.prompt_count[self.get_image_name()] == 0:
             self.iface.messageBar().pushMessage(f'No drawings to undo for {self.get_image_name()}.', level=Qgis.Warning)
+            QMessageBox.warning(None, "Warning", f"No drawings to undo for {self.get_image_name()}.")
             return
 
         last_prompt_id = self.prompts_geojson[self.get_image_name()]['features'][-1]['properties']['id'] # gets the last prompt ID from prompts_geojson
