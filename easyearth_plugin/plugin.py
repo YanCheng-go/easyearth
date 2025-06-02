@@ -787,6 +787,13 @@ class EasyEarthPlugin:
         self.save_embedding_radio.setEnabled(is_sam)
         self.embedding_group.setVisible(is_sam)
 
+        # DIsable text input and enter button if not SAM model
+        self.text_input.setEnabled(is_sam)
+        self.enter_button.setEnabled(is_sam)
+        # disable the text input and enter button if not SAM model
+        if not is_sam:
+            self.text_input.clear()
+
         # Update embedding path
         if is_sam:
             self.update_embeddings()
