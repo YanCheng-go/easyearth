@@ -358,7 +358,7 @@ class EasyEarthPlugin:
             
             self.undo_button = QPushButton("Undo last drawing")
             self.undo_button.clicked.connect(self.undo_last_drawing)
-            self.undo_button.setEnabled(False) # enable after drawing starts
+            # self.undo_button.setEnabled(False) # enable after drawing starts
             self.undo_shortcut = QShortcut(QKeySequence.Undo, self.iface.mainWindow())
             self.undo_shortcut.activated.connect(self.undo_last_drawing)  # Connect shortcut to undo function
             button_layout.addWidget(self.undo_button)
@@ -1069,7 +1069,7 @@ class EasyEarthPlugin:
             else:
                 self.canvas.unsetMapTool(self.point_tool)
                 self.draw_button.setText("Start drawing")
-                self.undo_button.setEnabled(False)
+                # self.undo_button.setEnabled(False)
                 self.logger.info("Stopping drawing session")
 
         except Exception as e:
@@ -2014,7 +2014,7 @@ class EasyEarthPlugin:
             if draw_type == "Text":
                 # Hide draw button and undo button
                 self.draw_button.setVisible(False)
-                self.undo_button.setVisible(False)
+                # self.undo_button.setVisible(False)
                 self.text_input.setVisible(True)
                 self.text_input.setEnabled(True)
                 self.enter_button.setVisible(True)  # Show enter button for text input
@@ -2025,7 +2025,7 @@ class EasyEarthPlugin:
             else:
                 # Show draw button and undo button
                 self.draw_button.setVisible(True)
-                self.undo_button.setVisible(True)
+                # self.undo_button.setVisible(True)
                 self.text_input.setVisible(False)
                 self.text_input.setEnabled(False)
                 self.enter_button.setVisible(False)
