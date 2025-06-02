@@ -3,7 +3,7 @@ import numpy as np
 import rasterio
 import torch
 from easyearth.models.sam import Sam
-from easyearth.models.sam2 import SAM2
+from easyearth.models.easy_sam2 import SAM2
 from easyearth.models.segmentation import Segmentation
 from PIL import Image
 import requests
