@@ -563,7 +563,7 @@ class EasyEarthPlugin:
                                       stdout=self.local_server_log_file,  # redirects stdout to a log file
                                       stderr=subprocess.STDOUT,  # redirects stderr to the same log file
                                       text=True,              # decodes output as text, not bytes
-                                      start_new_session=True, timeout=1800)  # detaches from QGIS
+                                      start_new_session=True)  # detaches from QGIS
             self.iface.messageBar().pushMessage(f"Starting local server...", level=Qgis.Info)
             if result:
                 self.iface.messageBar().pushMessage(f"Local server started successfully. Check logs {self.local_server_log_file} for details.", level=Qgis.Success)
