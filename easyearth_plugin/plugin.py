@@ -221,9 +221,10 @@ class EasyEarthPlugin:
                 "facebook/sam-vit-base",
                 "facebook/sam-vit-large",
                 "facebook/sam-vit-huge",
+                "ultralytics/sam2.1_t",
+                "ultralytics/sam2.1_s",
                 "ultralytics/sam2.1_b",
                 "ultralytics/sam2.1_l",
-                "ultralytics/sam2.1_x",
                 "restor/tcd-segformer-mit-b5",
             ])
             self.model_dropdown.setEditText("facebook/sam-vit-base") # default
