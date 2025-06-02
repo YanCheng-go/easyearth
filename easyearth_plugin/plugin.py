@@ -2202,7 +2202,7 @@ class EasyEarthPlugin:
                 if file_path and os.path.exists(file_path):
                     os.remove(file_path)
 
-            if self.local_server_log_file:
+            if hasattr(self, 'local_server_log_file') and self.local_server_log_file:
                 self.local_server_log_file.close()
 
             self.logger.debug("Plugin unloaded successfully")
