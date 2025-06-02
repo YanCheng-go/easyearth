@@ -684,7 +684,7 @@ class EasyEarthPlugin:
             self.downloading_progress_status.show()
 
             local_filename = os.path.basename(image_url.split("?")[0])
-            save_path = os.path.join(self.base_dir, local_filename)
+            save_path = os.path.join(self.base_dir, "images", local_filename)
             response = requests.get(image_url, stream=True)
             total = int(response.headers.get('content-length', 0))
             downloaded = 0
