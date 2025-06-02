@@ -362,7 +362,8 @@ class EasyEarthPlugin:
             self.text_input.setPlaceholderText("Enter text prompt here, e.g. 'tree', 'building'")
             self.text_input.hide()  # Hide text input initially
             self.text_input.setEnabled(False)  # Initially disabled, enabled when Text draw type is selected
-            self.text_input.returnPressed.connect(self.on_text_prompt_changed)  # Connect to text input change
+            # self.text_input.returnPressed.connect(self.on_text_prompt_changed)  # Connect to text input change
+            # disable return key to avoid triggering on Enter key press
             # add a confirm button to confirm the text input
             self.enter_button = QPushButton("Enter")
             self.enter_button.hide()
