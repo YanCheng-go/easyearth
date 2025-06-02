@@ -27,8 +27,13 @@ class BaseModel:
         self._setup_cuda()
         self.device = self._get_device()
 
+        self.tmp_dir = os.environ.get('TEMP_DIR', os.path.join(os.path.expanduser("~"), ".easyearth", "tmp"))
+        os.makedirs(self.tmp_dir, exist_ok=True)
+
         # Get environment variables from docker container
         self.cache_dir = os.environ.get('MODEL_CACHE_DIR', os.path.join(os.path.expanduser("~"), ".cache", "easyearth", "models"))
+        os.makedirs(self.cache_dir, exist_ok=True)
+
         self.logger.info(f"Model cache directory: {self.cache_dir}")
 
     # TODO: figure out why GPU is not working on my computer
