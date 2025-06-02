@@ -548,7 +548,13 @@ class EasyEarthPlugin:
             env_path = os.path.join(self.base_dir, 'easyearth_env')
 
             if not os.path.exists(env_path):
-                QMessageBox.warning(None, "Local Python Environment Not Found", "Downloading EasyEarth Python environment. This may take a while,&nbsp;please wait...")
+                warning_box = QMessageBox()
+                warning_box.setIcon(QMessageBox.Warning)
+                warning_box.setWindowTitle("Downloading Python Environment")
+                warning_box.setTextFormat(Qt.RichText)
+                warning_box.setText("Downloading the EasyEarth Python environment.&nbsp;This may take a while for the first time,&nbsp;please wait...")
+                warning_box.exec_()
+
                 self.iface.messageBar().pushMessage(f"Downloading EasyEarth Python environment for {platform.system().lower()} system",level=Qgis.Info)
 
                 if platform.system().lower() == 'darwin':  # macOS
@@ -561,6 +567,7 @@ class EasyEarthPlugin:
                     QApplication.processEvents()
                     subprocess.run(f'tar -xzf \"{zipped_env_path}\" -C \"{self.base_dir}\"', capture_output=True, text=True, shell=True)  # unzips the environment tar.gz file
                     os.remove(zipped_env_path)  # remove the zip file after extraction
+                    os.rename(os.path.join(self.base_dir, 'easyearth_env_mac'), env_path)
                 else:
                     EnvManager(self.iface, self.logs_dir, self.plugin_dir).download_linux_env() # Use EnvManager to download (internally calls download_linux_env.sh)
                 
@@ -575,7 +582,7 @@ class EasyEarthPlugin:
                                     text=True,              # decodes output as text, not bytes
                                     start_new_session=True)  # detaches from QGIS
             
-            if result:
+            if result and self.server_running == True:
                 self.iface.messageBar().pushMessage(f"Local server started successfully. Check logs {self.local_server_log_file} for details.", level=Qgis.Success)
 
     def stop_server(self):
@@ -1121,6 +1128,7 @@ class EasyEarthPlugin:
         try:            
             if not self.draw_button.isChecked() or button != Qt.LeftButton:
                 return None
+            
             is_sam = self.is_sam_model()
             draw_type = self.draw_type_dropdown.currentText()
             extent, width, height, raster_crs = self.raster_extent, self.raster_width, self.raster_height, self.raster_crs
