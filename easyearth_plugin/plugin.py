@@ -578,7 +578,7 @@ class EasyEarthPlugin:
                 QApplication.processEvents()
 
                 if platform.system().lower() == 'darwin':  # macOS
-                    env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/mac-env/easyearth_env_mac.tar.gz'
+                    env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/mac-env-v2/easyearth_env_mac.tar.gz'
                     zipped_env_path = os.path.join(self.base_dir, 'easyearth_env_mac.tar.gz')
                     self.iface.messageBar().pushMessage(f"Downloading environment from {env_url} to {zipped_env_path}", level=Qgis.Info)
                     QApplication.processEvents()
@@ -2000,7 +2000,7 @@ class EasyEarthPlugin:
                 }} for i, t in enumerate(text_data)]
 
             self.prompt_count[self.get_image_name()] += len(text_data)  # Update prompt count
-
+            self.predict_group.show()
             self.add_features_to_layer(text_features, "prompts")
             self.iface.messageBar().pushMessage("Text Prompt Added", f"Added {len(text_features)} text prompts.", level=Qgis.Info, duration=3)
 
