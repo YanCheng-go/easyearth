@@ -2,8 +2,10 @@ from flask import request, jsonify
 import numpy as np
 import rasterio
 import torch
+
+from easyearth.models.langsam import SamText
 from easyearth.models.sam import Sam
-from easyearth.models.sam2 import SAM2
+from easyearth.models.easy_sam2 import SAM2
 from easyearth.models.segmentation import Segmentation
 from PIL import Image
 import requests
@@ -100,6 +102,25 @@ def reproject_prompts(prompts, transform, image_shape):
     return transformed
 
 def reorganize_prompts(prompts):
+    """
+    Reorganize prompts into a unified format for processing.
+    This function takes a list of prompts and organizes them into a dictionary with keys for points, labels, boxes, and text.
+    Args:
+        prompts: List of prompt dictionaries, where each dictionary contains:
+            - 'type': Type of prompt (e.g., 'Point', 'Box', 'Text')
+            - 'data': Dictionary containing the actual prompt data, which may include:
+                - 'points': List of points for 'Point' prompts
+                - 'labels': List of labels for 'Point' prompts
+                - 'boxes': List of bounding boxes for 'Box' prompts
+                - 'text': List of text prompts for 'Text' prompts
+    Returns:
+        dict: A dictionary with keys 'points', 'labels', 'boxes', and 'text', each containing a list of corresponding data.
+        If no prompts of a certain type are provided, the corresponding list will be empty.
+            - text: one dimensional list of text prompts
+            - points: three dimensional list of points, where each point is a list of [x, y] coordinates
+            - labels: one dimensional list of labels corresponding to the points
+            - boxes: two dimensional list of bounding boxes, where each box is a list of [x1, y1, x2, y2] coordinates
+    """
     transformed_prompts = {'points': [], 'labels': [], 'boxes': [], 'text': []}
 
     for prompt in prompts:
@@ -170,8 +191,31 @@ def predict():
 
         original_height, original_width = image_array.shape[:2]
 
+        # --- LangSam branch ---
+        if model_type == 'langsam':
+            prompts = data.get('prompts', [])
+            transformed_prompts = reorganize_prompts(prompts)
+            input_text = transformed_prompts.get('text')
+            # get one dimensional list of text prompts
+            if len(input_text) > 0 and isinstance(input_text[0], list):
+                input_text = [text for sublist in input_text for text in sublist]
+
+            # Initialize LangSam
+            logger.info("Initializing LangSam model")
+            langsam = SamText(model_path or 'ultralytics/sam2.1_s')
+
+            # Get masks from LangSam
+            masks_path, _ = langsam.get_masks(image_path, input_text=input_text)
+
+            if masks_path is None or len(masks_path) == 0:
+                return jsonify({'status': 'error', 'message': 'No valid masks generated'}), 400
+
+            # Convert masks to GeoJSON
+            geojson_path = f"{TEMP_DIR}/predict-langsam_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson"
+            geojson = langsam.raster_to_vector(masks_path[0], input_text[0], filename=geojson_path, img_transform=transform)
+
         # --- SAM2 branch ---
-        if model_type == 'sam2' and model_path.startswith('ultralytics/sam2'):
+        elif model_type == 'sam2' and model_path.startswith('ultralytics/sam2'):
             prompts = data.get('prompts', [])
             transformed_prompts = reorganize_prompts(prompts)
 

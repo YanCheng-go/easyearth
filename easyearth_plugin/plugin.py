@@ -1,6 +1,7 @@
 """Entry point for the QGIS plugin. Handles plugin registration, menu/toolbar actions, and high-level coordination."""
 
 from datetime import datetime
+import shapely
 from qgis.PyQt.QtWidgets import (QAction, QDockWidget, QPushButton, QVBoxLayout,
                                 QWidget, QMessageBox, QLabel, QHBoxLayout,
                                 QLineEdit, QFileDialog, QComboBox, QGroupBox, QShortcut, QProgressBar, QCheckBox, QButtonGroup, QRadioButton, QApplication, QScrollArea)
@@ -89,6 +90,7 @@ class EasyEarthPlugin:
         self.prediction_count = {} # for generating unique IDs
         self.prompts_geojson = {} # stores prompts in GeoJSON format
         self.predictions_geojson = {} # stores predictions in GeoJSON format
+        self.text_prompts = {} # stores text prompts
         self.temp_prompts_geojson = None # temporary file for storing prompts
         self.temp_predictions_geojson = None
         self.last_pred_time = {}  # timestamp when the real-time prediction is unchecked. or the last batch prediction was done
@@ -331,16 +333,16 @@ class EasyEarthPlugin:
             main_layout.addWidget(self.embedding_group)
 
             # 7. Drawing and Prediction Settings Group
-            self.drawing_group = QGroupBox("Drawing and Prediction Settings")
+            self.drawing_group = QGroupBox("Prompt and Prediction Settings")
             self.drawing_group.hide()  # Hide by default, will show when image is loaded
             settings_layout = QVBoxLayout()
 
             # Drawing type selection
             type_layout = QHBoxLayout()
-            type_label = QLabel("Draw type:")
+            type_label = QLabel("Prompt type:")
             self.draw_type_dropdown = QComboBox()
-            self.draw_type_dropdown.addItems(["Point", "Box"])
-            self.draw_type_dropdown.setItemData(2, False, Qt.UserRole - 1)  # Disable Text option
+            self.draw_type_dropdown.addItems(["Point", "Box", "Text"])
+            # self.draw_type_dropdown.setItemData(2, False, Qt.UserRole - 1)  # Disable Text option
             self.draw_type_dropdown.currentTextChanged.connect(self.on_draw_type_changed)
             type_layout.addWidget(type_label)
             type_layout.addWidget(self.draw_type_dropdown)
@@ -353,10 +355,28 @@ class EasyEarthPlugin:
             self.draw_button.clicked.connect(self.toggle_drawing)
             self.draw_button.setEnabled(False) # enabled after image is loaded
             button_layout.addWidget(self.draw_button)
-            
+
+            # Text input in drawing group -> later change to prompt input
+            text_input_layout = QHBoxLayout()
+            self.text_input = QLineEdit()
+            self.text_input.setPlaceholderText("Enter text prompt here, e.g. 'tree', 'building'")
+            self.text_input.hide()  # Hide text input initially
+            self.text_input.setEnabled(False)  # Initially disabled, enabled when Text draw type is selected
+            # self.text_input.returnPressed.connect(self.on_text_prompt_changed)  # Connect to text input change
+            # disable return key to avoid triggering on Enter key press
+            # add a confirm button to confirm the text input
+            self.enter_button = QPushButton("Enter")
+            self.enter_button.hide()
+            self.enter_button.setEnabled(False)  # Initially disabled, enabled when Text draw type is selected
+            self.enter_button.clicked.connect(self.on_text_prompt_changed)
+            self.text_input.textChanged.connect(lambda: self.enter_button.setEnabled(bool(self.text_input.text().strip())))  # Enable button when text is entered
+            text_input_layout.addWidget(self.text_input)
+            text_input_layout.addWidget(self.enter_button)
+            settings_layout.addLayout(text_input_layout)
+
             self.undo_button = QPushButton("Undo last drawing")
             self.undo_button.clicked.connect(self.undo_last_drawing)
-            self.undo_button.setEnabled(False) # enable after drawing starts
+            # self.undo_button.setEnabled(False) # enable after drawing starts
             self.undo_shortcut = QShortcut(QKeySequence.Undo, self.iface.mainWindow())
             self.undo_shortcut.activated.connect(self.undo_last_drawing)  # Connect shortcut to undo function
             button_layout.addWidget(self.undo_button)
@@ -665,7 +685,7 @@ class EasyEarthPlugin:
             self.downloading_progress_status.show()
 
             local_filename = os.path.basename(image_url.split("?")[0])
-            save_path = os.path.join(self.base_dir, local_filename)
+            save_path = os.path.join(self.base_dir, "images", local_filename)
             response = requests.get(image_url, stream=True)
             total = int(response.headers.get('content-length', 0))
             downloaded = 0
@@ -763,6 +783,13 @@ class EasyEarthPlugin:
         self.load_embedding_radio.setEnabled(is_sam)
         self.save_embedding_radio.setEnabled(is_sam)
         self.embedding_group.setVisible(is_sam)
+
+        # DIsable text input and enter button if not SAM model
+        self.text_input.setEnabled(is_sam)
+        self.enter_button.setEnabled(is_sam)
+        # disable the text input and enter button if not SAM model
+        if not is_sam:
+            self.text_input.clear()
 
         # Update embedding path
         if is_sam:
@@ -1043,7 +1070,7 @@ class EasyEarthPlugin:
             else:
                 self.canvas.unsetMapTool(self.point_tool)
                 self.draw_button.setText("Start drawing")
-                self.undo_button.setEnabled(False)
+                # self.undo_button.setEnabled(False)
                 self.logger.info("Stopping drawing session")
 
         except Exception as e:
@@ -1311,6 +1338,7 @@ class EasyEarthPlugin:
 
         if self.prompt_count[self.get_image_name()] == 0:
             self.iface.messageBar().pushMessage(f'No drawings to undo for {self.get_image_name()}.', level=Qgis.Warning)
+            QMessageBox.warning(None, "Warning", f"No drawings to undo for {self.get_image_name()}.")
             return
 
         last_prompt_id = self.prompts_geojson[self.get_image_name()]['features'][-1]['properties']['id'] # gets the last prompt ID from prompts_geojson
@@ -1345,13 +1373,16 @@ class EasyEarthPlugin:
                 self.prediction_count[self.get_image_name()] = self.prediction_count[self.get_image_name()] - 1 if self.prediction_count[self.get_image_name()] > 0 else 0 # updates the feature count
                 self.add_features_to_layer([], "predictions") # updates the predictions layer
 
-    def add_features_to_layer(self, features, layer_type='prompts', crs=None, model_path=None):
+    def add_features_to_layer(self, features, layer_type='prompts', crs=None, model_path=None, model_type=None):
         """
         Add or append features to the specified layer (prompts or predictions).
         Args:
             features: list of GeoJSON features
             layer_type: 'prompts' or 'predictions'
             crs: coordinate reference system for the features
+            model_path: path to the model used for predictions (if applicable), only for predictions layer
+            model_type: type of the model used for predictions (if applicable), only for predictions layer
+            text: text prompt for the prediction (if applicable), only for predictions layer
         """
         try:
             extent, width, height, raster_crs = self.raster_extent, self.raster_width, self.raster_height, self.raster_crs
@@ -1370,9 +1401,14 @@ class EasyEarthPlugin:
                         feat['properties'] = {}
                         
                     if 'type' not in feat['properties']:
-                        geom_type = feat.get('geometry', {}).get('type', '')
-                        feat['properties']['type'] = 'Point' if geom_type == 'Point' else 'Box' if geom_type == 'Polygon' else 'Unknown'
-
+                        # check the length of the geometry see if it is empty
+                        geom_json = feat.get('geometry', {})
+                        geom_type = geom_json.get('type', None)
+                        empty_geom = True if not geom_json or len(geom_json.get('coordinates', [])) == 0 else False
+                        if not empty_geom:
+                            feat['properties']['type'] = 'Point' if geom_type == 'Point' else 'Box' if geom_type == 'Polygon' else 'Unknown'
+                        else:
+                            feat['properties']['type'] = 'Text' # Default to 'Text' if no geometry type is found
                 # convert project crs to raster crs
                 # transform = QgsCoordinateTransform(self.project_crs, raster_crs, QgsProject.instance())
                 
@@ -1424,7 +1460,9 @@ class EasyEarthPlugin:
                     "properties": {
                         "id": start_id + i,
                         "model_path": model_path,
-                        # "scores": feat.get('properties', {}).get('scores', 0),  # TODO： if scores are available in the feature properties
+                        "model_type": model_type,
+                        "text": feat.get('properties', {}).get('text', 0.0),
+                        "score": feat.get('properties', {}).get('score', 0.0),  # TODO： if scores are available in the feature properties
                     },
                     "geometry": feat['geometry']
                 } for i, feat in enumerate(features)]
@@ -1615,6 +1653,12 @@ class EasyEarthPlugin:
                         y2 = feature['pixel_y'] + feature['pixel_height']
                         prompts.append({'type': 'Box', 'data': {'boxes': [[x1, y1, x2, y2]]}})
                         aoi_features.append((x1, y1, x2, y2))  # adds the box coordinates to AOI features
+
+                    elif prompt_type == 'Text':
+                        text = feature['text']
+                        prompts.append({'type': 'Text', 'data': {'text': [text]}})
+                        # self.iface.messageBar().pushMessage(f'Text prompt: {text}', level=Qgis.Info)
+
                     else:
                         self.iface.messageBar().pushMessage('Unknown prompt type', level=Qgis.Info)
                         self.logger.error(f"Unknown prompt type: {prompt_type}")
@@ -1749,6 +1793,12 @@ class EasyEarthPlugin:
                 if condition:
                     self.model_type = model_type
 
+            # use langsam model if text prompt is used for SAM model
+            if "text" in prompts[0].get('type', '').lower() and self.is_sam_model():
+                self.model_type = "langsam"
+
+            self.logger.debug(f"Model type: {self.model_type}")
+
             if self.model_path:
                 payload["model_path"] = self.model_path
                 payload["model_type"] = self.model_type
@@ -1825,12 +1875,14 @@ class EasyEarthPlugin:
 
                         features = response_json['features']
                         feature_crs = response_json.get('crs', None)
+                        text_prompt = response_json.get('text', None)
 
                         if not features:
                             self.iface.messageBar().pushMessage("Warning", "No predictions returned from server", level=Qgis.Warning, duration=3)
                             return
 
-                        self.add_features_to_layer(features, "predictions", crs=feature_crs, model_path=self.model_path) # adds the predictions as a layer
+                        self.add_features_to_layer(features, "predictions", crs=feature_crs,
+                                                   model_path=self.model_path, model_type=self.model_type) # adds the predictions as a layer
 
                     except json.JSONDecodeError as e:
                         raise ValueError(f"Invalid JSON response: {str(e)}")
@@ -1904,17 +1956,96 @@ class EasyEarthPlugin:
             self.logger.error(f"Error browsing embedding: {str(e)}")
             QMessageBox.critical(None, "Error", f"Failed to browse embedding: {str(e)}")
 
+    def on_text_prompt_changed(self):
+        """Handle changes in the text prompt input field."""
+        try:
+            if not self.text_input.isEnabled():
+                return  # Early exit if the text input is not enabled
+
+            text = self.text_input.text()  # This gets the current input text
+
+            # Check invalid input, only allow comma-separated values
+            if isinstance(text, str):
+                if not all(t.strip() for t in text.split(',')):
+                    QMessageBox.warning(None, "Invalid Input", "Please enter valid comma-separated values.")
+                    return
+
+            text = text.strip()
+            if not text:
+                QMessageBox.critical(None, "Error", "Please enter a valid text prompt.")
+                return
+
+            # Split the text by comma and strip spaces
+            # check if there are any commas in the text
+            if ',' not in text:
+                text_data = [text.strip()]
+            else:
+                # Split by comma and remove empty strings
+                text_data = [t.strip() for t in text.split(',') if t.strip()]
+            self.logger.debug(f"Text prompt changed: {text_data}")
+
+            if self.get_image_name() not in self.prompt_count.keys():
+                self.prompt_count[self.get_image_name()] = 0
+
+            # Create an empty GeoJSON feature for the text prompt
+            empty_geom = shapely.geometry.mapping(shapely.geometry.MultiPolygon([]))
+            text_features = [{
+                "type": "Feature",
+                "geometry": empty_geom,
+                "properties": {
+                    "id": self.prompt_count[self.get_image_name()] + i,
+                    "type": "Text",
+                    "text": t,
+                    "timestamp": time.time() + i * 2  # Add timestamp for tracking, manually separated by 2000ms
+                }} for i, t in enumerate(text_data)]
+
+            self.prompt_count[self.get_image_name()] += len(text_data)  # Update prompt count
+
+            self.add_features_to_layer(text_features, "prompts")
+            self.iface.messageBar().pushMessage("Text Prompt Added", f"Added {len(text_features)} text prompts.", level=Qgis.Info, duration=3)
+
+        except Exception as e:
+            self.logger.error(f"Error in on_text_prompt_changed: {e}")
+            QMessageBox.critical(None, "Error", f"Failed to update text prompt: {str(e)}")
+
     def on_draw_type_changed(self, draw_type):
         """Handle draw type change"""
         try:
             self.logger.debug(f"Draw type changed to: {draw_type}")
 
+            if draw_type == "Text":
+                # Hide draw button and undo button
+                self.draw_button.setVisible(False)
+                # self.undo_button.setVisible(False)
+                self.text_input.setVisible(True)
+                self.text_input.setEnabled(True)
+                self.enter_button.setVisible(True)  # Show enter button for text input
+                # hide real-time checkbox
+                self.realtime_checkbox.setVisible(False)
+                self.realtime_checkbox.setChecked(False)
+                # self.text_input.setFocus()  # Set focus to text input
+            else:
+                # Show draw button and undo button
+                self.draw_button.setVisible(True)
+                # self.undo_button.setVisible(True)
+                self.text_input.setVisible(False)
+                self.text_input.setEnabled(False)
+                self.enter_button.setVisible(False)
+                # clear text input
+                self.text_input.clear()
+                # show real-time checkbox
+                self.realtime_checkbox.setVisible(True)
+
             if self.draw_button.isChecked():
+                self.text_input.setEnabled(False)
+                self.text_input.clear()
                 # Switch map tool based on draw type
                 if draw_type == "Point":
                     self.canvas.setMapTool(self.point_tool)
+                    self.text_input.setEnabled(False)
                 elif draw_type == "Box":
                     self.canvas.setMapTool(self.box_tool)
+                    self.text_input.setEnabled(False)
                 else:
                     self.canvas.unsetMapTool(self.point_tool)
                     self.canvas.unsetMapTool(self.box_tool)
@@ -2017,8 +2148,8 @@ class EasyEarthPlugin:
                 self.predictions_layer = None
 
             # Reset feature count
-            self.prediction_count = 0
-            self.prompt_count = 0
+            self.prediction_count = {}
+            self.prompt_count = {}
             # Clear any existing rubber bands
             self.rubber_band.reset()
             self.temp_rubber_band.reset()
@@ -2080,7 +2211,7 @@ class EasyEarthPlugin:
                 if file_path and os.path.exists(file_path):
                     os.remove(file_path)
 
-            if self.local_server_log_file:
+            if hasattr(self, 'local_server_log_file') and self.local_server_log_file:
                 self.local_server_log_file.close()
 
             self.logger.debug("Plugin unloaded successfully")

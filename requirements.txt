@@ -19,3 +19,5 @@ ipdb
 PyYAML>=5.1
 matplotlib
 ultralytics
+segment-geospatial
+groundingdino-py
