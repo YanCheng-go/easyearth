@@ -214,6 +214,19 @@ We welcome community contributions! If you'd like to contribute, check out:
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)
 ---
 
+## Acknowledgements
+
+This project was inspired by several outstanding open-source initiatives. We extend our gratitude to the developers and communities behind the following projects:
+
+- **[Segment Anything (SAM)](https://github.com/facebookresearch/segment-anything)** – Meta AI's foundation model for promptable image and video segmentation.
+- **[SAMGeo](https://github.com/opengeos/segment-geospatial)** – A Python package for applying SAM to geospatial data.
+- **[Geo-SAM](https://github.com/coolzhao/Geo-SAM)** – A QGIS plugin for efficient segmentation of large geospatial raster images.
+- **[GroundingDINO](https://github.com/IDEA-Research/GroundingDINO)** – An open-set object detector integrating language and vision for zero-shot detection.
+- **[Lang-Segment-Anything](https://github.com/luca-medeiros/lang-segment-anything)** – Combines SAM and GroundingDINO to enable segmentation via natural language prompts.
+- **[Ultralytics](https://github.com/ultralytics/ultralytics)** – Creators of the YOLO series, offering real-time object detection and segmentation models.
+- **[Hugging Face](https://huggingface.co)** – A platform for sharing and collaborating on machine learning models and datasets.
+- **[Ollama](https://ollama.com)** – A framework for running large language models locally with ease.
+
 ## 🧑‍💻 Authors
 
 Developed by:
