@@ -493,28 +493,26 @@ class EasyEarthPlugin:
 
     def start_server(self):
         if self.docker_mode_button.isChecked():
-            # docker_image_url = 'https://github.com/YanCheng-go/easyearth/releases/download/latest/easyearth.tar.gz'
-            # zipped_docker_image_path = os.path.join(self.base_dir, 'easyearth.tar.gz')
-            # docker_image_path = os.path.join(self.base_dir, 'easyearth.tar')
-
-            # if not os.path.exists(docker_image_path):
-            #     urllib.request.urlretrieve(docker_image_url, zipped_docker_image_path) # downloads the docker image from the URL
-            #     self.iface.messageBar().pushMessage(f"Downloaded Docker image from {docker_image_url} to {zipped_docker_image_path}", level=Qgis.Info)
-            #     subprocess.run(['gunzip', '-f', zipped_docker_image_path]) # unzips the downloaded file
-            #     self.iface.messageBar().pushMessage(f"Unzipped Docker image to {docker_image_path}", level=Qgis.Info)
-            #     loading = subprocess.run([f'{self.docker_path}', 'load', '-i', docker_image_path], capture_output=True, text=True) # loads the docker image into Docker
-            #     self.iface.messageBar().pushMessage(f"Loaded Docker image from {docker_image_path}. {loading}", level=Qgis.Info)
-
             linux_gpu_flags = " --runtime nvidia" if platform.system().lower() == "linux" else ""  # adds GPU support if available and on Linux
             gpu_flags = " --gpus all" if platform.system().lower() != "darwin" else ""  # adds GPU support if available and not on macOS
-            docker_run_cmd = (f"{self.docker_path} rm -f easyearth 2>/dev/null || true && " # removes the container if it already exists
-                              f"{self.docker_path} pull {self.docker_hub_image_name} && " # pulls the latest image from docker hub
-                              f"{self.docker_path} run{linux_gpu_flags}{gpu_flags} -d --name easyearth -p 3781:3781 " # runs the container in detached mode and maps port 3781
+            self.iface.messageBar().pushMessage('Removing the docker container if it already exists', level=Qgis.Info)
+            QApplication.processEvents()
+            subprocess.run(f"{self.docker_path} rm -f easyearth 2>/dev/null || true", capture_output=True, text=True, shell=True)  # removes the container if it already exists
+            self.iface.messageBar().pushMessage('Pulling the latest image from Docker Hub', level=Qgis.Info)
+            QApplication.processEvents()
+            warning_box = QMessageBox()
+            warning_box.setIcon(QMessageBox.Warning)
+            warning_box.setWindowTitle("Update Docker Image")
+            warning_box.setTextFormat(Qt.RichText)
+            warning_box.setText("Downloading or updating Docker image from Docker Hub.&nbsp;This may take a while for the first time,&nbsp;please wait...")
+            warning_box.exec_()
+            subprocess.run(f"{self.docker_path} pull {self.docker_hub_image_name}", capture_output=True, text=True, shell=True)  # removes the container if it already exists
+            self.iface.messageBar().pushMessage('Starting the Docker container', level=Qgis.Info)
+            QApplication.processEvents()
+            docker_run_cmd = (f"{self.docker_path} run{linux_gpu_flags}{gpu_flags} -d --name easyearth -p 3781:3781 " # runs the container in detached mode and maps port 3781
                               f"-v \"{self.base_dir}\":/usr/src/app/easyearth_base " # mounts the base directory in the container
                               f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
                               f"{self.docker_hub_image_name}")
-                            #   "easyearth")
-            QMessageBox.warning(None, "Update Docker Image", "Downloading or Updating Docker image from Docker Hub. This may take a while for the first time, please wait...") # shows a warning message that the Docker image is being downloaded
             result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True, timeout=1800)
             self.iface.messageBar().pushMessage(f"Starting server...\nRunning command: {result}", level=Qgis.Info)
             
@@ -530,41 +528,53 @@ class EasyEarthPlugin:
             easyearth_folder_path = os.path.join(self.base_dir, 'easyearth')
 
             if not os.path.exists(easyearth_folder_path):
+                self.iface.messageBar().pushMessage(f"Downloading easyearth repo from {repo_url} to {zipped_repo_path}", level=Qgis.Info)
+                QApplication.processEvents()
                 urllib.request.urlretrieve(repo_url, zipped_repo_path)
-                self.iface.messageBar().pushMessage(f"Downloaded easyearth repo from {repo_url} to {zipped_repo_path}", level=Qgis.Info)
+                
+                self.iface.messageBar().pushMessage(f"Unzipping repo to {repo_path}", level=Qgis.Info)
+                QApplication.processEvents()
 
                 with zipfile.ZipFile(zipped_repo_path, 'r') as zip_ref:
                     zip_ref.extractall(self.base_dir)
 
-                self.iface.messageBar().pushMessage(f"Unzipped repo to {repo_path}", level=Qgis.Info)
+                self.iface.messageBar().pushMessage(f"Moving easyearth folder out of repo to {easyearth_folder_path}", level=Qgis.Info)
+                QApplication.processEvents()
                 shutil.move(os.path.join(repo_path, "easyearth"), easyearth_folder_path)
                 shutil.rmtree(repo_path)
                 os.remove(zipped_repo_path)
-                self.iface.messageBar().pushMessage(f"Moved easyearth folder out of repo to {easyearth_folder_path}", level=Qgis.Info)
 
             # Download env
             env_path = os.path.join(self.base_dir, 'easyearth_env')
+
             if not os.path.exists(env_path):
-                QMessageBox.warning(None, "Local Python Environment Not Found", "Downloading EasyEarth Python environment. This may take a while, please wait...")
+                QMessageBox.warning(None, "Local Python Environment Not Found", "Downloading EasyEarth Python environment. This may take a while,&nbsp;please wait...")
                 self.iface.messageBar().pushMessage(f"Downloading EasyEarth Python environment for {platform.system().lower()} system",level=Qgis.Info)
-                if platform.system().lower() == "darwin":
+
+                if platform.system().lower() == 'darwin':  # macOS
                     env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/env-v3/easyearth_env.tar.gz'
                     zipped_env_path = os.path.join(self.base_dir, 'easyearth_env.tar.gz')
+                    self.iface.messageBar().pushMessage(f"Downloading environment from {env_url} to {zipped_env_path}", level=Qgis.Info)
+                    QApplication.processEvents()
                     urllib.request.urlretrieve(env_url, zipped_env_path)
-                    unzipping = subprocess.run(f'tar -xzf \"{zipped_env_path}\" -C \"{self.base_dir}\"', capture_output=True, text=True, shell=True, timeout=1800)  # unzips the environment tar.gz file
+                    self.iface.messageBar().pushMessage(f"Unzipping environment to {env_path}", level=Qgis.Info)
+                    QApplication.processEvents()
+                    subprocess.run(f'tar -xzf \"{zipped_env_path}\" -C \"{self.base_dir}\"', capture_output=True, text=True, shell=True)  # unzips the environment tar.gz file
                     os.remove(zipped_env_path)  # remove the zip file after extraction
                 else:
                     EnvManager(self.iface, self.logs_dir, self.plugin_dir).download_linux_env() # Use EnvManager to download (internally calls download_linux_env.sh)
+                
                 self.iface.messageBar().pushMessage(f"Unzipped environment to {env_path}", level=Qgis.Info)
 
             self.local_server_log_file = open(f"{self.logs_dir}/launch_server_local.log", "w")  # log file for the local server launch
-            result = subprocess.Popen(f'chmod +x \"{self.plugin_dir}\"/launch_server_local.sh && \"{self.plugin_dir}\"/launch_server_local.sh',
-                                      shell=True,
-                                      stdout=self.local_server_log_file,  # redirects stdout to a log file
-                                      stderr=subprocess.STDOUT,  # redirects stderr to the same log file
-                                      text=True,              # decodes output as text, not bytes
-                                      start_new_session=True)  # detaches from QGIS
             self.iface.messageBar().pushMessage(f"Starting local server...", level=Qgis.Info)
+            result = subprocess.Popen(f'chmod +x \"{self.plugin_dir}\"/launch_server_local.sh && \"{self.plugin_dir}\"/launch_server_local.sh',
+                                    shell=True,
+                                    stdout=self.local_server_log_file,  # redirects stdout to a log file
+                                    stderr=subprocess.STDOUT,  # redirects stderr to the same log file
+                                    text=True,              # decodes output as text, not bytes
+                                    start_new_session=True)  # detaches from QGIS
+            
             if result:
                 self.iface.messageBar().pushMessage(f"Local server started successfully. Check logs {self.local_server_log_file} for details.", level=Qgis.Success)
 
@@ -793,8 +803,6 @@ class EasyEarthPlugin:
                     self.load_embedding_radio.setChecked(True)
                     self.embedding_path_edit.setEnabled(True)
                     self.embedding_browse_btn.setEnabled(True)
-
-                    # Set the embedding path in the text box
                     self.embedding_path_edit.setText(embedding_path)
 
                     self.iface.messageBar().pushMessage(
@@ -929,15 +937,6 @@ class EasyEarthPlugin:
                 group.addLayer(raster_layer) # adds the layer to the group
             
             self.on_image_selected()
-
-            # Get image crs and extent
-            # self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(raster_layer)
-            # raster_properties = (f"Extent: X min: {self.raster_extent.xMinimum()}, X max: {self.raster_extent.xMaximum()}, "
-            #                      f"Y min: {self.raster_extent.yMinimum()}, Y max: {self.raster_extent.yMaximum()}; "
-            #                      f"Width: {self.raster_width}; "
-            #                      f"Height: {self.raster_height}; "
-            #                      f"CRS: {self.raster_crs.authid()}")
-            # self.iface.messageBar().pushMessage("Selected raster CRS and dimensions", raster_properties, level=Qgis.Info, duration=5)
             self.create_prediction_layers()
 
             if is_sam:
@@ -1149,13 +1148,12 @@ class EasyEarthPlugin:
                 py = max(0, min(py, height - 1))
 
                 if self.get_image_name() not in self.prompt_count.keys():
-                    self.iface.messageBar().pushMessage(f'No prompts found for {self.get_image_name()}', level=Qgis.Info)
+                    # self.iface.messageBar().pushMessage(f'No prompts found for {self.get_image_name()}', level=Qgis.Info)
                     self.prompt_count[self.get_image_name()] = 0
 
                 self.iface.messageBar().pushMessage(f"Image name: {self.get_image_name()}\n"
                                                     f"Map coordinates: ({point.x():.2f}, {point.y():.2f})\n"
-                                                    f"Pixel coordinates: ({px}, {py})\n"
-                                                    f"Prompt count: {self.prompt_count[self.get_image_name()]}",
+                                                    f"Pixel coordinates: ({px}, {py})\n",
                                                     level=Qgis.Info)
 
                 # Create prompt feature
@@ -1308,10 +1306,10 @@ class EasyEarthPlugin:
             return
 
         last_prompt_id = self.prompts_geojson[self.get_image_name()]['features'][-1]['properties']['id'] # gets the last prompt ID from prompts_geojson
-        self.iface.messageBar().pushMessage(f'Last prompt ID: {last_prompt_id}', level=Qgis.Info)
+        # self.iface.messageBar().pushMessage(f'Last prompt ID: {last_prompt_id}', level=Qgis.Info)
         # last_prediction_ID = map_id(self.prompts_geojson[self.get_image_name()]['features']) # finds the last prediction feature ID using map_id
         last_prediction_ID = dict((f['properties']['id'], i) for i, f in enumerate(self.prompts_geojson[self.get_image_name()]['features']))
-        self.iface.messageBar().pushMessage(f'Last prediction ID: {last_prediction_ID}', level=Qgis.Info)
+        # self.iface.messageBar().pushMessage(f'Last prediction ID: {last_prediction_ID}', level=Qgis.Info)
 
         self.prompts_geojson[self.get_image_name()]['features'] = self.prompts_geojson[self.get_image_name()]['features'][:-1] # removes the last point from the prompts geojson
         self.prompt_count[self.get_image_name()] = self.prompt_count[self.get_image_name()] - 1 if self.prompt_count[self.get_image_name()] > 0 else 0  # decrements the prompt counter
@@ -1327,7 +1325,7 @@ class EasyEarthPlugin:
             else:
                 # Get the last prediction ID from predictions_geojson
                 last_prediction_index = last_prediction_ID.get(last_prompt_id, None)
-                self.iface.messageBar().pushMessage(f'Last prediction index: {last_prediction_index}', level=Qgis.Info)
+                # self.iface.messageBar().pushMessage(f'Last prediction index: {last_prediction_index}', level=Qgis.Info)
                 last_prediction_id = self.predictions_geojson[self.get_image_name()]['features'][last_prediction_index]['properties']['id']
                 # self.iface.messageBar().pushMessage(f'Last prediction id: {last_prediction_id}', level=Qgis.Info)
                 # self.iface.messageBar().pushMessage(f"{self.predictions_geojson[self.get_image_name()]['features']}", level=Qgis.Info)
@@ -1931,27 +1929,10 @@ class EasyEarthPlugin:
     def create_prediction_layers(self):
         """Prepare for prediction and prompt layers"""
         try:
-            # Clean up existing layers first
-            # if hasattr(self, 'prompts_layer') and self.prompts_layer:
-            #     QgsProject.instance().removeMapLayer(self.prompts_layer)
-            #     self.prompts_layer = None
-
-            # if hasattr(self, 'predictions_layer') and self.predictions_layer:
-            #     QgsProject.instance().removeMapLayer(self.predictions_layer)
-            #     self.predictions_layer = None
-
-            # Reset the GeoJSON data
-            # self.prompts_geojson = None
-            # self.predictions_geojson = None
-
             # Create temporary file paths
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             self.temp_prompts_geojson = os.path.join(self.tmp_dir, f'prompts_{timestamp}.geojson')
             self.temp_predictions_geojson = os.path.join(self.tmp_dir, f'predictions_{timestamp}.geojson')
-
-            # self.prediction_count = 0 # resets feature counter
-            # self.prompt_count = 0 # resets prompt counter
-
             self.logger.info(f"Prepared file paths: \n"
                              f"Prompts: {self.temp_prompts_geojson}\n"
                              f"Predictions: {self.temp_predictions_geojson}")
@@ -1977,22 +1958,6 @@ class EasyEarthPlugin:
 
                 if not self.selected_layer:
                     return
-
-                # Get image crs and extent
-                # self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(self.selected_layer)
-                # msg = (
-                #     f"Extent: X min: {self.raster_extent.xMinimum()}, X max: {self.raster_extent.xMaximum()}, "
-                #     f"Y min: {self.raster_extent.yMinimum()}, Y max: {self.raster_extent.yMaximum()}; "
-                #     f"Width: {self.raster_width}; "
-                #     f"Height: {self.raster_height}; "
-                #     f"CRS: {self.raster_crs.authid()}"
-                # )
-                # self.iface.messageBar().pushMessage(
-                #     "Selected raster CRS and dimensions",
-                #     msg,
-                #     level=Qgis.Info,
-                #     duration=5
-                # )
 
                 self.image_path.setText(self.selected_layer.source())
                 self.on_image_selected()
