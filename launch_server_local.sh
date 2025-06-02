@@ -3,21 +3,24 @@
 # Check operating system
 if [[ "$OSTYPE" != "darwin"* ]]; then
     REQUIREMENTS="requirements.txt"
+    ENV_NAME="easyearth_env"
 else
     REQUIREMENTS="requirements_mac.txt"
+    ENV_NAME="easyearth_env_mac"
 fi
+
 
 # Virtual environment
 if [ ! -d "easyearth_env" ]; then # checks if easyearth_env already exists
-    echo "Creating virtual environment 'easyearth_env'..."
-    python3 -m venv --copies easyearth_env
-    source easyearth_env/bin/activate
+    echo "Creating virtual environment $ENV_NAME..."
+    python3 -m venv --copies $ENV_NAME
+    source $ENV_NAME/bin/activate
     pip install --upgrade pip
     pip install torch torchvision torchaudio
     pip install --prefer-binary -r $REQUIREMENTS
 else
-    echo "Virtual environment 'easyearth_env' already exists."
-    source easyearth_env/bin/activate
+    echo "Virtual environment $ENV_NAME already exists."
+    source $ENV_NAME/bin/activate
 fi
 
 # Set up directories
