@@ -23,6 +23,7 @@ dependencies:
   - matplotlib
   - pip
   - ultralytics
+  - segment-geospatial
   - pip:
       - connexion[swagger-ui]
       - connexion[flask]
