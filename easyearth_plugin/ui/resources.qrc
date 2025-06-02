@@ -1,8 +1,0 @@
-<RCC>
-    <qresource prefix="/plugins/sam_qgis_plugin">
-        <file>icon.png</file>
-        <file>icons/point.png</file>
-        <file>icons/predict.png</file>
-        <file>icons/clear.png</file>
-    </qresource>
-</RCC>

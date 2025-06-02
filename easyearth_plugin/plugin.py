@@ -505,7 +505,7 @@ class EasyEarthPlugin:
             warning_box.setWindowTitle("Update Docker Image")
             warning_box.setTextFormat(Qt.RichText)
             warning_box.setText("Downloading or updating Docker image from Docker Hub.&nbsp;This may take a while for the first time,&nbsp;please wait...")
-            warning_box.show()
+            warning_box.exec_()
             subprocess.run(f"{self.docker_path} pull {self.docker_hub_image_name}", capture_output=True, text=True, shell=True)  # removes the container if it already exists
             self.iface.messageBar().pushMessage('Starting the Docker container', level=Qgis.Info)
             QApplication.processEvents()
