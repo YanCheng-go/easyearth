@@ -52,8 +52,8 @@ class EasyEarthPlugin:
         self.project_name = "easyearth_plugin"
         self.sudo_password = None  # Add this to store password temporarily
         self.docker_path = 'docker' if shutil.which('docker') else '/Applications/Docker.app/Contents/Resources/bin/docker' # adds compatibility for macOS
-        # self.docker_hub_image_name = "maverickmiaow/easyearth"
-        self.docker_hub_image_name = "lgordon99/easyearth"
+        self.docker_hub_image_name = "maverickmiaow/easyearth"
+        # self.docker_hub_image_name = "lgordon99/easyearth"
 
         # Initialize map tools and data
         self.canvas = iface.mapCanvas() # QGIS map canvas instance
