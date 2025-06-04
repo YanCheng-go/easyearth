@@ -7,7 +7,7 @@ from qgis.PyQt.QtWidgets import (QAction, QDockWidget, QPushButton, QVBoxLayout,
                                 QLineEdit, QFileDialog, QComboBox, QGroupBox, QShortcut, QProgressBar, QCheckBox, QButtonGroup, QRadioButton, QApplication, QScrollArea)
 from qgis.PyQt.QtCore import Qt, QTimer
 from qgis.PyQt.QtGui import QIcon, QKeySequence, QColor
-from qgis.core import (QgsVectorLayer, QgsGeometry, QgsRectangle,
+from qgis.core import (QgsVectorLayer, QgsGeometry, QgsApplication,
                       QgsPointXY, QgsProject,
                       QgsWkbTypes, QgsRasterLayer, Qgis, QgsLayerTreeGroup, QgsCategorizedSymbolRenderer,
                       QgsRendererCategory, QgsMarkerSymbol, QgsFillSymbol, QgsCoordinateTransform, QgsSingleSymbolRenderer)
@@ -40,17 +40,20 @@ class EasyEarthPlugin:
 
         self.actions = []
         self.menu = 'EasyEarth'
-        self.toolbar = self.iface.addToolBar(u'EasyEarth')
-        self.toolbar.setObjectName(u'EasyEarth')
+
+        if not hasattr(self, 'toolbar') or self.toolbar is None:
+            self.toolbar = self.iface.addToolBar(u'EasyEarth')
+            self.toolbar.setObjectName(u'EasyEarth')
+
+        self.toolbar.setMovable(False)
         self.plugin_dir = os.path.dirname(__file__) # directory path where the current file is located
 
         # Docker configuration
         self.project_name = "easyearth_plugin"
         self.sudo_password = None  # Add this to store password temporarily
         self.docker_path = 'docker' if shutil.which('docker') else '/Applications/Docker.app/Contents/Resources/bin/docker' # adds compatibility for macOS
-        self.docker_hub_image_name = "maverickmiaow/easyearth"
-        # self.docker_hub_image_name = "lgordon99/easyearth"
-        self.docker_mode = True
+        # self.docker_hub_image_name = "maverickmiaow/easyearth"
+        self.docker_hub_image_name = "lgordon99/easyearth"
 
         # Initialize map tools and data
         self.canvas = iface.mapCanvas() # QGIS map canvas instance
@@ -70,6 +73,7 @@ class EasyEarthPlugin:
         self.start_point = None
         self.drawn_features = []
         self.drawn_layer = None
+        self.run_mode = None  # 'docker' or 'local'
 
         # Directories
         self.base_dir = '' # data directory for storing images and embeddings
@@ -124,6 +128,17 @@ class EasyEarthPlugin:
             self.logger.info(f"Plugin directory: {self.plugin_dir}")
 
             icon = QIcon(os.path.join(self.plugin_dir, 'resources/icons/easyearth.png')) # loads the icon from the resources directory
+            folder_icon = QgsApplication.getThemeIcon('mActionFileOpen.svg')
+
+            for action in self.iface.mainWindow().findChildren(QAction):
+                if action.text() == 'EasyEarth':
+                    self.iface.removePluginMenu('EasyEarth', action)
+                    self.iface.removeToolBarIcon(action)
+                    action.deleteLater()
+
+            if hasattr(self, 'toolbar') and self.toolbar:
+                self.iface.mainWindow().removeToolBar(self.toolbar)
+                self.toolbar = None
 
             # Create action with the icon
             self.action = QAction(icon, 'EasyEarth', self.iface.mainWindow()) # creates a toolbar button with the icon and text
@@ -143,13 +158,30 @@ class EasyEarthPlugin:
             main_layout = QVBoxLayout()
 
             # 1. Base folder
+            try:
+                response = requests.get(f"{self.server_url}/ping", timeout=2)
+
+                if response.status_code == 200:
+                    self.base_dir = response.json()['user_base_dir']  # get the user base directory from the response
+                    self.initialize_dirs()  # initializes the directories based on the base directory
+                    self.run_mode = response.json()['run_mode']  # get the run mode from the response
+            except Exception as e:
+                self.iface.messageBar().pushMessage(f"Error checking server status: {str(e)}", level=Qgis.Info)
+
             base_folder_group = QGroupBox("Base Folder")
             base_folder_layout = QHBoxLayout()
-            self.base_folder = QLineEdit('')
-            self.base_folder.setPlaceholderText("No folder selected")
+            self.base_folder_button = QPushButton(folder_icon, '')
+
+            if self.base_dir:
+                self.base_folder = QLineEdit(self.base_dir)
+                self.base_folder_button.setEnabled(False)  # Disable button if server is running
+            else:
+                self.base_folder = QLineEdit('')
+                self.base_folder.setPlaceholderText("No folder selected")
+                self.base_folder_button.clicked.connect(self.select_base_folder)
+
             self.base_folder.setReadOnly(True)
-            self.base_folder_button = QPushButton("Select folder")
-            self.base_folder_button.clicked.connect(self.select_base_folder)
+
             base_folder_layout.addWidget(self.base_folder)
             base_folder_layout.addWidget(self.base_folder_button)
             base_folder_group.setLayout(base_folder_layout)
@@ -165,23 +197,31 @@ class EasyEarthPlugin:
             run_mode_layout.addWidget(run_mode_info_label)
 
             run_mode_button_layout = QHBoxLayout()
-            self.docker_mode_button = QPushButton("Docker")
+            self.docker_mode_button = QPushButton("Docker 🐳")
             self.docker_mode_button.setCheckable(True)
             self.docker_mode_button.clicked.connect(lambda: self.run_mode_selected("docker"))
             run_mode_button_layout.addWidget(self.docker_mode_button)
             
-            self.local_mode_button = QPushButton("Local")
+            self.local_mode_button = QPushButton("Local 💻")
             self.local_mode_button.setCheckable(True)
             self.local_mode_button.clicked.connect(lambda: self.run_mode_selected("local"))
             run_mode_button_layout.addWidget(self.local_mode_button)
             run_mode_layout.addLayout(run_mode_button_layout)
             self.run_mode_group.setLayout(run_mode_layout)
+
+            if not self.base_dir:
+                self.run_mode_group.hide() # hide by default, will show when base folder is selected
+            else:
+
+                if self.run_mode == 'docker':
+                    self.docker_mode_button.setChecked(True)
+                elif self.run_mode == 'local':
+                    self.local_mode_button.setChecked(True)
+
             main_layout.addWidget(self.run_mode_group)
-            self.run_mode_group.hide() # hide by default, will show when base folder is selected
 
             # 3. Server
             self.server_group = QGroupBox("Server")
-            self.server_group.hide()  # Hide by default, will show when run mode is selected
             service_layout = QVBoxLayout()
 
             # Server status
@@ -200,17 +240,21 @@ class EasyEarthPlugin:
             # API Information
             api_layout = QVBoxLayout()
             api_label = QLabel("API Endpoints:")
-            api_label.setStyleSheet("font-weight: bold;")
-            self.api_info = QLabel(f"Base URL: {self.server_url}\n"
-                                   f"Inference: /predict\n"
+            # api_label.setStyleSheet("font-weight: bold;")
+            self.api_info = QLabel(f"Base URL: <a href={self.server_url.replace('0.0.0.0', 'localhost')}>{self.server_url}</a><br>"
+                                   f"Inference: /predict<br>"
                                    f"Health check: /ping")
             self.api_info.setWordWrap(True)
+            self.api_info.setOpenExternalLinks(True)  # allows the links to be clickable
+            self.api_info.setTextFormat(Qt.RichText)  # enables rich text formatting
             api_layout.addWidget(api_label)
             api_layout.addWidget(self.api_info)
             service_layout.addLayout(api_layout)
-
             self.server_group.setLayout(service_layout)
             main_layout.addWidget(self.server_group)
+
+            if not self.base_dir:
+                self.server_group.hide()  # Hide by default, will show when run mode is selected
 
             # 4. Model Selection Group
             self.model_group = QGroupBox("Segmentation Model")
@@ -258,7 +302,7 @@ class EasyEarthPlugin:
             self.image_path = QLineEdit("")
             self.image_path.setReadOnly(True)
             self.image_path.setPlaceholderText("No image selected")
-            self.browse_button = QPushButton("Select image")
+            self.browse_button = QPushButton(folder_icon, '')
             self.browse_button.clicked.connect(self.browse_image)
             file_layout.addWidget(image_path_label)
             file_layout.addWidget(self.image_path)
@@ -314,7 +358,7 @@ class EasyEarthPlugin:
             self.embedding_path_layout = QHBoxLayout()
             self.embedding_path_edit = QLineEdit()
             self.embedding_path_edit.setEnabled(False)
-            self.embedding_browse_btn = QPushButton("Browse")
+            self.embedding_browse_btn = QPushButton(folder_icon, '')
             self.embedding_browse_btn.setEnabled(False)
             self.embedding_browse_btn.clicked.connect(self.browse_embedding)
             self.embedding_path_layout.addWidget(self.embedding_path_edit)
@@ -483,22 +527,28 @@ class EasyEarthPlugin:
 
         if folder: # if a folder is selected
             self.base_dir = os.path.join(folder, 'easyearth_base')
-            self.images_dir = os.path.join(self.base_dir, 'images')
-            self.embeddings_dir = os.path.join(self.base_dir, 'embeddings')
-            self.predictions_dir = os.path.join(self.base_dir, 'predictions')
-            self.tmp_dir = os.path.join(self.base_dir, 'tmp')
-            self.logs_dir = os.path.join(self.base_dir, 'logs')
-            self.base_folder.setText(self.base_dir)
-            self.iface.messageBar().pushMessage(f"Base folder set to {self.base_dir}", level=Qgis.Info)
-            self.run_mode_group.show() # shows run mode group when base folder is selected
-            
-            os.makedirs(self.images_dir, exist_ok=True)  # creates the images directory if it doesn't exist
-            os.makedirs(self.embeddings_dir, exist_ok=True)  # creates the embeddings directory if it doesn't exist
-            os.makedirs(self.predictions_dir, exist_ok=True)  # creates the predictions directory if it doesn't exist
-            os.makedirs(self.tmp_dir, exist_ok=True)  # creates the tmp directory if it doesn't exist
-            os.makedirs(self.logs_dir, exist_ok=True)  # creates the logs directory if it doesn't exist
-            
-            os.environ['BASE_DIR'] = self.base_dir
+        
+        self.initialize_dirs()  # initializes the directories based on the selected base directory
+
+        self.base_folder.setText(self.base_dir)
+        self.run_mode_group.show() # shows run mode group when base folder is selected
+        
+        os.makedirs(self.images_dir, exist_ok=True)  # creates the images directory if it doesn't exist
+        os.makedirs(self.embeddings_dir, exist_ok=True)  # creates the embeddings directory if it doesn't exist
+        os.makedirs(self.predictions_dir, exist_ok=True)  # creates the predictions directory if it doesn't exist
+        os.makedirs(self.tmp_dir, exist_ok=True)  # creates the tmp directory if it doesn't exist
+        os.makedirs(self.logs_dir, exist_ok=True)  # creates the logs directory if it doesn't exist
+
+    def initialize_dirs(self):
+        self.iface.messageBar().pushMessage(f"Base folder set to {self.base_dir}", level=Qgis.Info)
+
+        self.images_dir = os.path.join(self.base_dir, 'images')
+        self.embeddings_dir = os.path.join(self.base_dir, 'embeddings')
+        self.predictions_dir = os.path.join(self.base_dir, 'predictions')
+        self.tmp_dir = os.path.join(self.base_dir, 'tmp')
+        self.logs_dir = os.path.join(self.base_dir, 'logs')
+        
+        os.environ['BASE_DIR'] = self.base_dir
 
     def run_mode_selected(self, mode):
         """Handle run mode selection (Docker or Local)"""
@@ -506,18 +556,15 @@ class EasyEarthPlugin:
 
         if mode == 'docker':
             self.local_mode_button.setChecked(False)
-            self.docker_mode = True
         elif mode == 'local':
             self.docker_mode_button.setChecked(False)
-            self.docker_mode = False
 
     def start_server(self):
         if self.docker_mode_button.isChecked():
-            linux_gpu_flags = " --runtime nvidia" if platform.system().lower() == "linux" else ""  # adds GPU support if available and on Linux
-            gpu_flags = " --gpus all" if platform.system().lower() != "darwin" else ""  # adds GPU support if available and not on macOS
             self.iface.messageBar().pushMessage('Removing the docker container if it already exists', level=Qgis.Info)
             QApplication.processEvents()
             subprocess.run(f"{self.docker_path} rm -f easyearth 2>/dev/null || true", capture_output=True, text=True, shell=True)  # removes the container if it already exists
+            
             self.iface.messageBar().pushMessage('Pulling the latest image from Docker Hub', level=Qgis.Info)
             QApplication.processEvents()
             warning_box = QMessageBox()
@@ -527,15 +574,20 @@ class EasyEarthPlugin:
             warning_box.setText("Downloading or updating Docker image from Docker Hub.&nbsp;This may take a while for the first time,&nbsp;please wait...")
             warning_box.exec_()
             subprocess.run(f"{self.docker_path} pull {self.docker_hub_image_name}", capture_output=True, text=True, shell=True)  # removes the container if it already exists
+            
             self.iface.messageBar().pushMessage('Starting the Docker container', level=Qgis.Info)
             QApplication.processEvents()
+            linux_gpu_flags = " --runtime nvidia" if platform.system().lower() == "linux" else ""  # adds GPU support if available and on Linux
+            gpu_flags = " --gpus all" if platform.system().lower() != "darwin" else ""  # adds GPU support if available and not on macOS
             docker_run_cmd = (f"{self.docker_path} run{linux_gpu_flags}{gpu_flags} -d --name easyearth -p 3781:3781 " # runs the container in detached mode and maps port 3781
                               f"-v \"{self.base_dir}\":/usr/src/app/easyearth_base " # mounts the base directory in the container
                               f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
+                              f"-e USER_BASE_DIR=\"{self.base_dir}\" " # sets an environment variable in the container containing the user's base directory
+                              f"-e RUN_MODE=docker " # sets the run mode to docker
                               f"{self.docker_hub_image_name}")
             result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True, timeout=1800)
             self.iface.messageBar().pushMessage(f"Starting server...\nRunning command: {result}", level=Qgis.Info)
-            
+
             if result.returncode == 0:
                 self.docker_running = True
                 self.iface.messageBar().pushMessage("Docker container started successfully.", level=Qgis.Success)
