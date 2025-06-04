@@ -25,6 +25,8 @@ mkdir -p "$BASE_DIR/tmp"
 
 echo "Created directories"
 
+export USER_BASE_DIR=$BASE_DIR
+export RUN_MODE=local
 export PYTORCH_ENABLE_MPS_FALLBACK=1 # enables MPS fallback for PyTorch
 cd "$BASE_DIR"
 "$PYTHON_CMD" -m easyearth.app --host 0.0.0.0 --port 3781 # runs the application
