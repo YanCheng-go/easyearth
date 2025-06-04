@@ -374,4 +374,7 @@ def ping():
 
     gpu_info["device"] = "CUDA" if gpu_info["CUDA"] else "MPS" if gpu_info["MPS"] else "CPU"
 
-    return jsonify({"message": "Server is alive", "device": gpu_info["device"]}), 200
+    return jsonify({"message": "Server is alive",
+                    "device": gpu_info["device"],
+                    "user_base_dir": os.environ.get("USER_BASE_DIR"),
+                    "run_mode": os.environ.get("RUN_MODE")}), 200
