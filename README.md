@@ -50,23 +50,20 @@ EasyEarth enables seamless application of cutting-edge computer vision and visio
 
 ## Table of Contents
 - [Project Structure](#-project-structure)
+- [Compatibility](#-compatibility)
 - [Get Started](#-get-started)
   - [Requirements](#-requirements)
-  - [Clone Repository](#-clone-repository)
-  - [Set Up Docker Server](#-set-up-docker-server)
-    - [Stop the Server](#-stop-the-server)
-    - [Useful Docker Commands](#-useful-docker-commands)
+  - [Clone Repository](#-download-pre-built-plugin)
   - [Install EasyEarth Plugin in QGIS](#-install-easyearth-plugin-in-qgis)
     - [Method 1: Manual Installation](#method-1-manual-installation)
     - [Method 2: Terminal Installation](#method-2-terminal-installation)
 - [Available Models](#-available-models-adding)
 - [Usage](#-usage)
   - [Run EasyEarth in QGIS](#-run-easyearth-in-qgis)
-  - [Run EasyEarth Outside QGIS](#-run-easyearth-outside-qgis)
-  - [Health Check](#-health-check)
 - [Documentation](#-documentation)
 - [Roadmap](#-roadmap)
 - [Contributing](#-contributing)
+- [Acknowledgements](#-acknowledgements)
 - [Authors](#-authors)
 
 ## 📁 Project Structure
@@ -111,8 +108,8 @@ EasyEarth enables seamless application of cutting-edge computer vision and visio
 ### ✅ Requirements
 
 
-- Python ≥ 3.6
-- (optional) [QGIS](https://qgis.org) > = 3.22 (tested with 3.38 and 3.40)
+- Python ≥ 3.9
+- (optional) [QGIS](https://qgis.org) > = 3.34 (tested with 3.38 and 3.40)
  _⚠️ required to use the plugin on QGIS, otherwise, one can use the server side only_
 - (optional) CUDA ≥ 12.4 ([download](https://developer.nvidia.com/cuda-downloads))  
  _⚠️ CUDA is **only required** for GPU inference on Linux. CPU-only mode is also available (though slower)_
