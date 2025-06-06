@@ -571,7 +571,7 @@ class EasyEarthPlugin:
             warning_box.setIcon(QMessageBox.Warning)
             warning_box.setWindowTitle("Update Docker Image")
             warning_box.setTextFormat(Qt.RichText)
-            warning_box.setText("Downloading or updating Docker image from Docker Hub.&nbsp;This may take a while for the first time,&nbsp;please wait...")
+            warning_box.setText("Downloading the latest Docker image from Docker Hub.&nbsp;This may take a while.&nbsp;Please wait...")
             warning_box.exec_()
             subprocess.run(f"{self.docker_path} pull {self.docker_hub_image_name}", capture_output=True, text=True, shell=True)  # removes the container if it already exists
             
@@ -624,7 +624,7 @@ class EasyEarthPlugin:
                 warning_box.setIcon(QMessageBox.Warning)
                 warning_box.setWindowTitle("Downloading Python Environment")
                 warning_box.setTextFormat(Qt.RichText)
-                warning_box.setText("Downloading the EasyEarth Python environment.&nbsp;This may take a while for the first time,&nbsp;please wait...")
+                warning_box.setText("Downloading the EasyEarth Python environment.&nbsp;This may take a while.&nbsp;Please wait...")
                 warning_box.exec_()
                 self.iface.messageBar().pushMessage(f"Downloading EasyEarth Python environment for {platform.system().lower()} system",level=Qgis.Info)
                 QApplication.processEvents()
