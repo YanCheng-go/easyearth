@@ -59,7 +59,6 @@ EasyEarth enables seamless application of cutting-edge computer vision and visio
     - [Method 2: Terminal Installation](#method-2-terminal-installation)
 - [Available Models](#-available-models-adding)
 - [Usage](#-usage)
-  - [Run EasyEarth in QGIS](#-run-easyearth-in-qgis)
 - [Documentation](#-documentation)
 - [Roadmap](#-roadmap)
 - [Contributing](#-contributing)
@@ -103,17 +102,15 @@ EasyEarth enables seamless application of cutting-edge computer vision and visio
 ```
 
 ---
-## Get Started
+## 🚀 Get Started
 
 ### ✅ Requirements
 
 
 - Python ≥ 3.9
-- (optional) [QGIS](https://qgis.org) > = 3.34 (tested with 3.38 and 3.40)
- _⚠️ required to use the plugin on QGIS, otherwise, one can use the server side only_
-- (optional) CUDA ≥ 12.4 ([download](https://developer.nvidia.com/cuda-downloads))  
- _⚠️ CUDA is **only required** for GPU inference on Linux. CPU-only mode is also available (though slower)_
-- (optional) Docker Compose ≥ 1.21.2 ([install guide](https://docs.docker.com/compose/install/))
+- (optional) [QGIS](https://qgis.org) (tested with 3.38 and 3.40) <br>_⚠️ required to use the plugin on QGIS, otherwise, one can use the server side only_
+- (optional) CUDA ≥ 12.4 ([download](https://developer.nvidia.com/cuda-downloads)) <br>_⚠️ CUDA is **only required** for GPU inference on Linux. CPU-only mode is also available (though much slower)_
+- (optional) Docker and Docker Compose ≥ 1.21.2 ([install guide](https://docs.docker.com/get-started/get-docker/)) <br>_⚠️ The server side is a dockerized Flask APP. Without Docker, one can use the local server mode in the plugin, which will download and use a pre-compressed env file for running the app without Docker_
 
 ### 📦 Compatibility
 Currently tested on:<br>
@@ -161,7 +158,7 @@ After this, Restart QGIS > `Plugins` > `Manage and Install Plugins` > enable **E
    - `easyearth_base/logs` - for storing logs
    - `easyearth_base/tmp` - for storing temporary files
    - `easyearth_base/predictions ` - for storing predictions
-3. Click **Docker** to launch the EasyEarth server dockerized container, or **Local** to run the non-dockerized server
+3. Click **Docker** to launch the EasyEarth server dockerized container, or **Local** to run the non-dockerized server <br>_⚠️ This may take a while the first time and when there is an updated docker image. As a faster option, one can pull the docker image outside QGIS using the terminal and run "docker pull maverickmiaow/easyearth:latest"_
 4. Then you will see the Server Status as **Online - Device: <DEVICE INFO>** in the Server section
 5. Click **Browse Image** to select an image from the `easyearth_base/images` folder
 6. Select a model from the dropdown menu
@@ -190,7 +187,7 @@ Check out our User Guide and Developer Guide for more.
 - [API Reference](docs/APIReference.md)  # for developers to use the EasyEarth APIs
 ---
 
-## ✅ Roadmap
+## 🎯 Roadmap
 - [x] EasyEarth server for model inference
 - [x] QGIS plugin for model application
 - [x] Dockerized server for scalable model inference
@@ -208,7 +205,7 @@ We welcome community contributions! If you'd like to contribute, check out:
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)
 ---
 
-## Acknowledgements
+## 👥 Acknowledgements
 
 This project was inspired by several outstanding open-source initiatives. We extend our gratitude to the developers and communities behind the following projects:
 
