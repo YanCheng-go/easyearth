@@ -23,6 +23,9 @@
   <a href="#">
     <img src="https://img.shields.io/badge/OS-macOS-lightgrey?logo=apple" alt="macOS"/>
   </a>
+  <a href="https://doi.org/10.5281/zenodo.15699316">
+    <img src="https://zenodo.org/badge/DOI/10.5281/zenodo.15699316.svg" alt="DOI"/>
+  </a>
 
 [//]: # (  <a href="#">)
 
@@ -239,5 +242,20 @@ Lucia Gordon ([luciagordon@g.harvard.edu](mailto:luciagordon@g.harvard.edu)) –
   <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/linkedin.svg" alt="LinkedIn" width="20" style="vertical-align: middle;"/> LinkedIn
 </a><br>
 Ankit Kariryaa ([ankit.ky@gmail.com](mailto:ankit.ky@gmail.com))
+
+## Citation
+If you use EasyEarth in your research or projects, please cite it as follows:
+
+```bibtex
+@software{easyearth2025,
+  author = {Yan Cheng and Lucia Gordon and Ankit Kariryaa},
+  title = {EasyEarth: Run Vision(-Language) Models for Earth Observations at Your Fingertips},
+  year = {2025},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  url = {https://github.com/YanCheng-go/easyearth},
+  doi = {10.5281/zenodo.15699316},
+}
+```
 
 ---
