@@ -1,4 +1,5 @@
 name: Upload Win Env
+# This GitHub Actions workflow uploads a Windows environment for the EasyEarth app to a GitHub release.
 
 on:
   push:
@@ -37,16 +38,16 @@ jobs:
 
       - name: Start EasyEarth app & run alive test
         run: |
-          easyearth_env\Scripts\activate
+          call easyearth_env\Scripts\activate
           start /B python -m easyearth.app --host 0.0.0.0 --port 3781
           timeout /t 10
-          easyearth_env\Scripts\activate
+          call easyearth_env\Scripts\activate
           python -m unittest easyearth.tests.test_alive_controller
         shell: cmd
 
       - name: Zip the environment
         run: |
-          powershell Compress-Archive -Path easyearth_env -DestinationPath easyearth_env_win.zip -Force
+          Compress-Archive -Path easyearth_env -DestinationPath easyearth_env_win.zip -Force
         shell: pwsh
 
       - name: Check if release with tag exists
