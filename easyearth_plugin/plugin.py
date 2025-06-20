@@ -681,17 +681,45 @@ class EasyEarthPlugin:
             self.docker_running = False
         else:
             if platform.system().lower() == "windows":
-                # Find the PID of the process using port 3781
-                command_find_pid = "netstat -ano | findstr :3781"
-                result_find_pid = subprocess.run(command_find_pid, capture_output=True, text=True, shell=True, timeout=1800)
-                if result_find_pid.returncode == 0 and result_find_pid.stdout.strip():
-                    # Extract PID from the command output
-                    pid = result_find_pid.stdout.strip().split()[-1]
-                    # Kill the process with the found PID
-                    command_kill = f"taskkill /PID {pid} /F"
-                    result = subprocess.run(command_kill, capture_output=True, text=True, shell=True, timeout=1800)
-                else:
-                    print("No process found on port 3781.")
+                try:
+                    # Find the PID of the process using port 3781
+                    command_find_pid = "netstat -ano | findstr :3781"
+                    result_find_pid = subprocess.run(
+                        command_find_pid, capture_output=True, text=True, shell=True, timeout=1800
+                    )
+
+                    if result_find_pid.returncode == 0 and result_find_pid.stdout.strip():
+                        # Parse the output to find the relevant PID (LISTENING)
+                        for line in result_find_pid.stdout.strip().splitlines():
+                            parts = line.split()
+                            if "LISTENING" in parts:
+                                pid = parts[-1]  # Extract PID from the LISTENING entry
+                                break
+                        else:
+                            pid = None
+
+                        # Validate and terminate the process with the found PID
+                        if pid and pid.isdigit() and int(pid) != 0:
+                            print(f"Process found on port 3781 with PID: {pid}")
+
+                            # Kill the process with the found PID
+                            command_kill = f"taskkill /PID {pid} /F"
+                            result_kill = subprocess.run(
+                                command_kill, capture_output=True, text=True, shell=True, timeout=1800
+                            )
+
+                            if result_kill.returncode == 0:
+                                print(f"Successfully terminated process with PID: {pid}")
+                            else:
+                                print(f"Failed to terminate process with PID: {pid}. Error: {result_kill.stderr}")
+                        else:
+                            print("No valid PID found for termination.")
+                    else:
+                        print("No process found on port 3781.")
+                except subprocess.SubprocessError as e:
+                    print(f"Subprocess error occurred: {e}")
+                except Exception as e:
+                    print(f"An unexpected error occurred: {e}")
             elif platform.system().lower() in ["linux", "darwin"]:  # macOS or Linux
                 result = subprocess.run('kill $(lsof -t -i:3781)', capture_output=True, text=True, shell=False, timeout=1800) # kills the process running on port 3781
             else:
