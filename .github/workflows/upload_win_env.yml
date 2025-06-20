@@ -30,7 +30,7 @@ jobs:
       - name: Create virtual environment & install dependencies
         run: |
           python -m venv --copies easyearth_env
-          easyearth_env\Scripts\activate
+          call easyearth_env\Scripts\activate.bat
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
         shell: cmd
@@ -49,13 +49,18 @@ jobs:
           powershell Compress-Archive -Path easyearth_env -DestinationPath easyearth_env_win.zip -Force
         shell: pwsh
 
-      - name: Delete existing release (if exists)
+      - name: Check if release with tag exists
+        id: get_release
         uses: octokit/request-action@v2.4.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          route: GET /repos/${{ github.repository }}/releases/tags/win-env-v1
+        continue-on-error: true   # so workflow continues if not found
+
+      - name: Delete release if found
+        if: ${{ steps.get_release.outcome == 'success' }}
+        uses: octokit/request-action@v2.4.0
         with:
           route: DELETE /repos/${{ github.repository }}/releases/tags/win-env-v1
-          fail-on-error: false
 
       - name: Delete existing tag (if exists)
         run: |
