@@ -50,7 +50,7 @@ jobs:
         shell: pwsh
 
       - name: Delete existing release (if exists)
-        uses: octokit/request-action@v2
+        uses: octokit/request-action@latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
