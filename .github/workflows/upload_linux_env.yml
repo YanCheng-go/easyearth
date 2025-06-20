@@ -1,22 +1,18 @@
-name: Upload zipped environment to Google Drive for Linux
+name: Upload Linux Env
+# This GitHub Actions workflow uploads a Linux environment for the EasyEarth app to a GitHub release.
 
 on:
   push:
     branches:
-      - yan
+      - deactivate
     paths:
       - requirements.txt
-      - utils/upload_to_gdrive.py
 #      - .github/workflows/upload_linux_env.yml
-      - tests/test_alive_controller.py
-  pull_request:
-    branches:
-      - master  # Run on pull requests to the master branch
-    paths:
-      - requirements.txt
-      - utils/upload_to_gdrive.py
-#      - .github/workflows/upload_linux_env.yml
-      - tests/test_alive_controller.py
+#  pull_request:
+#    branches:
+#      - master
+#    paths:
+#      - requirements.txt
 
 jobs:
   upload-env:
@@ -52,15 +48,47 @@ jobs:
 
       - name: zip the environment
         run: |
-          source easyearth_env/bin/activate
-          zip -r easyearth_env.zip easyearth_env
+            tar -czf easyearth_env_linux.tar.gz easyearth_env
 
-      - name: Install Google API client
-        run: pip install google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib
+      - name: Check if release with tag exists
+        id: get_release
+        uses: octokit/request-action@v2.4.0
+        with:
+          route: GET /repos/${{ github.repository }}/releases/tags/linux-env-v1
+        continue-on-error: true   # so workflow continues if not found
 
-      - name: Upload zipped environment to Google Drive
-        working-directory: ${{ github.workspace }}
-        env:
-          GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
+      - name: Delete release if found
+        if: ${{ steps.get_release.outcome == 'success' }}
+        uses: octokit/request-action@v2.4.0
+        with:
+          route: DELETE /repos/${{ github.repository }}/releases/tags/linux-env-v1
+
+      - name: Delete existing tag (if exists)
         run: |
-          python utils/upload_to_gdrive.py
+          git tag -d linux-env-v1 || true
+          git push origin :refs/tags/linux-env-v1 || true
+
+      - name: Create or Update GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: linux-env-v1
+          release_name: EasyEarth Linux Env
+          body: |
+            This release contains the Linux environment for EasyEarth.
+            Use it to set up the app on a Linux machine.
+            This is a pre-release for testing purposes.
+          draft: false
+          prerelease: true
+
+      - name: Upload zipped environment to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./easyearth_env_linux.tar.gz
+          asset_name: easyearth_env_linux.tar.gz
+          asset_content_type: application/gzip

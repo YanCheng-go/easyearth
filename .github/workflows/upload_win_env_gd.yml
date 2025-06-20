@@ -1,0 +1,70 @@
+name: Upload Win Env
+# This GitHub Actions workflow uploads a Windows environment for the EasyEarth app to Goodle Drive.
+
+on:
+  push:
+    branches:
+      - deactivate
+    paths:
+      - requirements.txt
+      - utils/upload_to_gdrive.py
+      - .github/workflows/upload_win_env_gd.yml
+  pull_request:
+    branches:
+      - master  # Run on pull requests to the master branch
+    paths:
+      - requirements.txt
+      - utils/upload_to_gdrive.py
+#      - .github/workflows/upload_linux_env.yml
+#      - tests/test_alive_controller.py
+
+jobs:
+  upload-env:
+    timeout-minutes: 30
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10.11' # Specify the Python version you need
+
+      - name: Create virtual environment & install dependencies
+        run: |
+          python -m venv --copies easyearth_env
+          call easyearth_env\Scripts\activate.bat
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+        shell: cmd
+
+      - name: Start EasyEarth app & run alive test
+        run: |
+          easyearth_env\Scripts\activate
+          start /B python -m easyearth.app --host 0.0.0.0 --port 3781
+          timeout /t 10
+          easyearth_env\Scripts\activate
+          python -m unittest easyearth.tests.test_alive_controller
+        shell: cmd
+
+      - name: Zip the environment
+        run: |
+          powershell Compress-Archive -Path easyearth_env -DestinationPath easyearth_env_win.zip -Force
+        shell: pwsh
+
+      - name: Install Google API client
+        run: pip install google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib
+
+      - name: Upload zipped environment to Google Drive
+        working-directory: ${{ github.workspace }}
+        env:
+          GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
+        run: |
+          python utils/upload_to_gdrive.py `
+            --file-id 1RBv2I_30fwNGwqvBAL31vr4HO5KUbXQc `
+            --shareable `
+            --VERSION "" `
+            --format .tar
+        shell: pwsh
