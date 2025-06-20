@@ -1,0 +1,84 @@
+name: Upload Win Env
+
+on:
+  push:
+    branches:
+      - yan
+    paths:
+      - requirements.txt
+  pull_request:
+    branches:
+      - master
+    paths:
+      - requirements.txt
+
+jobs:
+  upload-env:
+    timeout-minutes: 30
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10.12'
+
+      - name: Create virtual environment & install dependencies
+        run: |
+          python -m venv easyearth_env
+          easyearth_env\Scripts\activate
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+        shell: cmd
+
+      - name: Start EasyEarth app & run alive test
+        run: |
+          easyearth_env\Scripts\activate
+          start /B python -m easyearth.app --host 0.0.0.0 --port 3781
+          timeout /t 10
+          easyearth_env\Scripts\activate
+          python -m unittest easyearth.tests.test_alive_controller
+        shell: cmd
+
+      - name: Zip the environment
+        run: |
+          powershell Compress-Archive -Path easyearth_env -DestinationPath easyearth_env_win.zip -Force
+        shell: pwsh
+
+      - name: Delete existing release (if exists)
+        uses: octokit/request-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          route: DELETE /repos/${{ github.repository }}/releases/tags/win-env-v1
+          fail-on-error: false
+
+      - name: Delete existing tag (if exists)
+        run: |
+          git tag -d win-env-v1 || true
+          git push origin :refs/tags/win-env-v1 || true
+
+      - name: Create or Update GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: win-env-v1
+          release_name: EasyEarth Environment (Windows - Pre-Release)
+          body: "This release contains the Windows environment for EasyEarth. Use it to set up the app on a Windows machine. This is a pre-release for testing purposes."
+          draft: false
+          prerelease: true
+
+      - name: Upload zipped environment to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./easyearth_env_win.zip
+          asset_name: easyearth_env_win.zip
+          asset_content_type: application/zip
