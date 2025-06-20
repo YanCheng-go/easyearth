@@ -3,9 +3,10 @@ name: Upload Win Env
 on:
   push:
     branches:
-      - yan
+      - win
     paths:
       - requirements.txt
+      - .github/workflows/upload_win_env.yml
   pull_request:
     branches:
       - master
@@ -28,7 +29,7 @@ jobs:
 
       - name: Create virtual environment & install dependencies
         run: |
-          python -m venv easyearth_env
+          python -m venv --copies easyearth_env
           easyearth_env\Scripts\activate
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt

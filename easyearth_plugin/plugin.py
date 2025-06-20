@@ -635,11 +635,8 @@ class EasyEarthPlugin:
                 QApplication.processEvents()
 
                 if platform.system() in ['Darwin', 'Windows']:  # macOS or Windows
-                    env_url = (
-                        'https://github.com/YanCheng-go/easyearth/releases/download/mac-env-v2/easyearth_env_mac.tar.gz'
-                        if platform.system() == 'Darwin'
-                        else 'https://github.com/YanCheng-go/easyearth/releases/download/mac-env-v2/easyearth_env_win.zip'
-                    )
+                    release_path = "mac-env-v2/easyearth_env_mac.tar.gz" if platform.system() == "Darwin" else "win-env-v2/easyearth_env_win.tar.gz"
+                    env_url = f"https://github.com/YanCheng-go/easyearth/releases/download/{release_path}"
                     env_name_full = env_url.split('/')[-1]
                     zipped_env_path = os.path.join(self.base_dir, env_name_full)  # Get the file name from URL
                     self.iface.messageBar().pushMessage(f"Downloading environment from {env_url} to {zipped_env_path}", level=Qgis.Info)
@@ -653,8 +650,6 @@ class EasyEarthPlugin:
                         # Use subprocess with shell=False for security and correctness
                         if env_url.endswith('.tar.gz'):
                             subprocess.run(['tar', '-xzf', zipped_env_path, '-C', self.base_dir], capture_output=True, text=True, check=True)
-                        elif env_url.endswith('.zip'):
-                            subprocess.run(['unzip', zipped_env_path, '-d', self.base_dir], capture_output=True, text=True, check=True)
                         else:
                             raise ValueError("Unsupported environment file format")
 
@@ -692,7 +687,24 @@ class EasyEarthPlugin:
             self.docker_hub_process = None
             self.docker_running = False
         else:
-            result = subprocess.run('kill $(lsof -t -i:3781)', capture_output=True, text=True, shell=False, timeout=1800) # kills the process running on port 3781
+            if platform.system().lower() == "windows":
+                # Find the PID of the process using port 3781
+                command_find_pid = "netstat -ano | findstr :3781"
+                result_find_pid = subprocess.run(command_find_pid, capture_output=True, text=True, shell=True,
+                                                 timeout=1800)
+                if result_find_pid.returncode == 0 and result_find_pid.stdout.strip():
+                    # Extract PID from the command output
+                    pid = result_find_pid.stdout.strip().split()[-1]
+                    # Kill the process with the found PID
+                    command_kill = f"taskkill /PID {pid} /F"
+                    result_kill = subprocess.run(command_kill, capture_output=True, text=True, shell=True, timeout=1800)
+                else:
+                    print("No process found on port 3781.")
+            elif platform.system().lower() in ["linux", "darwin"]:  # macOS or Linux
+                result = subprocess.run('kill $(lsof -t -i:3781)', capture_output=True, text=True, shell=False, timeout=1800) # kills the process running on port 3781
+            else:
+                self.iface.messageBar().pushMessage("Unsupported OS for stopping server", level=Qgis.Critical)
+                return
 
         self.iface.messageBar().pushMessage(f"Stopping server with command: {result}", level=Qgis.Info)
 
