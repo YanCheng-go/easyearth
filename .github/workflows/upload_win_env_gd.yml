@@ -8,7 +8,7 @@ on:
     paths:
       - requirements.txt
       - utils/upload_to_gdrive.py
-      - .github/workflows/upload_linux_env.yml
+      - .github/workflows/upload_win_env_gd.yml
   pull_request:
     branches:
       - master  # Run on pull requests to the master branch
