@@ -63,8 +63,9 @@ jobs:
         env:
           GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
         run: |
-          python utils/upload_to_gdrive.py \
-            --file-id 1RBv2I_30fwNGwqvBAL31vr4HO5KUbXQc \
-            --shareable \
-            --version "" \
+          python utils/upload_to_gdrive.py `
+            --file-id 1RBv2I_30fwNGwqvBAL31vr4HO5KUbXQc `
+            --shareable `
+            --version "" `
             --format .tar
+        shell: pwsh

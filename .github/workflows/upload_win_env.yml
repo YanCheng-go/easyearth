@@ -7,7 +7,6 @@ on:
       - win
     paths:
       - requirements.txt
-      - .github/workflows/upload_win_env.yml
   pull_request:
     branches:
       - master
@@ -75,7 +74,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: win-env-v1
-          release_name: EasyEarth Environment (Windows - Pre-Release)
+          release_name: EasyEarth Windows Env
           body: "This release contains the Windows environment for EasyEarth. Use it to set up the app on a Windows machine. This is a pre-release for testing purposes."
           draft: false
           prerelease: true
