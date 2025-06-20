@@ -704,14 +704,14 @@ class EasyEarthPlugin:
 
                             # Kill the process with the found PID
                             command_kill = f"taskkill /PID {pid} /F"
-                            result_kill = subprocess.run(
+                            result = subprocess.run(
                                 command_kill, capture_output=True, text=True, shell=True, timeout=1800
                             )
 
-                            if result_kill.returncode == 0:
+                            if result.returncode == 0:
                                 print(f"Successfully terminated process with PID: {pid}")
                             else:
-                                print(f"Failed to terminate process with PID: {pid}. Error: {result_kill.stderr}")
+                                print(f"Failed to terminate process with PID: {pid}. Error: {result.stderr}")
                         else:
                             print("No valid PID found for termination.")
                     else:
