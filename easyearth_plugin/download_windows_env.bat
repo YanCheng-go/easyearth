@@ -5,6 +5,8 @@ REM Base directory (default to current directory if not set)
 set "BASE_DIR=%cd%"
 echo Using base directory: %BASE_DIR%
 
+python -m pip install --upgrade pip
+
 REM Check for gdown and install if missing
 where gdown >nul 2>&1
 if %ERRORLEVEL% neq 0 (
