@@ -1,7 +1,6 @@
 """Entry point for the QGIS plugin. Handles plugin registration, menu/toolbar actions, and high-level coordination."""
 
 from datetime import datetime
-import shapely
 from qgis.PyQt.QtWidgets import (QAction, QDockWidget, QPushButton, QVBoxLayout,
                                 QWidget, QMessageBox, QLabel, QHBoxLayout,
                                 QLineEdit, QFileDialog, QComboBox, QGroupBox, QShortcut, QProgressBar, QCheckBox, QButtonGroup, QRadioButton, QApplication, QScrollArea)
@@ -2039,11 +2038,11 @@ class EasyEarthPlugin:
             if self.get_image_name() not in self.prompt_count.keys():
                 self.prompt_count[self.get_image_name()] = 0
 
-            # Create an empty GeoJSON feature for the text prompt
-            empty_geom = shapely.geometry.mapping(shapely.geometry.MultiPolygon([]))
+            # Create an empty feature for the text prompt
+            empty_geom = QgsGeometry.fromMultiPolygonXY([])
             text_features = [{
                 "type": "Feature",
-                "geometry": empty_geom,
+                "geometry": empty_geom.asJson(),
                 "properties": {
                     "id": self.prompt_count[self.get_image_name()] + i,
                     "type": "Text",
