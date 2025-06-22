@@ -23,15 +23,12 @@
   <a href="#">
     <img src="https://img.shields.io/badge/OS-macOS-lightgrey?logo=apple" alt="macOS"/>
   </a>
+  <a href="#">
+    <img src="https://img.shields.io/badge/OS-Windows-blue?logo=windows" alt="Windows"/>
+  </a>
   <a href="https://doi.org/10.5281/zenodo.15699316">
     <img src="https://zenodo.org/badge/DOI/10.5281/zenodo.15699316.svg" alt="DOI"/>
   </a>
-
-[//]: # (  <a href="#">)
-
-[//]: # (    <img src="https://img.shields.io/badge/OS-Windows-blue?logo=windows" alt="Windows"/>)
-
-[//]: # (  </a>)
 </p>
 
 EasyEarth enables seamless application of cutting-edge computer vision and vision-language models directly on Earth observation data — without writing code. The platform integrates with [QGIS](https://qgis.org) via a plugin GUI and provides server-side infrastructure for scalable model inference and management.
@@ -114,13 +111,13 @@ EasyEarth enables seamless application of cutting-edge computer vision and visio
 - (optional) [QGIS](https://qgis.org) (tested with 3.38 and 3.40) <br>_⚠️ required to use the plugin on QGIS, otherwise, one can use the server side only_
 - (optional) CUDA ≥ 12.4 ([download](https://developer.nvidia.com/cuda-downloads)) <br>_⚠️ CUDA is **only required** for GPU inference on Linux. CPU-only mode is also available (though much slower)_
 - (optional) Docker and Docker Compose ≥ 1.21.2 ([install guide](https://docs.docker.com/get-started/get-docker/)) <br>_⚠️ The server side is a dockerized Flask APP. Without Docker, one can use the local server mode in the plugin, which will download and use a pre-compressed env file for running the app without Docker_
-
+- (optional) NVIDIA Container Toolkit ([install guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html))<br>_⚠️ To use GPU with docker container, only required if you want to use the docker mode_
 ### 📦 Compatibility
 Currently tested on:<br>
 ✅ Ubuntu<br>
 ✅ MacOS<br>
 ⚠️ Windows support:<br>
-We have not yet tested EasyEarth on Windows. If you encounter any issues or would like to help us add Windows support, contributions are welcome!
+Please find the pre-release for Windoes [here](https://github.com/YanCheng-go/easyearth/releases/tag/v0.0.3.dev). We haven't finished the full test for Windows - if you encounter any issues or would like to help us add Windows support, contributions are welcome!
 
 ### 📥 Download Pre-built Plugin
 
