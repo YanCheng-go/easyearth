@@ -88,6 +88,8 @@ EasyEarth enables seamless application of cutting-edge computer vision and visio
 │   └── ui  # User interface files for the plugin
 ├── docs  # Documentation for EasyEarth
 │   ├── APIReference.md  # API reference documentation
+│   ├── TROUBLESHOOTING.md  # Troubleshooting guide for common issues
+│   ├── docker_installation.md  # Docker installation guide for Ubuntu
 │   └── DeveloperGuide.md  # Developer guide for contributing to EasyEarth
 ├── docker-compose.yml  # Docker Compose configuration for EasyEarth
 ├── Dockerfile  # Dockerfile for building the EasyEarth server image
@@ -96,7 +98,7 @@ EasyEarth enables seamless application of cutting-edge computer vision and visio
 ├── README.md  
 ├── requirements_mac.txt  # Python dependencies for macOS
 ├── requirements.txt  # Python dependencies for EasyEarth
-├── setup.sh  # Script to set up the dockerized EasyEarth server (only needed for building the image from the start)
+├── launch_server_docker.sh  # Script to set up the dockerized EasyEarth server (only needed for building the image from the start)
 
     
 ```
