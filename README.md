@@ -167,7 +167,9 @@ After this, Restart QGIS > `Plugins` > `Manage and Install Plugins` > enable **E
 7. Click **Start Drawing** to draw points or boxes on the image <br>_⚠️when the real-time mode is checked, the prediction of each drawing prompt will be shown in real time, so no need to go step 8_
 8. Click **Predict** to run the model inference
 9. Prediction results will be saved in the easyearth_base/tmp folder and can be moved to the easyearth_base/predictions folder as desired.
-![QGIS Plugin GUI](https://github.com/user-attachments/assets/7233c11c-cc7f-4fd8-8dc5-196db4a4220b)
+![QGIS Plugin GUI](https://github.com/user-attachments/assets/c61ddc82-348e-4acd-85ea-244c601d9be3)
+
+
 
 ---
 ## 🧠 Available Models (Adding...)
