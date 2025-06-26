@@ -9,7 +9,7 @@ class EnvManager:
     """
     Python environment manager for EasyEarth plugin.
     """
-    def __init__(self, iface, logs_dir, plugin_dir):
+    def __init__(self, iface, logs_dir, plugin_dir, base_dir):
         """
         Initialize the environment manager.
         Args:
@@ -20,6 +20,7 @@ class EnvManager:
         self.iface = iface
         self.logs_dir = logs_dir
         self.plugin_dir = plugin_dir
+        self.base_dir = base_dir
 
         self.download_env_log_file = None
         self.logger = logging.getLogger("easyearth_plugin")
@@ -54,7 +55,8 @@ class EnvManager:
             stdout=self.download_env_log_file,
             stderr=subprocess.STDOUT,
             text=True,
-            start_new_session=True
+            start_new_session=True,
+            env={**os.environ, "BASE_DIR": self.base_dir}
         )
 
         self.iface.messageBar().pushMessage(
@@ -110,7 +112,8 @@ class EnvManager:
             stdout=self.download_env_log_file,
             stderr=subprocess.STDOUT,
             text=True,
-            start_new_session=True
+            start_new_session=True,
+            env=env
         )
 
         self.iface.messageBar().pushMessage(
