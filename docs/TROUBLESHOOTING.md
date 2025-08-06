@@ -13,8 +13,13 @@ If you encounter issues with Docker during setup or usage, ensure that Docker is
    - Add your user to the `docker` group:  
      ```bash
      sudo usermod -aG docker $USER
-     ```
-   - Log out and back in for the changes to take effect.
+     newgrp docker
+     docker run hello-world
+     ```   
+  - if the last command line here is not giving any error, meaning you have set the permission correctly
+  - Reboot to activate the effect
+  - Check this for more information: https://docs.docker.com/engine/install/linux-postinstall/
+   
 
 3. **Cannot Connect to Docker Daemon**:
    - Ensure the Docker service is running:
