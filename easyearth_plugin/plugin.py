@@ -2108,11 +2108,15 @@ class EasyEarthPlugin:
 
     def get_container_path(self, host_path):
         """Convert host path to container path if within data_dir."""
-        
-        if host_path and host_path.startswith(self.images_dir) and self.docker_mode_button.isChecked():
-            relative_path = os.path.relpath(host_path, self.images_dir)
 
-            return os.path.join('/usr/src/app/easyearth_base/images', relative_path)
+        if host_path and self.docker_mode_button.isChecked():
+            if host_path.startswith(self.images_dir):
+                relative_path = os.path.relpath(host_path, self.images_dir)
+                return os.path.join('/usr/src/app/easyearth_base/images', relative_path)
+
+            elif host_path.startswith(self.embeddings_dir):
+                relative_path = os.path.relpath(host_path, self.embeddings_dir)
+                return os.path.join('/usr/src/app/easyearth_base/embeddings', relative_path)
         
         return host_path
 
