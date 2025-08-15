@@ -27,3 +27,13 @@ If you encounter issues with Docker during setup or usage, ensure that Docker is
      sudo systemctl start docker
      sudo systemctl enable docker
      ```
+
+## Install local environment instead
+If you prefer to run the EasyEarth server without Docker, you can set up a local Python environment. Follow these steps:
+```bash
+cd easyearth_base # Create a work directory  
+cp <PROJECT FOLDER>/easyearth/requirements.txt .  # Copy the requirements file to the current directory
+python -m venv --copies easyearth_env  # Create a virtual environment, remember to use `--copies` to avoid issues with symlinks
+source easyearth_env/bin/activate  # Activate the virtual environment
+pip install -r requirements.txt  # Install the required packages
+```
