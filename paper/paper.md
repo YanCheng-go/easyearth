@@ -36,9 +36,9 @@ A Statement of need section that clearly illustrates the research purpose of the
 EasyEarth contains two major components. Server-Side Infrastructure with scalable backend to run AI models on geospatial data
 and QGIS Plugin GUI with user-friendly interface to apply models inside QGIS (\label{fig:architecture})
 
-![EasyEarth Software Architecture. \label{fig:architecture}](architecture.png){ width=90% }
+![EasyEarth Software Architecture. \label{fig:architecture}](assets/architecture.png){ width=90% }
 
-![QGIS Plugin GUI. \label{fig:gui](gui.png)
+![QGIS Plugin GUI. \label{fig:gui](assets/gui.png)
 
 # Current list of vision-language Models
 
@@ -55,7 +55,7 @@ Table 1: List of current vision-language models enabled in EasyEarth.
 
 
 # EasyEarth Key Features
-![Example output. \label{fig:output}](output.png)
+![Example output. \label{fig:output}](assets/output.png)
 
 # Examples of research work
 Mention (if applicable) a representative set of past or ongoing research projects using the software and recent scholarly publications enabled by it.
