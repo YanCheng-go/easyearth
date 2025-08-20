@@ -28,36 +28,36 @@ bibliography: paper.bib
 
 Begin your paper with a summary of the high-level functionality of your software for a non-specialist reader. Avoid jargon in this section.
 
-# Statement of need
+# Statement of Need
 
 A Statement of need section that clearly illustrates the research purpose of the software and places it in the context of related work.
 
-# Software architecture
+# Software Architecture
 EasyEarth contains two major components. Server-Side Infrastructure with scalable backend to run AI models on geospatial data
 and QGIS Plugin GUI with user-friendly interface to apply models inside QGIS (\label{fig:architecture})
 
 ![EasyEarth Software Architecture. \label{fig:architecture}](assets/architecture.png){ width=90% }
 
-![QGIS Plugin GUI. \label{fig:gui](assets/gui.png)
+![QGIS Plugin GUI. \label{fig:gui](assets/gui.png) { width=40% }
 
-# Current list of vision-language Models
+# Current List of Vision(-Language) Models
 
 Table 1: List of current vision-language models enabled in EasyEarth.
 
-| Model Name                  | Description | Prompt Type | Prompt Data           |
-|-----------------------------|-------------|----------|-----------------------|
-| SAM ([@kirillov2023segany]) | Segment Anything Model | Point    | [[x, y], [x, y], ...] |
-| SAM                         | Segment Anything Model | Box      | [[x1, y1, x2, y2]]    |
-| SAM2                        | Segment Anything Model | Point    | [[x, y], [x, y], ...] |
-| SAM2                        | Segment Anything Model | Box      | [[x1, y1, x2, y2]]    |
-| LangSAM                     | Language Model | Text     | ["text1", "text2"]    |
+| Model Name                | Description | Prompt Type | Prompt Data           |
+|---------------------------|-------------|----------|-----------------------|
+| SAM [@kirillov2023segany] | Segment Anything Model | Point    | [[x, y], [x, y], ...] |
+| SAM                       | Segment Anything Model | Box      | [[x1, y1, x2, y2]]    |
+| SAM2                      | Segment Anything Model | Point    | [[x, y], [x, y], ...] |
+| SAM2                      | Segment Anything Model | Box      | [[x1, y1, x2, y2]]    |
+| LangSAM                   | Language Model | Text     | ["text1", "text2"]    |
 | restor/tcd-segformer-mit-b2 | Semantic Segmentation | None     | []                    |
 
 
 # EasyEarth Key Features
 ![Example output. \label{fig:output}](assets/output.png)
 
-# Examples of research work
+# Examples of Research Work
 Mention (if applicable) a representative set of past or ongoing research projects using the software and recent scholarly publications enabled by it.
 
 # Acknowledgements
