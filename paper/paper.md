@@ -38,7 +38,7 @@ and QGIS Plugin GUI with user-friendly interface to apply models inside QGIS (\l
 
 ![EasyEarth Software Architecture. \label{fig:architecture}](assets/architecture.png){ width=90% }
 
-![QGIS Plugin GUI. \label{fig:gui](assets/gui.png) { width=40% }
+![QGIS Plugin GUI. \label{fig:gui](assets/gui.png){ width=40% }
 
 # Current List of Vision(-Language) Models
 
