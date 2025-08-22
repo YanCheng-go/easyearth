@@ -11,7 +11,7 @@ from qgis.core import (QgsVectorLayer, QgsGeometry, QgsApplication,
                       QgsWkbTypes, QgsRasterLayer, Qgis, QgsLayerTreeGroup, QgsCategorizedSymbolRenderer,
                       QgsRendererCategory, QgsMarkerSymbol, QgsFillSymbol, QgsCoordinateTransform, QgsSingleSymbolRenderer)
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
-from .core import BoxMapTool, setup_logger, map_id, create_point_box, EnvManager
+from .core import BoxMapTool, setup_logger, map_id, create_point_box, EnvManager, prediction_editor
 import json
 import logging
 import os
@@ -1588,52 +1588,46 @@ class EasyEarthPlugin:
             current_dict[self.get_image_name()] = geojson
             setattr(self, geojson_attr, current_dict)
 
-            # Write GeoJSON file
-            with open(temp_geojson, 'w') as f:
-                json.dump(geojson, f)
+            # 2) Write GPKG (function picks correct action; returns uri + count)
+            gpkg_uri, expected_count = prediction_editor.geojson_to_gpkg(
+                geojson, temp_geojson, layer_name, True, self.raster_crs
+            )
 
-            # Create or update layer
-            layer = getattr(self, layer_type).get(self.get_image_name(), None)
             instance = QgsProject.instance()
-            group = instance.layerTreeRoot().findGroup(self.get_image_name())
+            root = instance.layerTreeRoot()
+            group_name = self.get_image_name()
+            group = root.findGroup(group_name) or root.addGroup(group_name)
 
-            if layer:
-                group.removeChildNode(group.findLayer(layer.id())) # removes the layer from the group
-                instance.removeMapLayer(layer.id()) # removes the layer from the project
-            
-            layer = QgsVectorLayer(temp_geojson, layer_name, "ogr")
-            layer.setCrs(self.raster_crs)
-            layer.setExtent(self.raster_extent)
-            group.insertLayer(0, layer)  # inserts the layer at the top of the group
-            instance.addMapLayer(layer, False) # False = don't auto-add to legend
+            # 1) Remove any existing layer that uses this gpkg (release lock)
+            layer_dict = getattr(self, layer_type, {})
+            old = layer_dict.get(group_name)
+            if old:
+                node = group.findLayer(old.id())
+                if node:
+                    group.removeChildNode(node)
+                instance.removeMapLayer(old.id())
+            QgsApplication.processEvents()
 
-            # if not layer:
-
+            # 3) Load exact layer
+            layer = QgsVectorLayer(gpkg_uri, layer_name, "ogr")
             if not layer.isValid():
-                raise ValueError("Failed to create valid vector layer")
-            
-            # instance.layerTreeRoot().findGroup(self.get_image_name()).insertLayer(0, layer) # adds the layer to the top of the group
-            current_dict = getattr(self, layer_type, {})
-            current_dict[self.get_image_name()] = layer
-            setattr(self, layer_type, current_dict) # updates the layer dictionary
-            # inspect = getattr(self, layer_type)[self.get_image_name()]
-            # self.iface.messageBar().pushMessage(f'Layer type: {layer_type}, {inspect.name()}', level=Qgis.Info)
+                raise ValueError(f"Failed to load '{layer_name}' from {temp_geojson}")
 
-            # else:
-            layer.dataProvider().reloadData()
-            layer.updateExtents()
-            layer.triggerRepaint()
+            # 4) Register + place in group
+            instance.addMapLayer(layer, False)
+            group.insertLayer(0, layer)
 
-            # Apply styling
-            style_func(layer)
-
-            # Refresh canvas
+            # 5) Style + refresh
+            if style_func:
+                style_func(layer)
             self.iface.mapCanvas().refresh()
 
-            # Log feature count
-            actual_count = layer.featureCount()
-            expected_count = len(geojson['features'])
-            self.logger.info(f"{layer_name} feature count: {actual_count} (added: {expected_count})")
+            # 6) Track it
+            layer_dict[group_name] = layer
+            setattr(self, layer_type, layer_dict)
+
+            # 7) Log
+            self.logger.info(f"{layer_name} feature count: {layer.featureCount()} (added: {expected_count})")
 
         except Exception as e:
             self.logger.error(f"Error adding {layer_type}: {str(e)}")
@@ -2125,8 +2119,8 @@ class EasyEarthPlugin:
         try:
             # Create temporary file paths
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.temp_prompts_geojson = os.path.join(self.tmp_dir, f'prompts_{timestamp}.geojson')
-            self.temp_predictions_geojson = os.path.join(self.tmp_dir, f'predictions_{timestamp}.geojson')
+            self.temp_prompts_geojson = os.path.join(self.tmp_dir, f'prompts_{timestamp}.gpkg')
+            self.temp_predictions_geojson = os.path.join(self.tmp_dir, f'predictions_{timestamp}.gpkg')
             self.logger.info(f"Prepared file paths: \n"
                              f"Prompts: {self.temp_prompts_geojson}\n"
                              f"Predictions: {self.temp_predictions_geojson}")

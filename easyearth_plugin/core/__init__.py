@@ -10,5 +10,6 @@ __all__ = [
     "setup_logger",
     "map_id",
     "create_point_box",
-    "EnvManager"
+    "EnvManager",
+    "prediction_editor",
 ]
