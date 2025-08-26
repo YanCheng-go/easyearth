@@ -47,7 +47,7 @@ The GitHub repository of `EasyEarth` contains extensive documentation covering i
 
 
 # Current List of Supported Models
-`EasyEarth` currently supports a range of pre-trained vision(-language) models from Hugging Face or Ultralytics that can be applied directly within QGIS (autoref{tab:model-list}). These include prompt-based segmentation (points, boxes, and text) and semantic segmentation models.
+`EasyEarth` currently supports a range of pre-trained vision(-language) models from Hugging Face or Ultralytics that can be applied directly within QGIS (\autoref{tab:model-list}). These include prompt-based segmentation (points, boxes, and text) and semantic segmentation models.
 
 
 : List of current vision-language models enabled in `EasyEarth`. \label{tab:model-list}
