@@ -35,9 +35,9 @@ In particular, `EasyEarth` addresses one of the major challenges in Earth observ
 # Implementation and Architecture
 `EasyEarth` contains two major components, a server-side Flask application and a QGIS plugin GUI (\autoref{fig:architecture}).
 
-The server-side Flask application is deployable via Docker (preferred for scalability) or via local execution without Docker. It handles model inference and request routing. The interactive model execution is powered by the QGIS plugin GUI, an environment that is mostly familiarized by geospatial researchers and practitioners. The plugin (\autoref{fig:output}) orchestrates a workflow that includes selecting imagery, choosing models (e.g., SAM segmentation, LangSAM, forest canopy models), drawing on the map (creating prompts), submitting inference requests, and visualizing/editing/storing results.
+The server-side Flask application is deployable via Docker (preferred for scalability) or via local execution without Docker. It handles model inference and request routing. The interactive model execution is powered by the QGIS plugin GUI, an environment that is mostly familiarized by geospatial researchers and practitioners. The plugin (\autoref{fig:output}) orchestrates a workflow that includes selecting imagery, choosing pretrained models such as SAM [@kirillov2023segany] or forest canopy models [@veitchmichaelis2024oamtcd], drawing point or box prompts on the map or entering text prompts, submitting inference requests, and visualizing or editing or storing results.
 
-The GitHub repository of `EasyEarth` contains extensive documentation covering installation (Docker and manual), API usage, developer contributions, and troubleshooting.
+The GitHub repository of `EasyEarth` contains extensive documentation covering installation, API usage, developer contributions, and troubleshooting.
 
 ![EasyEarth Software Architecture. \label{fig:architecture}](assets/architecture.png){ width=90% }
 
@@ -53,7 +53,7 @@ The GitHub repository of `EasyEarth` contains extensive documentation covering i
 `EasyEarth` currently supports a range of vision and vision-language models that can be applied directly within QGIS. These include prompt-based segmentation (points, boxes, and text) and semantic segmentation workflows.
 
 In addition to the pre-configured models, `EasyEarth` supports easy integration of models hosted on Hugging Face [@wolf-etal-2020-transformers]
-, as well as local custom models. This flexibility allows researchers to adapt the tool to specific domains (e.g., forestry, agriculture, disaster response).
+, as well as local custom models. This flexibility allows researchers to adapt the tool to specific domain, such as in forestry, agriculture, and disaster response.
 
 Table 1: List of current vision-language models enabled in `EasyEarth`.
 
@@ -64,7 +64,7 @@ Table 1: List of current vision-language models enabled in `EasyEarth`.
 | SAM2 [@ravi2024sam2]                         | Ultralytics                | Segment Anything 2                      | Point       | [[x, y], [x, y], ...] |
 | SAM2  [@ravi2024sam2]                        | Ultralytics                | Segment Anything 2                      | Box         | [[x1, y1, x2, y2]]    |
 | LangSAM [@medeiros2024langsegmentanything]   | Hugging Face & Ultralytics | SAM or SAM 2with text prompt            | Text        | ["text1", "text2"]    |
-| restor/tcd-segformer-mit-b2 [@restortcd]     | Hugging Face               | Semantic Segmentation for forest canopy | None        | []                    |
+| restor/tcd-segformer-mit-b2 [@veitchmichaelis2024oamtcd]     | Hugging Face               | Semantic Segmentation for forest canopy | None        | []                    |
 
 # Planned Features
 Future development of `EasyEarth` will focus on expanding usability and interpretability. A Model Manager is planned to support versioning, registration, and streamlined deployment of both pre-trained and custom models, making it easier for users to manage and switch between different model configurations. In addition, a chatbot assistant will be integrated to help users interpret results, such as summarizing detected changes, explaining segmentation outputs, or generating human-readable insights, thereby bridging the gap between raw model predictions and actionable geospatial knowledge.
