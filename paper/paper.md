@@ -33,19 +33,21 @@ While powerful pretrained vision(-language) models such as SAM[@kirillov2023sega
 In particular, `EasyEarth` addresses one of the major challenges in Earth observation: the inefficiency of annotation processes. Existing tools, such as GeoSAM [@zhao_zhuoyi_2023_8191039], have provided useful first steps by enabling training label generation with SAM. However, they remain limited to a single pre-trained model, require a two-step workflow of creating image embeddings and generating labels with prompts, and demand direct modification of base Python libraries in QGIS, which can be an insecure approach that risks destabilizing the software environment. `EasyEarth` overcomes these constraints by offering a more flexible, secure, and model-agnostic framework that integrates smoothly into QGIS without compromising its stability.
 
 # Implementation and Architecture
-`EasyEarth` contains two major components, a server-side Flask application and a QGIS plugin GUI (\label{fig:architecture}).
+`EasyEarth` contains two major components, a server-side Flask application and a QGIS plugin GUI (\autoref{fig:architecture}).
 
-The server-side Flask application is deployable via Docker (preferred for scalability) or via local execution without Docker. It handles model inference and request routing. The interactive model execution is powered by the QGIS plugin GUI, an environment that is mostly familiarized by geospatial researchers and practitioners. The plugin orchestrates a workflow that includes selecting imagery, choosing models (e.g., SAM segmentation, LangSAM, forest canopy models), drawing on the map (creating prompts), submitting inference requests, and visualizing/editing/storing results.
+The server-side Flask application is deployable via Docker (preferred for scalability) or via local execution without Docker. It handles model inference and request routing. The interactive model execution is powered by the QGIS plugin GUI, an environment that is mostly familiarized by geospatial researchers and practitioners. The plugin (\autoref{fig:output}) orchestrates a workflow that includes selecting imagery, choosing models (e.g., SAM segmentation, LangSAM, forest canopy models), drawing on the map (creating prompts), submitting inference requests, and visualizing/editing/storing results.
 
 The GitHub repository of `EasyEarth` contains extensive documentation covering installation (Docker and manual), API usage, developer contributions, and troubleshooting.
 
 ![EasyEarth Software Architecture. \label{fig:architecture}](assets/architecture.png){ width=90% }
+
 *Figure 1. `EasyEarth` architecture showing the QGIS plugin connected to the server-side backend.*
 
 [//]: # (![QGIS Plugin GUI. \label{fig:gui}]&#40;assets/gui.png&#41;{ width=40% })
 
 ![Example output. \label{fig:output}](assets/output.png)
-*`EasyEarth` QGIS plugin integrated within the QGIS environment, showing the plugin interface, layer viewer, and example segmentation results displayed on the map canvas.*
+
+*Figure 2. `EasyEarth` QGIS plugin integrated within the QGIS environment, showing the plugin interface, layer viewer, and example segmentation results displayed on the map canvas.*
 
 # Current List of Supported Models
 `EasyEarth` currently supports a range of vision and vision-language models that can be applied directly within QGIS. These include prompt-based segmentation (points, boxes, and text) and semantic segmentation workflows.
