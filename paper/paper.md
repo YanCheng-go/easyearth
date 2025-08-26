@@ -41,13 +41,10 @@ The GitHub repository of `EasyEarth` contains extensive documentation covering i
 
 ![EasyEarth Software Architecture. \label{fig:architecture}](assets/architecture.png){ width=90% }
 
-*Figure 1. `EasyEarth` architecture showing the QGIS plugin connected to the server-side backend.*
-
 [//]: # (![QGIS Plugin GUI. \label{fig:gui}]&#40;assets/gui.png&#41;{ width=40% })
 
-![Example output. \label{fig:output}](assets/output.png)
+![`EasyEarth` QGIS plugin interface and example model inference. \label{fig:output}](assets/output.png)
 
-*Figure 2. `EasyEarth` QGIS plugin integrated within the QGIS environment, showing the plugin interface, layer viewer, and example segmentation results displayed on the map canvas.*
 
 # Current List of Supported Models
 `EasyEarth` currently supports a range of vision and vision-language models that can be applied directly within QGIS. These include prompt-based segmentation (points, boxes, and text) and semantic segmentation workflows.
