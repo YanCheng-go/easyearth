@@ -49,6 +49,9 @@ The GitHub repository of `EasyEarth` contains extensive documentation covering i
 # Current List of Supported Models
 `EasyEarth` currently supports a range of pre-trained vision(-language) models from Hugging Face or Ultralytics that can be applied directly within QGIS (autoref{tab:model-list}). These include prompt-based segmentation (points, boxes, and text) and semantic segmentation models.
 
+
+: List of current vision-language models enabled in `EasyEarth`. \label{tab:model-list}
+
 | Model Name                                              | Platform                   | Description                             | Prompt Type | Prompt Data           |
 |---------------------------------------------------------|----------------------------|-----------------------------------------|-------------|-----------------------|
 | SAM [@kirillov2023segany]                               | Hugging Face               | Segment Anything                        | Point       | [[x, y], [x, y], ...] |
@@ -57,7 +60,6 @@ The GitHub repository of `EasyEarth` contains extensive documentation covering i
 | SAM2 [@ravi2024sam2]                                    | Ultralytics                | Segment Anything 2                      | Box         | [[x1, y1, x2, y2]]    |
 | LangSAM [@medeiros2024langsegmentanything]              | Hugging Face & Ultralytics | SAM or SAM 2 with text prompt           | Text        | ["text1", "text2"]    |
 | restor/tcd-segformer-mit-b2 [@veitchmichaelis2024oamtcd] | Hugging Face               | Semantic Segmentation for forest canopy | None        | []                    | 
-: Table 1: List of current vision-language models enabled in `EasyEarth`. \label{tab:model-list}
 
 # Planned Features
 Future development of `EasyEarth` will focus on expanding usability and interpretability. A Model Manager is planned to support versioning, registration, and streamlined deployment of both pre-trained models from platforms such as Hugging Face and local custom models, making it easier for users to manage, configure, and switch between different model. In addition, a chatbot assistant will be integrated to help users interpret results, such as summarizing detected changes, explaining segmentation outputs, or generating human-readable insights, thereby bridging the gap between raw model predictions and actionable geospatial knowledge.
