@@ -1,5 +1,5 @@
 ---
-title: 'EasyEarth: Vision(-language) models for earth observations at fingertips'
+title: 'EasyEarth: Vision(-language) models for earth observation at your fingertips'
 tags:
   - Python
   - remote sensing
@@ -11,15 +11,18 @@ authors:
     corresponding: true
     orcid: 0000-0001-8658-4673
     affiliation: 1 # (Multiple affiliations must be quoted)
-  - name: Lucia Gordon 
-    affiliation: 2
+  - name: Lucia Gordon
+    orcid: 0000-0003-3219-6960
+    affiliation: "2, 3"
   - name: Ankit Kariryaa
-    affiliation: "1, 2"
+    affiliation: "1, 3"
 affiliations:
  - name: Department of Geosciences and Natural Resource Management, University of Copenhagen, Denmark
    index: 1
- - name: Department of Computer Science, University of Copenhagen, Denmark
+ - name: School of Engineering and Applied Sciences, Harvard University, USA
    index: 2
+ - name: Department of Computer Science, University of Copenhagen, Denmark
+   index: 3
 date: 20 August 2025
 bibliography: paper.bib
 ---
@@ -35,7 +38,7 @@ In particular, `EasyEarth` addresses one of the major challenges in Earth observ
 # Implementation and Architecture
 `EasyEarth` contains two major components, a server-side Flask application and a QGIS plugin GUI (\autoref{fig:architecture}).
 
-The server-side Flask application is deployable via Docker (preferred for scalability) or via local execution without Docker. It handles model inference and request routing. The interactive model execution is powered by the QGIS plugin GUI, an environment that is already familiarized by geospatial researchers and practitioners. The plugin (\autoref{fig:output}) orchestrates a workflow that includes selecting imagery, choosing pre-trained models such as SAM [@kirillov2023segany] or forest canopy models [@veitchmichaelis2024oamtcd], drawing point or box prompts on the map or entering text prompts, submitting inference requests, and visualizing, editing, or storing results.
+The server-side Flask application is deployable via Docker (preferred for scalability) or via local execution without Docker. It handles model inference and request routing. The interactive model execution is powered by the QGIS plugin GUI, an environment that is already familiar to geospatial researchers and practitioners. The plugin (\autoref{fig:output}) orchestrates a workflow that includes selecting imagery, choosing pre-trained models such as SAM [@kirillov2023segany] or forest canopy models [@veitchmichaelis2024oamtcd], drawing point or box prompts on the map or entering text prompts, submitting inference requests, and visualizing, editing, or storing results.
 
 The GitHub repository of `EasyEarth` contains extensive documentation covering installation, API usage, developer contributions, and troubleshooting.
 
@@ -62,7 +65,7 @@ The GitHub repository of `EasyEarth` contains extensive documentation covering i
 | restor/tcd-segformer-mit-b2 [@veitchmichaelis2024oamtcd] | Hugging Face               | Semantic Segmentation for forest canopy | None        | []                    | 
 
 # Planned Features
-Future development of `EasyEarth` will focus on expanding usability and interpretability. A Model Manager is planned to support versioning, registration, and streamlined deployment of both pre-trained models from platforms such as Hugging Face and local custom models, making it easier for users to manage, configure, and switch between different model. In addition, a chatbot assistant will be integrated to help users interpret results, such as summarizing detected changes, explaining segmentation outputs, or generating human-readable insights, thereby bridging the gap between raw model predictions and actionable geospatial knowledge.
+Future development of `EasyEarth` will focus on expanding usability and interpretability. A Model Manager is planned to support versioning, registration, and streamlined deployment of both pre-trained models from platforms such as Hugging Face and local custom models, making it easier for users to manage, configure, and switch between different models. In addition, a chatbot assistant will be integrated to help users interpret results, such as summarizing detected changes, explaining segmentation outputs, or generating human-readable insights, thereby bridging the gap between raw model predictions and actionable geospatial knowledge.
 
 # Examples of Research Work
 `EasyEarth` has been applied in a variety of environmental monitoring and research contexts. For example, it has been used to support greenhouse segmentation from aerial imagery, enabling the rapid identification and mapping of agricultural infrastructure at scale. In forestry applications, `EasyEarth` has been employed for tree segmentation and canopy delineation, facilitating analyses of forest structure and health. These examples highlight the potential of the tool to accelerate the generation of high-quality training data and geospatial insights across domains. Future applications are expected to build upon this foundation, integrating `EasyEarth` into research workflows and contributing to publications in areas such as land use monitoring, biodiversity assessment, and climate impact studies.
