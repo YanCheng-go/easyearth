@@ -111,10 +111,11 @@ EasyEarth enables seamless application of cutting-edge computer vision and visio
 
 - Python ≥ 3.9
 - (optional) [QGIS](https://qgis.org) (tested with 3.38 and 3.40) <br>_⚠️ required to use the plugin on QGIS, otherwise, one can use the server side only_
-- (optional) CUDA ≥ 12.8 ([download](https://developer.nvidia.com/cuda-downloads)) <br>_⚠️ CUDA is **only required** for GPU inference on Linux. CPU-only mode is also available (though much slower). For macOS, run local mode to enable GPU._
+- (optional) CUDA ≥ 12.4 ([download](https://developer.nvidia.com/cuda-downloads)) <br>_⚠️ CUDA is **only required** for GPU inference on Linux. CPU-only mode is also available (though much slower). For macOS, run local mode to enable GPU._
 - (optional) Docker and Docker Compose ≥ 1.21.2 ([install guide](https://docs.docker.com/get-started/get-docker/)) <br>_⚠️ The server side is a dockerized Flask APP. Without Docker, one can use the local server mode in the plugin, which will download and use a pre-compressed env file for running the app without Docker. For linux, install docker using the offical Docker repository (deb package instead of through snap) to avoid issues_
 - (optional) NVIDIA Container Toolkit ([install guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html))<br>_⚠️ To use GPU with docker container on Linux, only required if you want to use the docker mode_
   - Tested on NVIDIA-SMI 570.133.07 | Driver Version: 570.133.07 | CUDA Version: 12.8 If you encounter issues with enabling GPU in Docker, please update your NVIDIA driver.
+
 ### 📦 Compatibility
 Currently tested on:<br>
 ✅ Ubuntu<br>
