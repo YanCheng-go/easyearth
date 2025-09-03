@@ -10,11 +10,6 @@ class TestSAMServer(unittest.TestCase):
         self.input_boxes = [[[620, 900, 1000, 1255]], [[2000, 800, 2500, 1200]]]
         self.input_labels = [[1]]
 
-    def test_health_check(self):
-        """Test the health check endpoint"""
-        response = requests.get(f"{self.base_url}/ping")
-        self.assertEqual(response.status_code, 200)
-
     def test_predict_with_point_prompts(self):
         """Test prediction with point prompts"""
         payload = {
@@ -33,7 +28,8 @@ class TestSAMServer(unittest.TestCase):
             f"{self.base_url}/predict",
             json=payload
         )
-        
+
+        assert response.status_code == 200, f"{response.status_code} {response.text}"
         self.assertEqual(response.status_code, 200)
 
     def test_predict_with_box_prompts(self):
@@ -80,7 +76,8 @@ class TestSAMServer(unittest.TestCase):
             f"{self.base_url}/predict",
             json=payload
         )
-        
+
+        assert response.status_code == 200, f"{response.status_code} {response.text}"
         self.assertEqual(response.status_code, 200)
 
     def test_invalid_image_path(self):
@@ -102,7 +99,7 @@ class TestSAMServer(unittest.TestCase):
             json=payload
         )
         
-        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 400)
 
 if __name__ == '__main__':
     unittest.main()

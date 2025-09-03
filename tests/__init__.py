@@ -1,3 +1,5 @@
+# tests/__init__.py
+
 import logging
 
 from flask_testing import TestCase
