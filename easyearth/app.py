@@ -5,6 +5,8 @@ import os
 
 app = init_api()  # Create the app as a module-level variable
 
+logger = logging.getLogger("easyearth")
+
 def pre_check():
     # Check if the application is running with the correct user permissions
     if os.name == 'nt':
@@ -26,11 +28,13 @@ def pre_check():
     else:
         logger.info(f"Cache directory {cache_dir} is writable.")
 
-if __name__ == "__main__":
+def main():
     # Set up logging
-    logger = logging.getLogger("easyearth")
     logger.info("Starting EasyEarth API server")
     # Configuration pre-checks before starting the app
     pre_check()
     # Start the Flask app
     app.run(host="0.0.0.0", port=3781)
+
+if __name__ == "__main__":
+    main()

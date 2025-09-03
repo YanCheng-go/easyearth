@@ -14,10 +14,7 @@ geopandas==1.0.1
 transformers==4.49.0
 torch>=2.2.2
 huggingface_hub==0.29.3
-pytest
-ipdb
 PyYAML>=5.1
-matplotlib
 ultralytics
 segment-geospatial
 groundingdino-py
