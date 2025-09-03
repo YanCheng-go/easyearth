@@ -41,7 +41,7 @@ jobs:
       - name: Start server (background)
         run: |
           set -euo pipefail
-          # Use localhost; no need for 0.0.0.0 inside CI
+          # Use localhost; no need for 127.0.0.1 inside CI
           easyearth-server --host 0.0.0.0 --port 3781 > server.log 2>&1 &
           echo $! > server.pid
 
@@ -50,7 +50,7 @@ jobs:
           set -euo pipefail
           for i in {1..60}; do
             # Prefer a /health endpoint if you have one; fall back to /
-            if curl -fsS http://0.0.0.0:3781/ping || curl -fsS http://0.0.0.0:3781/; then
+            if curl -fsS http://127.0.0.1:3781/ping || curl -fsS http://127.0.0.1:3781/; then
               echo "Server is up"; exit 0
             fi
             sleep 1
@@ -62,7 +62,7 @@ jobs:
 
       - name: Run tests
         env:
-          EASYEARTH_BASE_URL: http://0.0.0.0:3781/
+          EASYEARTH_BASE_URL: http://127.0.0.1:3781/
         run: pytest -q
 
       - name: Show server logs on failure
