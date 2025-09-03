@@ -1,0 +1,52 @@
+name: CI - Local Tests
+
+on:
+  push:
+    branches: [ yan ]
+    paths: [ 'requirements.txt', 'easyearth/**' ]
+  pull_request:
+    branches: [ master ]
+    paths: [ 'requirements.txt', 'easyearth/**' ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      BASE_DIR: ${{ github.workspace }}/.easyearth_base
+      MODEL_CACHE_DIR: ${{ runner.temp }}/easyearth_models
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python: "3.9"
+          - python: "3.10"
+          - python: "3.11"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare runtime folders (if your code expects them)
+        run: |
+          mkdir -p "$MODEL_CACHE_DIR" \
+                   "$BASE_DIR/embeddings" "$BASE_DIR/images" "$BASE_DIR/logs" \
+                   "$BASE_DIR/predictions" "$BASE_DIR/tmp"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: 'pip'
+          cache-dependency-path: |
+            pyproject.toml
+            requirements.txt
+
+      - name: Install project (dev)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Start the server
+        run: |
+          easyearth-server --host 0.0.0.0 --port 3781
+
+      - name: Run tests
+        run: pytest -q
