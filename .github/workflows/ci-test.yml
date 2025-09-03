@@ -1,19 +1,19 @@
-name: CI - Local Tests
+name: Test
 
 on:
   push:
     branches: [ yan ]
-    paths: [ 'requirements.txt', 'easyearth/**' ]
+    paths: [ 'requirements.txt', 'easyearth/**', 'pyproject.toml', 'tests/**', '.github/workflows/**' ]
   pull_request:
     branches: [ master ]
-    paths: [ 'requirements.txt', 'easyearth/**' ]
+    paths: [ 'requirements.txt', 'easyearth/**', 'pyproject.toml', '.github/workflows/**' ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
     env:
       BASE_DIR: ${{ github.workspace }}/.easyearth_base
-      MODEL_CACHE_DIR: ${{ runner.temp }}/easyearth_models
+      MODEL_CACHE_DIR: ${{ github.workspace }}/.cache/models
     strategy:
       fail-fast: false
       matrix:
