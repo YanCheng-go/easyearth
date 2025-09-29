@@ -28,6 +28,11 @@ If you encounter issues with Docker during setup or usage, ensure that Docker is
      sudo systemctl enable docker
      ```
 
+4. **Auto-detected mode as 'legacy'\nnvidia-container-cli: initialization error: nvml error: driver/library version mismatch: unknown**:
+
+   This error means that there is a mismatch between the driver and the kernel, which sometimes happens with automatic system updates. Restart or reboot to solve this issue.
+   
+
 ## Install local environment instead
 If you prefer to run the EasyEarth server without Docker, you can set up a local Python environment. Follow these steps:
 ```bash
