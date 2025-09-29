@@ -44,7 +44,7 @@ EasyEarth enables seamless application of cutting-edge computer vision and visio
 ![Architecture](https://github.com/user-attachments/assets/91f2cad0-4cbb-4b9b-a7e4-2cd2d247cc42)
 
 
-📽️ **[Watch Demo](https://drive.google.com/file/d/1AShHsXkYoBj4zltAGkdnzEfKp2GSFFeS/view)**
+📽️ **[Watch Demo](https://drive.google.com/file/d/1RuCS2g2qApLeYJisuXIHJKlh-T1uP5_a/view?usp=drive_link)**
 
 ---
 
