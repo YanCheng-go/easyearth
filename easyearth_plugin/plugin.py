@@ -46,7 +46,7 @@ class EasyEarthPlugin:
             self.toolbar.setObjectName(u'EasyEarth')
 
         self.toolbar.setMovable(False)
-        self.plugin_dir = os.path.dirname(__file__) # directory path where the current file is located
+        self.plugin_dir = Path(__file__).parent # directory path where the current file is located
 
         # Docker configuration
         self.project_name = "easyearth_plugin"
@@ -95,9 +95,9 @@ class EasyEarthPlugin:
         self.logs_dir = '' # logs directory for storing logs
 
         if os.name == "nt" or platform.system().lower().startswith("win"):
-            self.cache_dir = os.path.join(os.environ.get("USERPROFILE", ""), ".cache", "easyearth", "models")
+            self.cache_dir = Path(os.environ.get("USERPROFILE", "")) / ".cache" / "easyearth" / "models"
         else:
-            self.cache_dir = os.path.join(os.environ.get("HOME", ""), ".cache", "easyearth", "models")
+            self.cache_dir = Path(os.environ.get("HOME", "")) / ".cache" / "easyearth" / "models"
             
         self.model_path = None
         self.model_type = None
@@ -138,7 +138,7 @@ class EasyEarthPlugin:
             self.logger.debug("Starting initGui")
             self.logger.info(f"Plugin directory: {self.plugin_dir}")
 
-            icon = QIcon(os.path.join(self.plugin_dir, 'resources/icons/easyearth.png')) # loads the icon from the resources directory
+            icon = QIcon(Path(self.plugin_dir) / 'resources' / 'icons' / 'easyearth.png') # loads the icon from the resources directory
             folder_icon = QgsApplication.getThemeIcon('mActionFileOpen.svg')
 
             for action in self.iface.mainWindow().findChildren(QAction):
@@ -482,7 +482,7 @@ class EasyEarthPlugin:
             self.logger.exception("Full traceback:")
 
     def get_image_name(self):
-        return os.path.basename(self.image_path.text())
+        return Path(self.image_path.text()).name
 
     def run(self):
         """Run method that loads and starts the plugin"""
@@ -535,30 +535,29 @@ class EasyEarthPlugin:
         If not, it opens a dialog to select a folder.
         """
         folder = QFileDialog.getExistingDirectory(self.dock_widget, "Select location for base folder", '', QFileDialog.ShowDirsOnly) # opens a dialog to select a folder
-
+        folder = Path(folder)
         if folder: # if a folder is selected
-            self.base_dir = os.path.join(folder, 'easyearth_base')
+            self.base_dir = folder / "easyearth_base"
         
         self.initialize_dirs()  # initializes the directories based on the selected base directory
 
         self.base_folder.setText(self.base_dir)
         self.run_mode_group.show() # shows run mode group when base folder is selected
-        
-        os.makedirs(self.images_dir, exist_ok=True)  # creates the images directory if it doesn't exist
-        os.makedirs(self.embeddings_dir, exist_ok=True)  # creates the embeddings directory if it doesn't exist
-        os.makedirs(self.predictions_dir, exist_ok=True)  # creates the predictions directory if it doesn't exist
-        os.makedirs(self.tmp_dir, exist_ok=True)  # creates the tmp directory if it doesn't exist
-        os.makedirs(self.logs_dir, exist_ok=True)  # creates the logs directory if it doesn't exist
+
+        self.images_dir.mkdir(parents=True, exist_ok=True)
+        self.embeddings_dir.mkdir(parents=True, exist_ok=True)
+        self.predictions_dir.mkdir(parents=True, exist_ok=True)
+        self.tmp_dir.mkdir(parents=True, exist_ok=True)
+        self.logs_dir.mkdir(parents=True,  exist_ok=True)
 
     def initialize_dirs(self):
         self.iface.messageBar().pushMessage(f"Base folder set to {self.base_dir}", level=Qgis.Info)
+        self.images_dir = self.base_dir / 'images'
+        self.embeddings_dir = self.base_dir / 'embeddings'
+        self.predictions_dir = self.base_dir / 'predictions'
+        self.tmp_dir = self.base_dir / 'tmp'
+        self.logs_dir = self.base_dir / 'logs'
 
-        self.images_dir = os.path.join(self.base_dir, 'images')
-        self.embeddings_dir = os.path.join(self.base_dir, 'embeddings')
-        self.predictions_dir = os.path.join(self.base_dir, 'predictions')
-        self.tmp_dir = os.path.join(self.base_dir, 'tmp')
-        self.logs_dir = os.path.join(self.base_dir, 'logs')
-        
         os.environ['BASE_DIR'] = self.base_dir
 
     def run_mode_selected(self, mode):
@@ -603,11 +602,11 @@ class EasyEarthPlugin:
         if self.local_mode_button.isChecked():
             # Download server code
             repo_url = "https://github.com/YanCheng-go/easyearth/archive/refs/heads/master.zip"
-            zipped_repo_path = os.path.join(self.base_dir, 'easyearth-master.zip')
-            repo_path = os.path.join(self.base_dir, 'easyearth-master')
-            easyearth_folder_path = os.path.join(self.base_dir, 'easyearth')
+            zipped_repo_path = self.base_dir / 'easyearth-master.zip'
+            repo_path = self.base_dir /  'easyearth-master'
+            easyearth_folder_path = self.base_dir / 'easyearth'
 
-            if not os.path.exists(easyearth_folder_path):
+            if not easyearth_folder_path.exists():
                 self.iface.messageBar().pushMessage(f"Downloading easyearth repo from {repo_url} to {zipped_repo_path}", level=Qgis.Info)
                 QApplication.processEvents()
                 urllib.request.urlretrieve(repo_url, zipped_repo_path)
@@ -620,14 +619,14 @@ class EasyEarthPlugin:
 
                 self.iface.messageBar().pushMessage(f"Moving easyearth folder out of repo to {easyearth_folder_path}", level=Qgis.Info)
                 QApplication.processEvents()
-                shutil.move(os.path.join(repo_path, "easyearth"), easyearth_folder_path)
+                shutil.move(repo_path / "easyearth", easyearth_folder_path)
                 shutil.rmtree(repo_path)
                 os.remove(zipped_repo_path)
 
             # Download env
-            env_path = os.path.join(self.base_dir, 'easyearth_env')
+            env_path = self.base_dir / 'easyearth_env'
 
-            if not os.path.exists(env_path):
+            if not env_path.exists():
                 warning_box = QMessageBox()
                 warning_box.setIcon(QMessageBox.Warning)
                 warning_box.setWindowTitle("Downloading Python Environment")
@@ -639,7 +638,7 @@ class EasyEarthPlugin:
 
                 if platform.system().lower() == 'darwin':  # macOS
                     env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/mac-env-v2/easyearth_env_mac.tar.gz'
-                    zipped_env_path = os.path.join(self.base_dir, 'easyearth_env_mac.tar.gz')
+                    zipped_env_path = self.base_dir / 'easyearth_env_mac.tar.gz'
                     self.iface.messageBar().pushMessage(f"Downloading environment from {env_url} to {zipped_env_path}",
                                                         level=Qgis.Info)
                     QApplication.processEvents()
@@ -648,7 +647,7 @@ class EasyEarthPlugin:
                     QApplication.processEvents()
                     subprocess.run(f'tar -xzf \"{zipped_env_path}\" -C \"{self.base_dir}\"', capture_output=True, text=True, shell=True)  # unzips the environment tar.gz file
                     os.remove(zipped_env_path)  # remove the zip file after extraction
-                    os.rename(os.path.join(self.base_dir, 'easyearth_env_mac'), env_path)
+                    os.rename(self.base_dir / 'easyearth_env_mac', env_path)
                 elif platform.system().lower() == 'windows':  # Windows
                     EnvManager(self.iface, self.logs_dir, self.plugin_dir, self.base_dir).download_windows_env()  # Calls Windows-specific script
                 elif platform.system().lower() == 'linux':  # Linux
@@ -662,7 +661,7 @@ class EasyEarthPlugin:
             self.local_server_log_file = open(Path(self.logs_dir) / "launch_server_local.log", "w") # log file for the local server launch
             self.iface.messageBar().pushMessage(f"Starting local server...", level=Qgis.Info)
             script_name = "launch_server_local.sh" if platform.system() != "Windows" else "launch_server_local_win.bat"
-            script_path = os.path.join(self.plugin_dir, script_name)
+            script_path = self.plugin_dir / script_name
             result = subprocess.Popen(f'"{script_path}"',
                                     shell=True,
                                     stdout=self.local_server_log_file,  # redirects stdout to a log file
@@ -797,8 +796,8 @@ class EasyEarthPlugin:
             self.downloading_progress_status.setText("Downloading image...")
             self.downloading_progress_status.show()
 
-            local_filename = os.path.basename(image_url.split("?")[0])
-            save_path = os.path.join(self.base_dir, "images", local_filename)
+            local_filename = Path(image_url.split("?")[0]).name
+            save_path = self.base_dir / "images" / local_filename
             response = requests.get(image_url, stream=True)
             total = int(response.headers.get('content-length', 0))
             downloaded = 0
@@ -917,15 +916,15 @@ class EasyEarthPlugin:
                 return
 
             # Get the image name
-            image_name = os.path.splitext(os.path.basename(image_path))[0] if image_name is None else image_name
+            image_name = Path(image_path).stem if image_name is None else image_name
 
             # Create embedding directory if it doesn't exist
-            embedding_dir = os.path.join(self.base_dir, 'embeddings')
-            os.makedirs(embedding_dir, exist_ok=True)
+            embedding_dir = self.base_dir / 'embeddings'
+            embedding_dir.mkdir(parents=True, exist_ok=True)
 
             # Update the embedding path
             model_version = self.model_path.replace('/', '_')
-            embedding_path = os.path.join(embedding_dir, f"{image_name}_{model_version}.pt")
+            embedding_path = embedding_dir / f"{image_name}_{model_version}.pt"
 
             if self.save_embedding_radio.isChecked():
                 # Save new embedding
@@ -941,7 +940,7 @@ class EasyEarthPlugin:
                 self.logger.info(f"Will save new embedding to: {embedding_path}")
             else:
                 # Check if embedding file exists
-                if os.path.exists(embedding_path):
+                if embedding_path.exists():
                     # Found existing embedding
                     self.load_embedding_radio.setChecked(True)
                     self.embedding_path_edit.setEnabled(True)
@@ -1032,7 +1031,7 @@ class EasyEarthPlugin:
 
             if file_path:
                 # Verify the file is within data_dir
-                if not os.path.commonpath([file_path]).startswith(os.path.commonpath([self.base_dir])):
+                if self.base_dir.resolve() not in file_path.resolve().parents:
                     QMessageBox.warning(None, "Invalid Location", f"Please select an image from within the data directory:\n{self.base_dir}")
                     return
 
@@ -1064,7 +1063,7 @@ class EasyEarthPlugin:
             if not image_path:
                 return
 
-            layer_name = os.path.basename(image_path)
+            layer_name = Path(image_path).name
             raster_layer = QgsRasterLayer(image_path, layer_name) # loads the image as a raster layer
 
             if not raster_layer.isValid():
@@ -1849,9 +1848,9 @@ class EasyEarthPlugin:
             QApplication.setOverrideCursor(Qt.WaitCursor)
 
             # Get the image path and convert for container
-            image_path = self.image_path.text()
+            image_path = Path(self.image_path.text())
 
-            if not os.path.exists(image_path):
+            if not image_path.exists():
                 raise ValueError(f"Image file not found: {image_path}")
 
             # Initialize embedding variables
@@ -1861,25 +1860,24 @@ class EasyEarthPlugin:
 
             # Handle embedding settings
             if self.load_embedding_radio.isChecked() and self.load_embedding_radio.isEnabled():
-                embedding_path = self.embedding_path_edit.text().strip()
+                embedding_path = Path(self.embedding_path_edit.text().strip())
 
                 if not embedding_path:
                     raise ValueError("Please select an embedding file to load")
-                if not os.path.exists(embedding_path):
+                if not embedding_path.exists():
                     raise ValueError(f"Embedding file not found: {embedding_path}")
 
                 container_embedding_path = self.get_container_path(embedding_path)
             elif self.save_embedding_radio.isChecked():
-                embedding_path = self.embedding_path_edit.text().strip()
+                embedding_path = Path(self.embedding_path_edit.text().strip())
 
                 if not embedding_path:
                     raise ValueError("Please specify a path to save the embedding")
 
                 # Ensure the directory exists
-                embedding_dir = os.path.dirname(embedding_path)
+                embedding_dir = embedding_path.parent
+                embedding_dir.mkdir(parents=True, exist_ok=True)
 
-                if not os.path.exists(embedding_dir):
-                    os.makedirs(embedding_dir, exist_ok=True)
 
                 container_embedding_path = self.get_container_path(embedding_path)
                 save_embeddings = True
@@ -1894,7 +1892,7 @@ class EasyEarthPlugin:
             }
 
             # add the model path to the payload if not empty
-            self.model_path = self.model_dropdown.currentText().strip()
+            self.model_path = Path(self.model_dropdown.currentText().strip())
 
             model_conditions = [
                 (self.is_sam_model(), "sam"),
@@ -2048,7 +2046,8 @@ class EasyEarthPlugin:
         try:
             if self.load_embedding_radio.isChecked():
                 # Browse for existing file
-                embeddings_dir = os.path.join(self.base_dir, 'embeddings') if os.path.exists(os.path.join(self.base_dir, 'embeddings')) else self.base_dir
+                embeddings_dir = (self.base_dir / 'embeddings') if (
+                            self.base_dir / 'embeddings').exists() else self.base_dir
                 file_path, _ = QFileDialog.getOpenFileName(None, "Select Embedding File", embeddings_dir, "Embedding Files (*.pt);;All Files (*.*)")
                 self.logger.debug(f"Selected existing embedding file: {file_path}")
             else:
@@ -2168,11 +2167,11 @@ class EasyEarthPlugin:
         except Exception as e:
             self.logger.error(f"Error in draw type change: {str(e)}")
 
-    def get_container_path(self, host_path):
+    def get_container_path(self, host_path: Path) -> Path:
         """Convert host path to container path if within data_dir."""
         if host_path and self.docker_mode_button.isChecked():
-            relative_path = os.path.relpath(host_path, self.images_dir)
-            return os.path.join('/usr/src/app/easyearth_base/images', relative_path.replace("\\", "/"))
+            relative_path = host_path.relative_to(self.images_dir)
+            return Path('/usr/src/app/easyearth_base/images') / relative_path.as_posix()
         return host_path
 
     def create_prediction_layers(self):
@@ -2180,8 +2179,8 @@ class EasyEarthPlugin:
         try:
             # Create temporary file paths
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.temp_prompts_geojson = os.path.join(self.tmp_dir, f'prompts_{timestamp}.geojson')
-            self.temp_predictions_geojson = os.path.join(self.tmp_dir, f'predictions_{timestamp}.geojson')
+            self.temp_prompts_geojson = self.tmp_dir / f'prompts_{timestamp}.geojson'
+            self.temp_predictions_geojson = self.tmp_dir / f'predictions_{timestamp}.geojson'
             self.logger.info(f"Prepared file paths: \n"
                              f"Prompts: {self.temp_prompts_geojson}\n"
                              f"Predictions: {self.temp_predictions_geojson}")
@@ -2214,7 +2213,7 @@ class EasyEarthPlugin:
 
                 # Check for existing embedding
                 layer_source = self.selected_layer.source()
-                image_name = os.path.splitext(os.path.basename(layer_source))[0]
+                image_name = Path(layer_source).stem
                 self.update_embeddings(image_name)
         except Exception as e:
             self.logger.error(f"Error handling layer selection: {str(e)}")
@@ -2250,10 +2249,10 @@ class EasyEarthPlugin:
                 self.predictions_layer = None
 
             # Remove existing temporary files
-            if self.temp_prompts_geojson and os.path.exists(self.temp_prompts_geojson):
+            if self.temp_prompts_geojson and self.temp_prompts_geojson.exists():
                 os.remove(self.temp_prompts_geojson)
                 self.prompts_layer = None
-            if self.temp_predictions_geojson and os.path.exists(self.temp_predictions_geojson):
+            if self.temp_predictions_geojson and self.temp_predictions_geojson.exists():
                 os.remove(self.temp_predictions_geojson)
                 self.predictions_layer = None
 
@@ -2318,7 +2317,7 @@ class EasyEarthPlugin:
 
             # Remove temporary files
             for file_path in [self.temp_prompts_geojson, self.temp_predictions_geojson]:
-                if file_path and os.path.exists(file_path):
+                if file_path and file_path.exists():
                     os.remove(file_path)
 
             if hasattr(self, 'local_server_log_file') and self.local_server_log_file:
