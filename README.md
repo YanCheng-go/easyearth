@@ -120,7 +120,7 @@ Currently tested on:<br>
 ✅ Ubuntu<br>
 ✅ MacOS<br>
 ⚠️ Windows support:<br>
-Please find the pre-release for Windoes [here](https://github.com/YanCheng-go/easyearth/releases/tag/v0.0.3.dev). We haven't finished the full test for Windows - if you encounter any issues or would like to help us add Windows support, contributions are welcome!
+Please find the pre-release for Windoes [here](https://github.com/YanCheng-go/easyearth/releases/tag/win-end-v2). We haven't finished the full test for Windows - if you encounter any issues or would like to help us add Windows support, contributions are welcome!
 
 ### 📥 Download Pre-built Plugin
 
