@@ -3,6 +3,8 @@ import logging
 from easyearth import init_api
 import os
 
+logger = logging.getLogger("easyearth")
+
 app = init_api()  # Create the app as a module-level variable
 
 def pre_check():
@@ -27,8 +29,6 @@ def pre_check():
         logger.info(f"Cache directory {cache_dir} is writable.")
 
 if __name__ == "__main__":
-    # Set up logging
-    logger = logging.getLogger("easyearth")
     logger.info("Starting EasyEarth API server")
     # Configuration pre-checks before starting the app
     pre_check()

@@ -7,7 +7,7 @@ This will install Docker, build the image, and launch the EasyEarth server.
 If you make changes to the code, you can rebuild the Docker image using:
 ```bash
 cd easyearth  # go to the directory where docker-compose.yml is located
-./setup.sh  # run the setup.sh script to rebuild the Docker image, remember to setup the data folder.
+./launch_server_docker.sh  # run the script to rebuild the Docker image, remember to setup the data folder.
 ```
 stop the server first if it is running:
 ```bash
@@ -59,7 +59,7 @@ curl -X POST http://127.0.0.1:3781/easyearth/predict \
   "image_path": "/usr/src/app/data/DJI_0108.JPG",
   "model_path": "restor/tcd-segformer-mit-b2",
   "prompts": [],
-  "aoi": (0, 0, 1000, 1000)
+  "aoi": {"coordinates": [0, 0, 1000, 1000]}
 }'
 ```
 

@@ -51,7 +51,7 @@ jobs:
 #          python3 easyearth/tests/test_sam_server.py
 #        "
 
-    - name: Tag as lastest after tests pass
+    - name: Tag as latest after tests pass
       run: |
         docker tag ${{ secrets.DOCKER_USERNAME }}/easyearth:test ${{ secrets.DOCKER_USERNAME }}/easyearth:latest
 

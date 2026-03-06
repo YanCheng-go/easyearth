@@ -37,9 +37,17 @@ def verify_image_path(image_path):
             return False
 
 def verify_model_path(model_path):
-    """"Verify the model path and check if it is a valid model path from hugging face"""
-    # TODO: to complete
-    raise NotImplementedError("Model path verification is not implemented yet.")
+    """"Verify the model path and check if it is a valid model path from hugging face or a local path"""
+    if not model_path:
+        return False
+    # Accept Hugging Face model identifiers (org/model format)
+    if '/' in model_path and not model_path.startswith(('/', '.', '~')):
+        return True
+    # Accept local paths that exist
+    if os.path.isdir(model_path):
+        return True
+    logger.warning(f"Unrecognized model path format: {model_path}")
+    return False
 
 
 # TODO: add this to the predict function
@@ -154,8 +162,11 @@ def predict():
         model_type = data.get('model_type', 'sam')  # 'sam' or 'segment'
         image_path = data.get('image_path')
         model_path = data.get('model_path')
-        TEMP_DIR = os.path.join(os.environ['BASE_DIR'], 'tmp')
-        EMBEDDINGS_DIR = os.path.join(os.environ['BASE_DIR'], 'embeddings')
+        BASE_DIR = os.environ.get('BASE_DIR', os.path.join(os.path.expanduser("~"), ".easyearth"))
+        TEMP_DIR = os.path.join(BASE_DIR, 'tmp')
+        EMBEDDINGS_DIR = os.path.join(BASE_DIR, 'embeddings')
+        os.makedirs(TEMP_DIR, exist_ok=True)
+        os.makedirs(EMBEDDINGS_DIR, exist_ok=True)
 
         if not image_path or not verify_image_path(image_path):
             return jsonify({'status': 'error', 'message': 'Invalid or missing image_path'}), 400
@@ -270,6 +281,7 @@ def predict():
                         used_cache = True
 
                 except Exception as e:
+                    logger.warning(f"Failed to load embeddings from {embedding_path}: {str(e)}")
                     image_embeddings = None
 
             # Generate embeddings if not loaded from cache

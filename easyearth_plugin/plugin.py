@@ -1939,7 +1939,7 @@ class EasyEarthPlugin:
 
                         if 'message' in error_json:
                             error_msg = error_json['message']
-                    except:
+                    except (ValueError, KeyError):
                         error_msg = response.text
                     raise ValueError(f"Server error: {error_msg}")
 

@@ -31,4 +31,4 @@ COPY . $APP_DIR/
 
 EXPOSE 3781
 
-CMD ["python", "-m", "easyearth.app", "--host", "0.0.0.0", "--port", "3781"]
+CMD ["python", "-m", "easyearth.app"]
