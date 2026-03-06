@@ -222,7 +222,7 @@ def predict():
                 return jsonify({'status': 'error', 'message': 'No valid masks generated'}), 400
 
             # Convert masks to GeoJSON
-            geojson_path = f"{TEMP_DIR}/predict-langsam_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson"
+            geojson_path = os.path.join(TEMP_DIR, f"predict-langsam_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson")
             geojson = langsam.raster_to_vector(masks_path[0], input_text[0], filename=geojson_path, img_transform=transform)
 
         # --- SAM2 branch ---
@@ -246,7 +246,7 @@ def predict():
                 return jsonify({'status': 'error', 'message': 'No valid masks generated'}), 400
 
             # Convert masks to GeoJSON
-            geojson_path = f"{TEMP_DIR}/predict-sam2_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson"
+            geojson_path = os.path.join(TEMP_DIR, f"predict-sam2_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson")
             geojson = sam2.raster_to_vector(masks, transform, filename=geojson_path)
 
         # --- SAM branch ---
@@ -329,7 +329,7 @@ def predict():
                 return jsonify({'status': 'error', 'message': 'No valid masks generated'}), 400
 
             # Convert masks to GeoJSON
-            geojson_path = f"{TEMP_DIR}/predict-sam_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson"
+            geojson_path = os.path.join(TEMP_DIR, f"predict-sam_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson")
             geojson = sam.raster_to_vector(masks, scores, transform, filename=geojson_path)
 
         # --- Segmentation branch ---
@@ -365,7 +365,7 @@ def predict():
                 return jsonify({'status': 'error', 'message': 'No valid masks generated'}), 400
 
             # Convert masks to GeoJSON
-            geojson_path = f"{TEMP_DIR}/predict-segment_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson"
+            geojson_path = os.path.join(TEMP_DIR, f"predict-segment_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson")
             geojson = segformer.raster_to_vector(masks, transform, filename=geojson_path)
 
         else:

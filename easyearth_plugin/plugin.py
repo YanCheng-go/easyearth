@@ -50,7 +50,14 @@ class EasyEarthPlugin:
         # Docker configuration
         self.project_name = "easyearth_plugin"
         self.sudo_password = None  # Add this to store password temporarily
-        self.docker_path = 'docker' if shutil.which('docker') else '/Applications/Docker.app/Contents/Resources/bin/docker' # adds compatibility for macOS
+        if shutil.which('docker'):
+            self.docker_path = 'docker'
+        elif platform.system().lower() == 'darwin':
+            self.docker_path = '/Applications/Docker.app/Contents/Resources/bin/docker'
+        elif os.name == 'nt':
+            self.docker_path = r'C:\Program Files\Docker\Docker\resources\bin\docker.exe'
+        else:
+            self.docker_path = 'docker'
         self.docker_hub_image_name = "maverickmiaow/easyearth"
         # self.docker_hub_image_name = "lgordon99/easyearth"
 
@@ -60,7 +67,7 @@ class EasyEarthPlugin:
         self.points = [] # list to store selected points
         self.rubber_bands = []
         self.docker_process = None
-        self.server_url = f"http://0.0.0.0:3781/easyearth"  # Base URL for the server
+        self.server_url = f"http://127.0.0.1:3781/easyearth"  # Base URL for the server
         self.docker_running = False
         self.server_running = False
         self.action = None
@@ -240,7 +247,7 @@ class EasyEarthPlugin:
             api_layout = QVBoxLayout()
             api_label = QLabel("API Endpoints:")
             # api_label.setStyleSheet("font-weight: bold;")
-            self.api_info = QLabel(f"Base URL: <a href={self.server_url.replace('0.0.0.0', 'localhost')}>{self.server_url}</a><br>"
+            self.api_info = QLabel(f"Base URL: <a href={self.server_url}>{self.server_url}</a><br>"
                                    f"Inference: /predict<br>"
                                    f"Health check: /ping")
             self.api_info.setWordWrap(True)
@@ -562,7 +569,7 @@ class EasyEarthPlugin:
         if self.docker_mode_button.isChecked():
             self.iface.messageBar().pushMessage('Removing the docker container if it already exists', level=Qgis.Info)
             QApplication.processEvents()
-            subprocess.run(f"{self.docker_path} rm -f easyearth 2>/dev/null || true", capture_output=True, text=True, shell=True)  # removes the container if it already exists
+            subprocess.run([self.docker_path, "rm", "-f", "easyearth"], capture_output=True, text=True)  # removes the container if it already exists
             
             self.iface.messageBar().pushMessage('Pulling the latest image from Docker Hub', level=Qgis.Info)
             QApplication.processEvents()
@@ -572,20 +579,25 @@ class EasyEarthPlugin:
             warning_box.setTextFormat(Qt.RichText)
             warning_box.setText("Downloading the latest Docker image from Docker Hub.&nbsp;This may take a while.&nbsp;Please wait...")
             warning_box.exec_()
-            subprocess.run(f"{self.docker_path} pull {self.docker_hub_image_name}", capture_output=True, text=True, shell=True)  # removes the container if it already exists
+            subprocess.run([self.docker_path, "pull", self.docker_hub_image_name], capture_output=True, text=True)  # pulls the latest image
             
             self.iface.messageBar().pushMessage('Starting the Docker container', level=Qgis.Info)
             QApplication.processEvents()
-            linux_gpu_flags = " --runtime nvidia" if platform.system().lower() == "linux" else ""  # adds GPU support if available and on Linux
-            gpu_flags = " --gpus all" if platform.system().lower() != "darwin" else ""  # adds GPU support if available and not on macOS
-            docker_run_cmd = (f"{self.docker_path} run{linux_gpu_flags}{gpu_flags} -d --name easyearth -p 3781:3781 " # runs the container in detached mode and maps port 3781
-                              f"-v \"{self.base_dir}\":/usr/src/app/easyearth_base " # mounts the base directory in the container
-                              f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
-                              f"-e USER_BASE_DIR=\"{self.base_dir}\" " # sets an environment variable in the container containing the user's base directory
-                              f"-e RUN_MODE=docker " # sets the run mode to docker
-                              f"{self.docker_hub_image_name}")
-            result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True, timeout=1800)
-            self.iface.messageBar().pushMessage(f"Starting server...\nRunning command: {result}", level=Qgis.Info)
+            docker_run_cmd = [self.docker_path, "run", "-d", "--name", "easyearth",
+                              "-p", "3781:3781",
+                              "-v", f"{self.base_dir}:/usr/src/app/easyearth_base",
+                              "-v", f"{self.cache_dir}:/usr/src/app/.cache/models",
+                              "-e", f"USER_BASE_DIR={self.base_dir}",
+                              "-e", "RUN_MODE=docker"]
+            # Add GPU flags based on platform
+            if platform.system().lower() == "linux":
+                docker_run_cmd[2:2] = ["--runtime", "nvidia", "--gpus", "all"]
+            elif os.name == 'nt':
+                docker_run_cmd[2:2] = ["--gpus", "all"]
+            # macOS: no GPU flags needed (uses CPU or MPS inside container is not supported)
+            docker_run_cmd.append(self.docker_hub_image_name)
+            result = subprocess.run(docker_run_cmd, capture_output=True, text=True, timeout=1800)
+            self.iface.messageBar().pushMessage("Starting server...", level=Qgis.Info)
 
             if result.returncode == 0:
                 self.docker_running = True
@@ -636,35 +648,80 @@ class EasyEarthPlugin:
                     urllib.request.urlretrieve(env_url, zipped_env_path)
                     self.iface.messageBar().pushMessage(f"Unzipping environment to {env_path}", level=Qgis.Info)
                     QApplication.processEvents()
-                    subprocess.run(f'tar -xzf \"{zipped_env_path}\" -C \"{self.base_dir}\"', capture_output=True, text=True, shell=True)  # unzips the environment tar.gz file
-                    os.remove(zipped_env_path)  # remove the zip file after extraction
+                    import tarfile
+                    with tarfile.open(zipped_env_path, 'r:gz') as tar:
+                        tar.extractall(path=self.base_dir)
+                    os.remove(zipped_env_path)  # remove the archive after extraction
                     os.rename(os.path.join(self.base_dir, 'easyearth_env_mac'), env_path)
-                else:
-                    EnvManager(self.iface, self.logs_dir, self.plugin_dir).download_linux_env() # Use EnvManager to download (internally calls download_linux_env.sh)
+                elif os.name == 'nt':  # Windows
+                    env_url = 'https://github.com/YanCheng-go/easyearth/releases/download/win-end-v2/easyearth_env_win.zip'
+                    zipped_env_path = os.path.join(self.base_dir, 'easyearth_env_win.zip')
+                    self.iface.messageBar().pushMessage(f"Downloading environment from {env_url} to {zipped_env_path}", level=Qgis.Info)
+                    QApplication.processEvents()
+                    urllib.request.urlretrieve(env_url, zipped_env_path)
+                    self.iface.messageBar().pushMessage(f"Unzipping environment to {env_path}", level=Qgis.Info)
+                    QApplication.processEvents()
+                    with zipfile.ZipFile(zipped_env_path, 'r') as zip_ref:
+                        zip_ref.extractall(self.base_dir)
+                    os.remove(zipped_env_path)
+                    # Rename extracted folder if needed
+                    win_env_path = os.path.join(self.base_dir, 'easyearth_env_win')
+                    if os.path.exists(win_env_path) and not os.path.exists(env_path):
+                        os.rename(win_env_path, env_path)
+                else:  # Linux
+                    EnvManager(self.iface, self.logs_dir, self.plugin_dir).download_linux_env()
                 
                 self.iface.messageBar().pushMessage(f"Unzipped environment to {env_path}", level=Qgis.Info)
 
-            self.local_server_log_file = open(f"{self.logs_dir}/launch_server_local.log", "w")  # log file for the local server launch
-            self.iface.messageBar().pushMessage(f"Starting local server...", level=Qgis.Info)
-            result = subprocess.Popen(f'chmod +x \"{self.plugin_dir}\"/launch_server_local.sh && \"{self.plugin_dir}\"/launch_server_local.sh',
-                                    shell=True,
-                                    stdout=self.local_server_log_file,  # redirects stdout to a log file
-                                    stderr=subprocess.STDOUT,  # redirects stderr to the same log file
-                                    text=True,              # decodes output as text, not bytes
-                                    start_new_session=True)  # detaches from QGIS
+            self.local_server_log_file = open(os.path.join(self.logs_dir, "launch_server_local.log"), "w")
+            self.iface.messageBar().pushMessage("Starting local server...", level=Qgis.Info)
+            env = os.environ.copy()
+            env['BASE_DIR'] = self.base_dir
+            if os.name == 'nt':
+                # Windows: use the Python executable directly from the env
+                python_cmd = os.path.join(self.base_dir, 'easyearth_env', 'Scripts', 'python.exe')
+                if not os.path.exists(python_cmd):
+                    python_cmd = os.path.join(self.base_dir, 'easyearth_env', 'python.exe')
+                env['MODEL_CACHE_DIR'] = os.path.join(os.environ.get('USERPROFILE', ''), '.cache', 'easyearth', 'models')
+                env['USER_BASE_DIR'] = self.base_dir
+                env['RUN_MODE'] = 'local'
+                result = subprocess.Popen(
+                    [python_cmd, "-m", "easyearth.app"],
+                    stdout=self.local_server_log_file,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    cwd=self.base_dir,
+                    env=env,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+            else:
+                launch_script = os.path.join(self.plugin_dir, 'launch_server_local.sh')
+                os.chmod(launch_script, 0o755)
+                result = subprocess.Popen(
+                    ['bash', launch_script],
+                    stdout=self.local_server_log_file,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    start_new_session=True,
+                    env=env)
             
             if result and self.server_running == True:
                 self.iface.messageBar().pushMessage(f"Local server started successfully. Check logs {self.local_server_log_file} for details.", level=Qgis.Success)
 
     def stop_server(self):
         if self.docker_mode_button.isChecked():
-            result = subprocess.run(f"{self.docker_path} stop easyearth && {self.docker_path} rm easyearth", capture_output=True, text=True, shell=True)
+            subprocess.run([self.docker_path, "stop", "easyearth"], capture_output=True, text=True)
+            result = subprocess.run([self.docker_path, "rm", "easyearth"], capture_output=True, text=True)
             self.docker_hub_process = None
             self.docker_running = False
         else:
-            result = subprocess.run('kill $(lsof -t -i:3781)', capture_output=True, text=True, shell=True, timeout=1800) # kills the process running on port 3781
+            if os.name == 'nt':
+                # Windows: find and kill process on port 3781
+                result = subprocess.run('for /f "tokens=5" %a in (\'netstat -aon ^| findstr :3781\') do taskkill /F /PID %a',
+                                       capture_output=True, text=True, shell=True, timeout=30)
+            else:
+                result = subprocess.run('kill $(lsof -t -i:3781)', capture_output=True, text=True, shell=True, timeout=30)
 
-        self.iface.messageBar().pushMessage(f"Stopping server with command: {result}", level=Qgis.Info)
+        self.iface.messageBar().pushMessage("Server stopped.", level=Qgis.Info)
 
     def run_or_stop_container(self):
         if not self.docker_running: # if the docker container is not running, start it
@@ -970,7 +1027,7 @@ class EasyEarthPlugin:
 
             if file_path:
                 # Verify the file is within data_dir
-                if not os.path.commonpath([file_path]).startswith(os.path.commonpath([self.base_dir])):
+                if not os.path.normpath(file_path).startswith(os.path.normpath(self.base_dir)):
                     QMessageBox.warning(None, "Invalid Location", f"Please select an image from within the data directory:\n{self.base_dir}")
                     return
 
