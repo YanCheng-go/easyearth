@@ -124,14 +124,13 @@ class Sam(BaseModel):
 
         # if multimask_output is True, then we have multiple masks for each object with different scores, then we choose the one with the highest score
         if num_scores > 1:
-            # TODO: verity if this is correct
             # Get the index of the mask with the highest iou score
-            highes_score_idx = torch.argmax(scores, dim=2)
-            assert highes_score_idx.shape[-1] == masks[0].shape[0]
+            highest_score_idx = torch.argmax(scores, dim=2)
+            assert highest_score_idx.shape[-1] == masks[0].shape[0]
 
             # Get the mask with the highest score
             masks_list = []
-            for obj, sco in enumerate(highes_score_idx[0].tolist()):
+            for obj, sco in enumerate(highest_score_idx[0].tolist()):
                 masks_list.append(masks_id[obj, sco, :, :])
                 
             masks_highest = torch.stack(masks_list, dim=0)
@@ -142,10 +141,12 @@ class Sam(BaseModel):
             # Convert to the dimensions suitable for super().raster_to_vector
             masks_combined = masks_id.squeeze(1)
 
-        # TODO: is there a better way? this will cause potential problems for overlapping predictions -> for now, the latter prediction will overwrite the former...
-        # reduce the dimensions of the masks to 2D by choosing the largest value
+        # Note: overlapping predictions are resolved by keeping the highest object ID.
+        # This means later objects overwrite earlier ones in overlap regions.
         if masks_combined.shape[0] > 1:
             masks_combined = torch.amax(masks_combined, dim=0, keepdim=False).numpy().astype(np.uint8)
+        else:
+            masks_combined = masks_combined.squeeze(0).numpy().astype(np.uint8)
 
         return super().raster_to_vector([masks_combined], img_transform, filename)
 
