@@ -16,6 +16,8 @@ import logging
 
 logger = logging.getLogger("easyearth")
 
+MAX_IMAGE_DIMENSION = int(os.environ.get('EASYEARTH_MAX_IMAGE_DIM', '4096'))
+
 def verify_image_path(image_path):
     """Verify the image path and check if it is a valid URL or local file. Remember to convert the image path the path in the docker container"""
     # TODO: to complete
@@ -191,6 +193,18 @@ def predict():
 
         original_height, original_width = image_array.shape[:2]
 
+        # Downscale if image exceeds maximum dimension
+        image_was_downscaled = False
+        if max(original_height, original_width) > MAX_IMAGE_DIMENSION:
+            scale_factor = MAX_IMAGE_DIMENSION / max(original_height, original_width)
+            new_height = int(original_height * scale_factor)
+            new_width = int(original_width * scale_factor)
+            image_pil = Image.fromarray(image_array)
+            image_pil = image_pil.resize((new_width, new_height), Image.LANCZOS)
+            image_array = np.array(image_pil)
+            image_was_downscaled = True
+            logger.info(f"Image downscaled from {original_width}x{original_height} to {new_width}x{new_height} (max dimension: {MAX_IMAGE_DIMENSION})")
+
         # --- LangSam branch ---
         if model_type == 'langsam':
             prompts = data.get('prompts', [])
@@ -359,7 +373,11 @@ def predict():
         else:
             return jsonify({'status': 'error', 'message': f'Unknown model_type: {model_type}'}), 400
 
-        return jsonify({'status': 'success', 'features': geojson, 'crs': source_crs}), 200
+        response = {'status': 'success', 'features': geojson, 'crs': source_crs,
+                    'image_width': original_width, 'image_height': original_height}
+        if image_was_downscaled:
+            response['downscaled_to'] = [image_array.shape[1], image_array.shape[0]]
+        return jsonify(response), 200
 
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Server error: {str(e)}'}), 500
