@@ -137,7 +137,14 @@ paths:
                     type: string
                     description: Coordinate reference system of the image
                     example: "EPSG:4326"
-                  # TODO: add information for example about the model used
+                  model_type:
+                    type: string
+                    description: Type of model used for inference
+                    example: "sam"
+                  model_path:
+                    type: string
+                    description: Path or identifier of the model used
+                    example: "facebook/sam-vit-base"
 servers:
   - url: '/easyearth'
     description: Local easyearth
