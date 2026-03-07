@@ -2,6 +2,7 @@ from flask import request, jsonify
 import numpy as np
 import rasterio
 import torch
+import time
 
 from easyearth.models.langsam import SamText
 from easyearth.models.sam import Sam
@@ -252,6 +253,9 @@ def predict():
             sam = Sam(model_path or 'facebook/sam-vit-base')
 
             image_embeddings = None
+            embedding_generated = False
+            embedding_time = None
+            used_cache = False
 
             if embedding_path and os.path.exists(embedding_path) and not save_embeddings:
                 try:
@@ -273,9 +277,13 @@ def predict():
                     image_embeddings = None
 
             # Generate embeddings if not loaded from cache
-            else:
+            if image_embeddings is None:
                 logger.debug("Generating image embeddings without caching.")
+                embed_start = time.time()
                 image_embeddings = sam.get_image_embeddings(image_array)
+                embedding_time = round(time.time() - embed_start, 2)
+                embedding_generated = True
+                logger.info(f"Embeddings generated in {embedding_time}s")
 
                 # generate an index file to relate image to the embeddings
                 index_path = os.path.join(EMBEDDINGS_DIR, 'index.json')
@@ -359,7 +367,14 @@ def predict():
         else:
             return jsonify({'status': 'error', 'message': f'Unknown model_type: {model_type}'}), 400
 
-        return jsonify({'status': 'success', 'features': geojson, 'crs': source_crs}), 200
+        response_data = {'status': 'success', 'features': geojson, 'crs': source_crs}
+
+        # Include embedding status for SAM predictions
+        if model_type == 'sam':
+            response_data['embedding_generated'] = embedding_generated
+            response_data['embedding_time'] = embedding_time
+
+        return jsonify(response_data), 200
 
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Server error: {str(e)}'}), 500

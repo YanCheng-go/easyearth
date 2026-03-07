@@ -137,6 +137,15 @@ paths:
                     type: string
                     description: Coordinate reference system of the image
                     example: "EPSG:4326"
+                  embedding_generated:
+                    type: boolean
+                    description: Whether embeddings were generated (true) or loaded from cache (false). Only present for SAM predictions.
+                    example: true
+                  embedding_time:
+                    type: number
+                    description: Time in seconds to generate embeddings, or null if cached. Only present for SAM predictions.
+                    example: 2.35
+                    nullable: true
                   # TODO: add information for example about the model used
 servers:
   - url: '/easyearth'

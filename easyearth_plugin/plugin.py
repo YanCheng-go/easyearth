@@ -1929,6 +1929,22 @@ class EasyEarthPlugin:
                         self.add_features_to_layer(features, "predictions", crs=feature_crs,
                                                    model_path=self.model_path, model_type=self.model_type) # adds the predictions as a layer
 
+                        # Display embedding status if available
+                        if response_json.get('embedding_generated') is not None:
+                            if response_json['embedding_generated']:
+                                embed_time = response_json.get('embedding_time', '?')
+                                self.iface.messageBar().pushMessage(
+                                    "Embedding Status",
+                                    f"Embeddings generated in {embed_time}s",
+                                    level=Qgis.Info, duration=5
+                                )
+                            else:
+                                self.iface.messageBar().pushMessage(
+                                    "Embedding Status",
+                                    "Using cached embeddings",
+                                    level=Qgis.Info, duration=5
+                                )
+
                     except json.JSONDecodeError as e:
                         raise ValueError(f"Invalid JSON response: {str(e)}")
                 else:
