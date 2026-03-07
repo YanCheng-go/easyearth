@@ -87,6 +87,14 @@ paths:
                         description: Prompt-specific data
                         nullable: true
                         example: { "points": [[100, 200]], "boxes": [[50, 50, 150, 150]], "text": "trees" } # pixel coordinates
+                bands:
+                  type: array
+                  description: List of band indices (1-indexed) to select from a multi-band image. If not provided, the first 3 bands are used for images with more than 3 bands.
+                  nullable: true
+                  items:
+                    type: integer
+                    minimum: 1
+                  example: [4, 3, 2]
                 aoi:
                   type: object
                   description: Area of interest for the analysis (optional), for now only for non-prompt based models
