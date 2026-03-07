@@ -25,7 +25,7 @@ It includes details on how to use the endpoints, the expected request and respon
       "model_type": "string",  // Type of model (e.g., "sam", "segment")
       "image_path": "string",  // Path to the input image
       "embedding_path": "string", // Optional, path to embedding file for SAM
-      "model_path": "string",   // Path or identifier for the model
+      "model_path": "string",   // HuggingFace model ID (e.g. "facebook/sam-vit-base") or local directory path
       "prompts": [              // Optional, list of prompts for SAM
         {
           "type": "Point",     // Type of prompt (e.g., "Point")
@@ -40,7 +40,7 @@ It includes details on how to use the endpoints, the expected request and respon
           }
         }
       ],
-      "aoi": (x1, y1, x2, y2), // Optional, area of interest for segmentation models
+      "aoi": {"coordinates": [x1, y1, x2, y2]} // Optional, area of interest for segmentation models
     }
     ```
     - **Response**: Returns the prediction results.

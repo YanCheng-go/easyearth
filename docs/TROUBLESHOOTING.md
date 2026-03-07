@@ -34,11 +34,27 @@ If you encounter issues with Docker during setup or usage, ensure that Docker is
    
 
 ## Install local environment instead
-If you prefer to run the EasyEarth server without Docker, you can set up a local Python environment. Follow these steps:
+If you prefer to run the EasyEarth server without Docker, you can set up a local Python environment.
+
+### macOS / Linux
 ```bash
-cd easyearth_base # Create a work directory  
+cd easyearth_base # Create a work directory
 cp <PROJECT FOLDER>/easyearth/requirements.txt .  # Copy the requirements file to the current directory
 python -m venv --copies easyearth_env  # Create a virtual environment, remember to use `--copies` to avoid issues with symlinks
 source easyearth_env/bin/activate  # Activate the virtual environment
 pip install -r requirements.txt  # Install the required packages
 ```
+
+### Windows
+```cmd
+cd easyearth_base
+copy <PROJECT FOLDER>\easyearth\requirements.txt .
+python -m venv --copies easyearth_env
+easyearth_env\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Windows-specific notes
+- Docker Desktop must be installed and running for Docker mode. The plugin looks for Docker at `C:\Program Files\Docker\Docker\resources\bin\docker.exe` if `docker` is not on the system PATH.
+- For local mode, use the `launch_server_local.bat` script or run `python -m easyearth.app` directly.
+- Set the `BASE_DIR` environment variable to your working directory before starting the server. If not set, it defaults to `%USERPROFILE%\.easyearth`.
