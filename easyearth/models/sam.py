@@ -123,6 +123,7 @@ class Sam(BaseModel):
         masks_id = torch.where(masks[0], objects_id + 1, torch.tensor(0))  # the second dimension is the mask id, one object may have multiple predicted masks with different confidence scores
 
         # if multimask_output is True, then we have multiple masks for each object with different scores, then we choose the one with the highest score
+        best_scores = {}
         if num_scores > 1:
             # TODO: verity if this is correct
             # Get the index of the mask with the highest iou score
@@ -133,7 +134,8 @@ class Sam(BaseModel):
             masks_list = []
             for obj, sco in enumerate(highes_score_idx[0].tolist()):
                 masks_list.append(masks_id[obj, sco, :, :])
-                
+                best_scores[obj + 1] = scores[0, obj, sco].item()
+
             masks_highest = torch.stack(masks_list, dim=0)
 
             # Convert to the dimensions suitable for super().raster_to_vector
@@ -141,13 +143,23 @@ class Sam(BaseModel):
         else:
             # Convert to the dimensions suitable for super().raster_to_vector
             masks_combined = masks_id.squeeze(1)
+            for obj in range(num_masks):
+                best_scores[obj + 1] = scores[0, obj, 0].item()
 
         # TODO: is there a better way? this will cause potential problems for overlapping predictions -> for now, the latter prediction will overwrite the former...
         # reduce the dimensions of the masks to 2D by choosing the largest value
         if masks_combined.shape[0] > 1:
             masks_combined = torch.amax(masks_combined, dim=0, keepdim=False).numpy().astype(np.uint8)
 
-        return super().raster_to_vector([masks_combined], img_transform, filename)
+        geojson = super().raster_to_vector([masks_combined], img_transform, filename)
+
+        # Add scores to GeoJSON feature properties
+        for feature in geojson:
+            uid = feature['properties'].get('uid')
+            if uid in best_scores:
+                feature['properties']['score'] = round(best_scores[uid], 4)
+
+        return geojson
 
 
 if __name__ == "__main__":

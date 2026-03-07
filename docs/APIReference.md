@@ -63,7 +63,17 @@ It includes details on how to use the endpoints, the expected request and respon
     ```
     ```json
     {
-      "result": "Prediction result here"
+      "status": "success",
+      "features": [
+        {
+          "properties": { "uid": 1, "score": 0.95 },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [[[50, 50], [150, 50], [150, 150], [50, 150], [50, 50]]]
+          }
+        }
+      ],
+      "crs": "EPSG:4326"
     }
     ```
 
