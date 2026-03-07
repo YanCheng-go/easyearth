@@ -63,7 +63,11 @@ It includes details on how to use the endpoints, the expected request and respon
     ```
     ```json
     {
-      "result": "Prediction result here"
+      "status": "success",
+      "features": { "type": "FeatureCollection", "features": [] },
+      "crs": "EPSG:4326",
+      "model_type": "sam",
+      "model_path": "facebook/sam-vit-large"
     }
     ```
 

@@ -359,7 +359,7 @@ def predict():
         else:
             return jsonify({'status': 'error', 'message': f'Unknown model_type: {model_type}'}), 400
 
-        return jsonify({'status': 'success', 'features': geojson, 'crs': source_crs}), 200
+        return jsonify({'status': 'success', 'features': geojson, 'crs': source_crs, 'model_type': model_type, 'model_path': model_path}), 200
 
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Server error: {str(e)}'}), 500
