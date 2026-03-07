@@ -558,38 +558,90 @@ class EasyEarthPlugin:
         elif mode == 'local':
             self.docker_mode_button.setChecked(False)
 
+    def docker_pull(self):
+        """Pull the latest Docker image, returning the subprocess result.
+
+        Shows progress messages in the QGIS message bar so users know whether
+        a new image is being downloaded or the local copy is already up to date.
+        """
+        self.iface.messageBar().pushMessage('Pulling the latest image from Docker Hub', level=Qgis.Info)
+        QApplication.processEvents()
+
+        pull_result = subprocess.run(
+            [self.docker_path, "pull", self.docker_hub_image_name],
+            capture_output=True, text=True, timeout=1800,
+        )
+
+        if pull_result.returncode != 0:
+            self.iface.messageBar().pushMessage(
+                f"Docker pull failed: {pull_result.stderr.strip()}",
+                level=Qgis.Critical,
+            )
+        elif "Image is up to date" in pull_result.stdout:
+            self.iface.messageBar().pushMessage(
+                "Docker image is already up to date.", level=Qgis.Info,
+            )
+        else:
+            self.iface.messageBar().pushMessage(
+                "New Docker image downloaded successfully.", level=Qgis.Success,
+            )
+        QApplication.processEvents()
+
+        return pull_result
+
+    def docker_run(self):
+        """Start the Docker container after a successful pull.
+
+        Returns the subprocess result of the ``docker run`` command.
+        """
+        self.iface.messageBar().pushMessage('Starting the Docker container', level=Qgis.Info)
+        QApplication.processEvents()
+
+        linux_gpu_flags = ["--runtime", "nvidia"] if platform.system().lower() == "linux" else []
+        gpu_flags = ["--gpus", "all"] if platform.system().lower() != "darwin" else []
+
+        docker_run_cmd = [
+            self.docker_path, "run",
+            *linux_gpu_flags,
+            *gpu_flags,
+            "-d", "--name", "easyearth",
+            "-p", "3781:3781",
+            "-v", f"{self.base_dir}:/usr/src/app/easyearth_base",
+            "-v", f"{self.cache_dir}:/usr/src/app/.cache/models",
+            "-e", f"USER_BASE_DIR={self.base_dir}",
+            "-e", "RUN_MODE=docker",
+            self.docker_hub_image_name,
+        ]
+        result = subprocess.run(docker_run_cmd, capture_output=True, text=True, timeout=1800)
+        self.iface.messageBar().pushMessage(f"Starting server...\nRunning command: {result}", level=Qgis.Info)
+
+        if result.returncode == 0:
+            self.docker_running = True
+            self.iface.messageBar().pushMessage("Docker container started successfully.", level=Qgis.Success)
+
+        return result
+
     def start_server(self):
         if self.docker_mode_button.isChecked():
             self.iface.messageBar().pushMessage('Removing the docker container if it already exists', level=Qgis.Info)
             QApplication.processEvents()
-            subprocess.run(f"{self.docker_path} rm -f easyearth 2>/dev/null || true", capture_output=True, text=True, shell=True)  # removes the container if it already exists
-            
-            self.iface.messageBar().pushMessage('Pulling the latest image from Docker Hub', level=Qgis.Info)
-            QApplication.processEvents()
-            warning_box = QMessageBox()
-            warning_box.setIcon(QMessageBox.Warning)
-            warning_box.setWindowTitle("Update Docker Image")
-            warning_box.setTextFormat(Qt.RichText)
-            warning_box.setText("Downloading the latest Docker image from Docker Hub.&nbsp;This may take a while.&nbsp;Please wait...")
-            warning_box.exec_()
-            subprocess.run(f"{self.docker_path} pull {self.docker_hub_image_name}", capture_output=True, text=True, shell=True)  # removes the container if it already exists
-            
-            self.iface.messageBar().pushMessage('Starting the Docker container', level=Qgis.Info)
-            QApplication.processEvents()
-            linux_gpu_flags = " --runtime nvidia" if platform.system().lower() == "linux" else ""  # adds GPU support if available and on Linux
-            gpu_flags = " --gpus all" if platform.system().lower() != "darwin" else ""  # adds GPU support if available and not on macOS
-            docker_run_cmd = (f"{self.docker_path} run{linux_gpu_flags}{gpu_flags} -d --name easyearth -p 3781:3781 " # runs the container in detached mode and maps port 3781
-                              f"-v \"{self.base_dir}\":/usr/src/app/easyearth_base " # mounts the base directory in the container
-                              f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
-                              f"-e USER_BASE_DIR=\"{self.base_dir}\" " # sets an environment variable in the container containing the user's base directory
-                              f"-e RUN_MODE=docker " # sets the run mode to docker
-                              f"{self.docker_hub_image_name}")
-            result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True, timeout=1800)
-            self.iface.messageBar().pushMessage(f"Starting server...\nRunning command: {result}", level=Qgis.Info)
+            subprocess.run(
+                [self.docker_path, "rm", "-f", "easyearth"],
+                capture_output=True, text=True,
+            )
 
-            if result.returncode == 0:
-                self.docker_running = True
-                self.iface.messageBar().pushMessage("Docker container started successfully.", level=Qgis.Success)
+            # Pull image first so we can report progress
+            pull_result = self.docker_pull()
+            if pull_result.returncode != 0:
+                self.iface.messageBar().pushMessage(
+                    "Aborting: Docker pull failed. Please check your network connection.",
+                    level=Qgis.Critical,
+                )
+                QApplication.processEvents()
+                return
+
+            # Run the container only after a successful pull
+            self.docker_run()
 
         if self.local_mode_button.isChecked():
             # Download server code
@@ -658,7 +710,8 @@ class EasyEarthPlugin:
 
     def stop_server(self):
         if self.docker_mode_button.isChecked():
-            result = subprocess.run(f"{self.docker_path} stop easyearth && {self.docker_path} rm easyearth", capture_output=True, text=True, shell=True)
+            subprocess.run([self.docker_path, "stop", "easyearth"], capture_output=True, text=True)
+            result = subprocess.run([self.docker_path, "rm", "easyearth"], capture_output=True, text=True)
             self.docker_hub_process = None
             self.docker_running = False
         else:
