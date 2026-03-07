@@ -40,6 +40,7 @@ It includes details on how to use the endpoints, the expected request and respon
           }
         }
       ],
+      "bands": [4, 3, 2],       // Optional, 1-indexed band indices to select from multi-band images
       "aoi": (x1, y1, x2, y2), // Optional, area of interest for segmentation models
     }
     ```

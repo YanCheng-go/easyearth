@@ -154,6 +154,7 @@ def predict():
         model_type = data.get('model_type', 'sam')  # 'sam' or 'segment'
         image_path = data.get('image_path')
         model_path = data.get('model_path')
+        bands = data.get('bands', None)
         TEMP_DIR = os.path.join(os.environ['BASE_DIR'], 'tmp')
         EMBEDDINGS_DIR = os.path.join(os.environ['BASE_DIR'], 'embeddings')
 
@@ -181,10 +182,28 @@ def predict():
                     image_array = np.array(image)
                     transform = None
                     source_crs = None
-            if len(image_array.shape) == 2:
-                image_array = np.stack([image_array] * 3, axis=-1)
-            elif image_array.shape[2] > 3:
-                image_array = image_array[:, :, :3]
+            # Handle band selection
+            if bands is not None:
+                if len(image_array.shape) == 2:
+                    raise ValueError("Cannot select bands from a single-band image")
+                num_bands = image_array.shape[2]
+                for b in bands:
+                    if b < 1 or b > num_bands:
+                        raise ValueError(f"Band index {b} is out of range. Image has {num_bands} band(s) (valid range: 1 to {num_bands})")
+                image_array = image_array[:, :, [b - 1 for b in bands]]
+                # If fewer than 3 bands selected, stack to 3 channels
+                if image_array.shape[2] == 1:
+                    image_array = np.stack([image_array[:, :, 0]] * 3, axis=-1)
+                elif image_array.shape[2] == 2:
+                    # Pad with zeros for the third channel
+                    padding = np.zeros(image_array.shape[:2], dtype=image_array.dtype)
+                    image_array = np.stack([image_array[:, :, 0], image_array[:, :, 1], padding], axis=-1)
+            else:
+                # Default behavior: handle band count
+                if len(image_array.shape) == 2:
+                    image_array = np.stack([image_array] * 3, axis=-1)
+                elif image_array.shape[2] > 3:
+                    image_array = image_array[:, :, :3]
         except Exception as e:
             logger.error("Error loading image", exc_info=True)
             return jsonify({'status': 'error', 'message': f'Failed to load image: {str(e)}'}), 500
