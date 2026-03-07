@@ -128,7 +128,7 @@ paths:
                         properties:
                           type: object
                           description: Properties of the feature
-                          example: { "uid": 1}  # TODO: add more properties such as {"label": "tree", "confidence": 0.95 }
+                          example: { "uid": 1, "score": 0.95 }
                         geometry:
                             type: object
                             description: Geometry of the feature
