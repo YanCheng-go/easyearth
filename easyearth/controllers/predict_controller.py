@@ -16,6 +16,12 @@ import logging
 
 logger = logging.getLogger("easyearth")
 
+_base_dir = os.environ.get('BASE_DIR', os.path.join(os.path.expanduser("~"), ".easyearth"))
+_temp_dir = os.path.join(_base_dir, 'tmp')
+_embeddings_dir = os.path.join(_base_dir, 'embeddings')
+os.makedirs(_temp_dir, exist_ok=True)
+os.makedirs(_embeddings_dir, exist_ok=True)
+
 def verify_image_path(image_path):
     """Verify the image path and check if it is a valid URL or local file. Remember to convert the image path the path in the docker container"""
     # TODO: to complete
@@ -37,9 +43,17 @@ def verify_image_path(image_path):
             return False
 
 def verify_model_path(model_path):
-    """"Verify the model path and check if it is a valid model path from hugging face"""
-    # TODO: to complete
-    raise NotImplementedError("Model path verification is not implemented yet.")
+    """"Verify the model path and check if it is a valid model path from hugging face or a local path"""
+    if not model_path:
+        return False
+    # Accept Hugging Face model identifiers (org/model format)
+    if '/' in model_path and not model_path.startswith(('/', '.', '~')):
+        return True
+    # Accept local paths that exist
+    if os.path.isdir(model_path):
+        return True
+    logger.warning(f"Unrecognized model path format: {model_path}")
+    return False
 
 
 # TODO: add this to the predict function
@@ -154,8 +168,6 @@ def predict():
         model_type = data.get('model_type', 'sam')  # 'sam' or 'segment'
         image_path = data.get('image_path')
         model_path = data.get('model_path')
-        TEMP_DIR = os.path.join(os.environ['BASE_DIR'], 'tmp')
-        EMBEDDINGS_DIR = os.path.join(os.environ['BASE_DIR'], 'embeddings')
 
         if not image_path or not verify_image_path(image_path):
             return jsonify({'status': 'error', 'message': 'Invalid or missing image_path'}), 400
@@ -211,7 +223,7 @@ def predict():
                 return jsonify({'status': 'error', 'message': 'No valid masks generated'}), 400
 
             # Convert masks to GeoJSON
-            geojson_path = f"{TEMP_DIR}/predict-langsam_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson"
+            geojson_path = os.path.join(_temp_dir, f"predict-langsam_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson")
             geojson = langsam.raster_to_vector(masks_path[0], input_text[0], filename=geojson_path, img_transform=transform)
 
         # --- SAM2 branch ---
@@ -235,7 +247,7 @@ def predict():
                 return jsonify({'status': 'error', 'message': 'No valid masks generated'}), 400
 
             # Convert masks to GeoJSON
-            geojson_path = f"{TEMP_DIR}/predict-sam2_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson"
+            geojson_path = os.path.join(_temp_dir, f"predict-sam2_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson")
             geojson = sam2.raster_to_vector(masks, transform, filename=geojson_path)
 
         # --- SAM branch ---
@@ -270,6 +282,7 @@ def predict():
                         used_cache = True
 
                 except Exception as e:
+                    logger.warning(f"Failed to load embeddings from {embedding_path}: {str(e)}")
                     image_embeddings = None
 
             # Generate embeddings if not loaded from cache
@@ -278,7 +291,7 @@ def predict():
                 image_embeddings = sam.get_image_embeddings(image_array)
 
                 # generate an index file to relate image to the embeddings
-                index_path = os.path.join(EMBEDDINGS_DIR, 'index.json')
+                index_path = os.path.join(_embeddings_dir, 'index.json')
 
                 if os.path.exists(index_path):
                     with open(index_path, 'r') as f:
@@ -317,7 +330,7 @@ def predict():
                 return jsonify({'status': 'error', 'message': 'No valid masks generated'}), 400
 
             # Convert masks to GeoJSON
-            geojson_path = f"{TEMP_DIR}/predict-sam_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson"
+            geojson_path = os.path.join(_temp_dir, f"predict-sam_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson")
             geojson = sam.raster_to_vector(masks, scores, transform, filename=geojson_path)
 
         # --- Segmentation branch ---
@@ -353,7 +366,7 @@ def predict():
                 return jsonify({'status': 'error', 'message': 'No valid masks generated'}), 400
 
             # Convert masks to GeoJSON
-            geojson_path = f"{TEMP_DIR}/predict-segment_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson"
+            geojson_path = os.path.join(_temp_dir, f"predict-segment_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson")
             geojson = segformer.raster_to_vector(masks, transform, filename=geojson_path)
 
         else:

@@ -7,7 +7,7 @@ This will install Docker, build the image, and launch the EasyEarth server.
 If you make changes to the code, you can rebuild the Docker image using:
 ```bash
 cd easyearth  # go to the directory where docker-compose.yml is located
-./setup.sh  # run the setup.sh script to rebuild the Docker image, remember to setup the data folder.
+./launch_server_docker.sh  # run the script to rebuild the Docker image, remember to setup the data folder.
 ```
 stop the server first if it is running:
 ```bash
@@ -16,6 +16,8 @@ sudo docker-compose down  # stop the docker container
 ```
 
 ## Run local server without Docker
+
+### macOS / Linux
 1. Create a local python environment:
 ```bash
 cd easyearth  # go to the directory where requirements.txt is located
@@ -23,11 +25,33 @@ python -m venv --copies easyearth_env  # Create a virtual environment, remember 
 source easyearth_env/bin/activate  # Activate the virtual environment
 pip install -r requirements.txt  # Install the required packages
 ```
-2. Launch the server, this bash also checks if the python environment exists and activates it:
+2. Launch the server:
 ```bash
 cd easyearth  # go to the directory where requirements.txt is located
 chmod +x ./launch_server_local.sh && ./launch_server_local.sh
 ```
+
+### Windows
+1. Create a local python environment:
+```cmd
+cd easyearth
+python -m venv --copies easyearth_env
+easyearth_env\Scripts\activate
+pip install -r requirements.txt
+```
+2. Launch the server:
+```cmd
+set BASE_DIR=C:\path\to\your\easyearth_base
+easyearth_plugin\launch_server_local.bat
+```
+
+### Configuration
+
+The server uses the `BASE_DIR` environment variable to determine where to store temporary files, embeddings, and predictions. If `BASE_DIR` is not set, it defaults to `~/.easyearth`.
+
+The following subdirectories are created automatically under `BASE_DIR`:
+- `tmp/` — temporary prediction output files
+- `embeddings/` — cached image embeddings for SAM
 
 ## 🧪 Test the Server and model APIs
 ### 📍 Use SAM with Prompts
@@ -59,7 +83,7 @@ curl -X POST http://127.0.0.1:3781/easyearth/predict \
   "image_path": "/usr/src/app/data/DJI_0108.JPG",
   "model_path": "restor/tcd-segformer-mit-b2",
   "prompts": [],
-  "aoi": (0, 0, 1000, 1000)
+  "aoi": {"coordinates": [0, 0, 1000, 1000]}
 }'
 ```
 
