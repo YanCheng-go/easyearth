@@ -137,6 +137,21 @@ paths:
                     type: string
                     description: Coordinate reference system of the image
                     example: "EPSG:4326"
+                  image_width:
+                    type: integer
+                    description: Original width of the input image in pixels
+                    example: 4000
+                  image_height:
+                    type: integer
+                    description: Original height of the input image in pixels
+                    example: 3000
+                  downscaled_to:
+                    type: array
+                    description: If image was downscaled, the new [width, height]
+                    items:
+                      type: integer
+                    example: [4096, 3072]
+                    nullable: true
                   # TODO: add information for example about the model used
 servers:
   - url: '/easyearth'
