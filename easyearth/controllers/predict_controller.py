@@ -219,9 +219,67 @@ def predict():
             prompts = data.get('prompts', [])
             transformed_prompts = reorganize_prompts(prompts)
 
+            # Handle embeddings
+            embedding_path = data.get('embedding_path', None)
+            save_embeddings = data.get('save_embeddings', False)
+
             # Initialize SAM2
             logger.debug("Initializing SAM2 model")
             sam2 = SAM2(model_path or 'ultralytics/sam2.1_b')
+
+            image_embeddings = None
+
+            if embedding_path and os.path.exists(embedding_path) and not save_embeddings:
+                try:
+                    logger.debug(f"Loading SAM2 image embeddings from: {embedding_path}")
+                    embedding_data = torch.load(embedding_path)
+
+                    # handle different formats of embedding data
+                    if isinstance(embedding_data, dict):
+                        if embedding_data.get('image_shape') == image_array.shape[:2]:
+                            image_embeddings = embedding_data['embeddings']
+                            used_cache = True
+                        else:
+                            logger.warning("Image shape mismatch in cached embeddings, regenerating")
+                    else:
+                        image_embeddings = embedding_data
+                        used_cache = True
+
+                except Exception as e:
+                    logger.warning(f"Failed to load SAM2 embeddings: {str(e)}")
+                    image_embeddings = None
+
+            # Generate embeddings if not loaded from cache
+            else:
+                logger.debug("Generating SAM2 image embeddings")
+                image_embeddings = sam2.get_image_embeddings(image_array)
+
+                # generate an index file to relate image to the embeddings
+                index_path = os.path.join(EMBEDDINGS_DIR, 'index.json')
+
+                if os.path.exists(index_path):
+                    with open(index_path, 'r') as f:
+                        index = json.load(f)
+                else:
+                    index = {}
+                # add the embedding path to the index
+                index[image_path] = embedding_path
+                with open(index_path, 'w') as f:
+                    json.dump(index, f)
+
+                if save_embeddings and embedding_path:
+                    try:
+                        os.makedirs(os.path.dirname(embedding_path), exist_ok=True)
+                        embedding_data = {
+                            'embeddings': image_embeddings.cpu() if hasattr(image_embeddings, 'cpu') else image_embeddings,
+                            'image_shape': image_array.shape[:2],
+                            'timestamp': datetime.now().isoformat()
+                        }
+                        logger.debug(f"Saving SAM2 image embeddings to: {embedding_path}")
+                        torch.save(embedding_data, embedding_path)
+                    except Exception as e:
+                        logger.error(f"Failed to save SAM2 image embeddings: {str(e)}")
+                        return jsonify({'status': 'error', 'message': f'Failed to save SAM2 image embeddings: {str(e)}'}), 500
 
             # Get masks from SAM2
             masks = sam2.get_masks(
@@ -229,6 +287,7 @@ def predict():
                 bboxes=transformed_prompts['boxes'] if len(transformed_prompts['boxes']) > 0 else None,
                 points=transformed_prompts['points'] if len(transformed_prompts['points']) > 0 else None,
                 labels=transformed_prompts['labels'] if len(transformed_prompts['labels']) > 0 else None,
+                image_embeddings=image_embeddings,
             )
 
             if masks is None:

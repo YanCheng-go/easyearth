@@ -6,9 +6,10 @@ Reference: https://docs.ultralytics.com/models/sam-2/#how-to-use-sam-2-versatili
 import os
 import numpy as np
 import requests
+import torch
 from PIL import Image
 from ultralytics import SAM
-from typing import Union, List
+from typing import Optional, Union, List
 from pathlib import Path
 
 try:
@@ -38,10 +39,27 @@ class SAM2(BaseModel):
         self.logger.info(f"Using SAM2 model from {model_path}")
         self.logger.debug(f"Cache directory: {self.cache_dir}")
 
+    def get_image_embeddings(self, image: Union[str, Image.Image, np.ndarray]) -> torch.Tensor:
+        """
+        Pre-compute and return image embeddings for a given image.
+
+        This allows caching embeddings to speed up repeated inference on the same image
+        with different prompts.
+
+        Args:
+            image (str | PIL.Image | numpy.ndarray): Path to the image file, or a PIL Image, or a numpy array.
+
+        Returns:
+            torch.Tensor: The image embeddings tensor.
+        """
+        self.model.set_image(image)
+        return self.model.get_image_embeddings(image)
+
     def get_masks(self, image: Union[str, Image.Image, np.ndarray],
                   bboxes: List[Union[List[float], List[List[float]]]] = None,
                   points: List[Union[List[float], List[List[float]]]] = None,
                   labels: List[int] = None,
+                  image_embeddings: Optional[torch.Tensor] = None,
                   timeout: int = 900) -> List[np.ndarray]:
         """
         Run inference on the given image with optional prompts.
@@ -51,11 +69,14 @@ class SAM2(BaseModel):
             bboxes (list, optional): List of bounding boxes [x1, y1, x2, y2] or list of such boxes.
             points (list, optional): List of points or list of list of points.
             labels (list, optional): Labels for the points.
+            image_embeddings (torch.Tensor, optional): Pre-computed image embeddings. If provided,
+                the model will use these instead of computing embeddings from the image.
 
         Returns:
             list: List of masks (numpy arrays) for the segmented objects.
         """
-        results = self.model(image, bboxes=bboxes, points=points, labels=labels)
+        results = self.model(image, bboxes=bboxes, points=points, labels=labels,
+                             embed=image_embeddings)
 
         masks = []
         for result in results:
