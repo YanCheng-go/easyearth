@@ -682,7 +682,7 @@ class EasyEarthPlugin:
                 python_cmd = os.path.join(self.base_dir, 'easyearth_env', 'Scripts', 'python.exe')
                 if not os.path.exists(python_cmd):
                     python_cmd = os.path.join(self.base_dir, 'easyearth_env', 'python.exe')
-                env['MODEL_CACHE_DIR'] = os.path.join(os.environ.get('USERPROFILE', ''), '.cache', 'easyearth', 'models')
+                env['MODEL_CACHE_DIR'] = self.cache_dir
                 env['USER_BASE_DIR'] = self.base_dir
                 env['RUN_MODE'] = 'local'
                 result = subprocess.Popen(
@@ -709,8 +709,7 @@ class EasyEarthPlugin:
 
     def stop_server(self):
         if self.docker_mode_button.isChecked():
-            subprocess.run([self.docker_path, "stop", "easyearth"], capture_output=True, text=True)
-            result = subprocess.run([self.docker_path, "rm", "easyearth"], capture_output=True, text=True)
+            result = subprocess.run([self.docker_path, "rm", "-f", "easyearth"], capture_output=True, text=True)
             self.docker_hub_process = None
             self.docker_running = False
         else:

@@ -16,6 +16,12 @@ import logging
 
 logger = logging.getLogger("easyearth")
 
+_base_dir = os.environ.get('BASE_DIR', os.path.join(os.path.expanduser("~"), ".easyearth"))
+_temp_dir = os.path.join(_base_dir, 'tmp')
+_embeddings_dir = os.path.join(_base_dir, 'embeddings')
+os.makedirs(_temp_dir, exist_ok=True)
+os.makedirs(_embeddings_dir, exist_ok=True)
+
 def verify_image_path(image_path):
     """Verify the image path and check if it is a valid URL or local file. Remember to convert the image path the path in the docker container"""
     # TODO: to complete
@@ -162,11 +168,6 @@ def predict():
         model_type = data.get('model_type', 'sam')  # 'sam' or 'segment'
         image_path = data.get('image_path')
         model_path = data.get('model_path')
-        BASE_DIR = os.environ.get('BASE_DIR', os.path.join(os.path.expanduser("~"), ".easyearth"))
-        TEMP_DIR = os.path.join(BASE_DIR, 'tmp')
-        EMBEDDINGS_DIR = os.path.join(BASE_DIR, 'embeddings')
-        os.makedirs(TEMP_DIR, exist_ok=True)
-        os.makedirs(EMBEDDINGS_DIR, exist_ok=True)
 
         if not image_path or not verify_image_path(image_path):
             return jsonify({'status': 'error', 'message': 'Invalid or missing image_path'}), 400
@@ -222,7 +223,7 @@ def predict():
                 return jsonify({'status': 'error', 'message': 'No valid masks generated'}), 400
 
             # Convert masks to GeoJSON
-            geojson_path = os.path.join(TEMP_DIR, f"predict-langsam_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson")
+            geojson_path = os.path.join(_temp_dir, f"predict-langsam_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson")
             geojson = langsam.raster_to_vector(masks_path[0], input_text[0], filename=geojson_path, img_transform=transform)
 
         # --- SAM2 branch ---
@@ -246,7 +247,7 @@ def predict():
                 return jsonify({'status': 'error', 'message': 'No valid masks generated'}), 400
 
             # Convert masks to GeoJSON
-            geojson_path = os.path.join(TEMP_DIR, f"predict-sam2_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson")
+            geojson_path = os.path.join(_temp_dir, f"predict-sam2_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson")
             geojson = sam2.raster_to_vector(masks, transform, filename=geojson_path)
 
         # --- SAM branch ---
@@ -290,7 +291,7 @@ def predict():
                 image_embeddings = sam.get_image_embeddings(image_array)
 
                 # generate an index file to relate image to the embeddings
-                index_path = os.path.join(EMBEDDINGS_DIR, 'index.json')
+                index_path = os.path.join(_embeddings_dir, 'index.json')
 
                 if os.path.exists(index_path):
                     with open(index_path, 'r') as f:
@@ -329,7 +330,7 @@ def predict():
                 return jsonify({'status': 'error', 'message': 'No valid masks generated'}), 400
 
             # Convert masks to GeoJSON
-            geojson_path = os.path.join(TEMP_DIR, f"predict-sam_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson")
+            geojson_path = os.path.join(_temp_dir, f"predict-sam_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson")
             geojson = sam.raster_to_vector(masks, scores, transform, filename=geojson_path)
 
         # --- Segmentation branch ---
@@ -365,7 +366,7 @@ def predict():
                 return jsonify({'status': 'error', 'message': 'No valid masks generated'}), 400
 
             # Convert masks to GeoJSON
-            geojson_path = os.path.join(TEMP_DIR, f"predict-segment_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson")
+            geojson_path = os.path.join(_temp_dir, f"predict-segment_{os.path.basename(image_path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson")
             geojson = segformer.raster_to_vector(masks, transform, filename=geojson_path)
 
         else:
