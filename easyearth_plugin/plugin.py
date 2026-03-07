@@ -919,6 +919,12 @@ class EasyEarthPlugin:
                 if layer.name() == self.get_image_name():
                     self.selected_layer = layer.layer()
 
+        if not self.selected_layer:
+            self.iface.messageBar().pushMessage(
+                "No matching layer found for the selected image.", level=Qgis.Warning
+            )
+            return
+
         self.iface.setActiveLayer(self.selected_layer) # sets the selected layer as the active layer
         self.iface.messageBar().pushMessage(f"Selected layer {self.selected_layer.name()}", level=Qgis.Info)
         self.raster_extent, self.raster_width, self.raster_height, self.raster_crs = self.get_current_raster_info(self.selected_layer)
@@ -956,8 +962,9 @@ class EasyEarthPlugin:
         # Reorder the group to be at the top
         root = QgsProject.instance().layerTreeRoot()
         group = root.findGroup(self.selected_layer.name())
-        root.insertChildNode(0, group.clone())  # inserts the group at the top of the layer tree
-        group.parent().removeChildNode(group) # removes the original group
+        if group is not None:
+            root.insertChildNode(0, group.clone())  # inserts the group at the top of the layer tree
+            group.parent().removeChildNode(group) # removes the original group
         self.iface.mapCanvas().refresh()
         
     def browse_image(self):
@@ -2153,8 +2160,9 @@ class EasyEarthPlugin:
 
                 # Check for existing embedding
                 layer_source = self.selected_layer.source()
-                image_name = os.path.splitext(os.path.basename(layer_source))[0]
-                self.update_embeddings(image_name)
+                if layer_source:
+                    image_name = os.path.splitext(os.path.basename(layer_source))[0]
+                    self.update_embeddings(image_name)
         except Exception as e:
             self.logger.error(f"Error handling layer selection: {str(e)}")
             self.logger.exception("Full traceback:")
