@@ -18,6 +18,7 @@ import os
 import platform
 import requests
 import shutil
+import signal
 import subprocess
 import time
 import traceback
@@ -420,7 +421,10 @@ class EasyEarthPlugin:
             self.undo_button = QPushButton("Undo last drawing")
             self.undo_button.clicked.connect(self.undo_last_drawing)
             # self.undo_button.setEnabled(False) # enable after drawing starts
-            self.undo_shortcut = QShortcut(QKeySequence.Undo, self.iface.mainWindow())
+            # Scope the shortcut to the plugin panel so it does not shadow QGIS's own
+            # undo (e.g. while digitizing a vector layer) across the whole main window
+            self.undo_shortcut = QShortcut(QKeySequence.Undo, self.dock_widget)
+            self.undo_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
             self.undo_shortcut.activated.connect(self.undo_last_drawing)  # Connect shortcut to undo function
             button_layout.addWidget(self.undo_button)
             settings_layout.addLayout(button_layout)
@@ -562,8 +566,8 @@ class EasyEarthPlugin:
         if self.docker_mode_button.isChecked():
             self.iface.messageBar().pushMessage('Removing the docker container if it already exists', level=Qgis.Info)
             QApplication.processEvents()
-            subprocess.run(f"{self.docker_path} rm -f easyearth 2>/dev/null || true", capture_output=True, text=True, shell=True)  # removes the container if it already exists
-            
+            subprocess.run([self.docker_path, "rm", "-f", "easyearth"], capture_output=True, text=True)  # removes the container if it already exists (non-zero exit is fine)
+
             self.iface.messageBar().pushMessage('Pulling the latest image from Docker Hub', level=Qgis.Info)
             QApplication.processEvents()
             warning_box = QMessageBox()
@@ -572,19 +576,21 @@ class EasyEarthPlugin:
             warning_box.setTextFormat(Qt.RichText)
             warning_box.setText("Downloading the latest Docker image from Docker Hub.&nbsp;This may take a while.&nbsp;Please wait...")
             warning_box.exec_()
-            subprocess.run(f"{self.docker_path} pull {self.docker_hub_image_name}", capture_output=True, text=True, shell=True)  # removes the container if it already exists
-            
+            subprocess.run([self.docker_path, "pull", self.docker_hub_image_name], capture_output=True, text=True)  # pulls the latest image
+
             self.iface.messageBar().pushMessage('Starting the Docker container', level=Qgis.Info)
             QApplication.processEvents()
-            linux_gpu_flags = " --runtime nvidia" if platform.system().lower() == "linux" else ""  # adds GPU support if available and on Linux
-            gpu_flags = " --gpus all" if platform.system().lower() != "darwin" else ""  # adds GPU support if available and not on macOS
-            docker_run_cmd = (f"{self.docker_path} run{linux_gpu_flags}{gpu_flags} -d --name easyearth -p 3781:3781 " # runs the container in detached mode and maps port 3781
-                              f"-v \"{self.base_dir}\":/usr/src/app/easyearth_base " # mounts the base directory in the container
-                              f"-v \"{self.cache_dir}\":/usr/src/app/.cache/models " # mounts the cache directory in the container
-                              f"-e USER_BASE_DIR=\"{self.base_dir}\" " # sets an environment variable in the container containing the user's base directory
-                              f"-e RUN_MODE=docker " # sets the run mode to docker
-                              f"{self.docker_hub_image_name}")
-            result = subprocess.run(docker_run_cmd, capture_output=True, text=True, shell=True, timeout=1800)
+            linux_gpu_flags = ["--runtime", "nvidia"] if platform.system().lower() == "linux" else []  # adds GPU support if available and on Linux
+            gpu_flags = ["--gpus", "all"] if platform.system().lower() != "darwin" else []  # adds GPU support if available and not on macOS
+            docker_run_cmd = (
+                [self.docker_path, "run"] + linux_gpu_flags + gpu_flags +
+                ["-d", "--name", "easyearth", "-p", "3781:3781", # runs the container in detached mode and maps port 3781
+                 "-v", f"{self.base_dir}:/usr/src/app/easyearth_base", # mounts the base directory in the container
+                 "-v", f"{self.cache_dir}:/usr/src/app/.cache/models", # mounts the cache directory in the container
+                 "-e", f"USER_BASE_DIR={self.base_dir}", # sets an environment variable in the container containing the user's base directory
+                 "-e", "RUN_MODE=docker", # sets the run mode to docker
+                 self.docker_hub_image_name])
+            result = subprocess.run(docker_run_cmd, capture_output=True, text=True, timeout=1800)
             self.iface.messageBar().pushMessage(f"Starting server...\nRunning command: {result}", level=Qgis.Info)
 
             if result.returncode == 0:
@@ -636,7 +642,7 @@ class EasyEarthPlugin:
                     urllib.request.urlretrieve(env_url, zipped_env_path)
                     self.iface.messageBar().pushMessage(f"Unzipping environment to {env_path}", level=Qgis.Info)
                     QApplication.processEvents()
-                    subprocess.run(f'tar -xzf \"{zipped_env_path}\" -C \"{self.base_dir}\"', capture_output=True, text=True, shell=True)  # unzips the environment tar.gz file
+                    subprocess.run(["tar", "-xzf", zipped_env_path, "-C", self.base_dir], capture_output=True, text=True)  # unzips the environment tar.gz file
                     os.remove(zipped_env_path)  # remove the zip file after extraction
                     os.rename(os.path.join(self.base_dir, 'easyearth_env_mac'), env_path)
                 else:
@@ -646,8 +652,17 @@ class EasyEarthPlugin:
 
             self.local_server_log_file = open(f"{self.logs_dir}/launch_server_local.log", "w")  # log file for the local server launch
             self.iface.messageBar().pushMessage(f"Starting local server...", level=Qgis.Info)
-            result = subprocess.Popen(f'chmod +x \"{self.plugin_dir}\"/launch_server_local.sh && \"{self.plugin_dir}\"/launch_server_local.sh',
-                                    shell=True,
+            launch_script = os.path.join(self.plugin_dir, "launch_server_local.sh")
+            launch_cmd = [launch_script]
+
+            try:
+                os.chmod(launch_script, os.stat(launch_script).st_mode | 0o111)  # make the launch script executable
+            except OSError as e:
+                # The plugin directory may be read-only, run the script through bash instead
+                self.logger.warning(f"Could not make {launch_script} executable ({str(e)}), falling back to bash")
+                launch_cmd = ["bash", launch_script]
+
+            result = subprocess.Popen(launch_cmd,
                                     stdout=self.local_server_log_file,  # redirects stdout to a log file
                                     stderr=subprocess.STDOUT,  # redirects stderr to the same log file
                                     text=True,              # decodes output as text, not bytes
@@ -658,13 +673,60 @@ class EasyEarthPlugin:
 
     def stop_server(self):
         if self.docker_mode_button.isChecked():
-            result = subprocess.run(f"{self.docker_path} stop easyearth && {self.docker_path} rm easyearth", capture_output=True, text=True, shell=True)
+            stopped = subprocess.run([self.docker_path, "stop", "easyearth"], capture_output=True, text=True, timeout=1800)
+
+            if stopped.returncode == 0:
+                subprocess.run([self.docker_path, "rm", "easyearth"], capture_output=True, text=True, timeout=1800)
+                summary = "Docker container stopped."
+            else:
+                summary = f"Failed to stop the Docker container: {stopped.stderr.strip()}"
+
             self.docker_hub_process = None
             self.docker_running = False
         else:
-            result = subprocess.run('kill $(lsof -t -i:3781)', capture_output=True, text=True, shell=True, timeout=1800) # kills the process running on port 3781
+            summary = self.kill_local_server()
 
-        self.iface.messageBar().pushMessage(f"Stopping server with command: {result}", level=Qgis.Info)
+        self.iface.messageBar().pushMessage(f"Stopping server: {summary}", level=Qgis.Info)
+
+    def kill_local_server(self, port=3781):
+        """Terminate the local server process listening on the given port.
+
+        Returns:
+            str: a human readable summary of what happened.
+        """
+
+        try:
+            listening = subprocess.run(["lsof", "-t", f"-i:{port}"], capture_output=True, text=True, timeout=60)
+        except FileNotFoundError:
+            return (f"Could not find 'lsof' to locate the server on port {port}. "
+                    f"Please stop the local server manually.")
+        except subprocess.SubprocessError as e:
+            return f"Could not look up the server process on port {port}: {str(e)}"
+
+        pids = []
+
+        for line in listening.stdout.split():
+            try:
+                pids.append(int(line))
+            except ValueError:
+                continue
+
+        if not pids:
+            return f"No process was listening on port {port}."
+
+        killed = []
+
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGTERM)
+                killed.append(pid)
+            except OSError as e:
+                self.logger.error(f"Failed to terminate process {pid}: {str(e)}")
+
+        if not killed:
+            return f"Failed to terminate the process(es) on port {port}. Please stop the local server manually."
+
+        return f"Terminated local server process(es): {', '.join(str(pid) for pid in killed)}."
 
     def run_or_stop_container(self):
         if not self.docker_running: # if the docker container is not running, start it
@@ -1387,9 +1449,13 @@ class EasyEarthPlugin:
     def undo_last_drawing(self):
         """Undo the last drawing action by removing the last point or box"""
 
-        if self.prompt_count[self.get_image_name()] == 0:
-            self.iface.messageBar().pushMessage(f'No drawings to undo for {self.get_image_name()}.', level=Qgis.Warning)
-            QMessageBox.warning(None, "Warning", f"No drawings to undo for {self.get_image_name()}.")
+        image_name = self.get_image_name()
+        prompt_features = self.prompts_geojson.get(image_name, {}).get('features', [])
+
+        # The image may not be loaded yet, or nothing has been drawn on it
+        if self.prompt_count.get(image_name, 0) == 0 or not prompt_features:
+            self.iface.messageBar().pushMessage(f'No drawings to undo for {image_name}.', level=Qgis.Warning)
+            QMessageBox.warning(None, "Warning", f"No drawings to undo for {image_name}.")
             return
 
         last_prompt_id = self.prompts_geojson[self.get_image_name()]['features'][-1]['properties']['id'] # gets the last prompt ID from prompts_geojson
@@ -1412,13 +1478,16 @@ class EasyEarthPlugin:
             else:
                 # Get the last prediction ID from predictions_geojson
                 last_prediction_index = last_prediction_ID.get(last_prompt_id, None)
+                prediction_features = self.predictions_geojson.get(self.get_image_name(), {}).get('features', [])
                 # self.iface.messageBar().pushMessage(f'Last prediction index: {last_prediction_index}', level=Qgis.Info)
-                last_prediction_id = self.predictions_geojson[self.get_image_name()]['features'][last_prediction_index]['properties']['id']
-                # self.iface.messageBar().pushMessage(f'Last prediction id: {last_prediction_id}', level=Qgis.Info)
-                # self.iface.messageBar().pushMessage(f"{self.predictions_geojson[self.get_image_name()]['features']}", level=Qgis.Info)
-                if last_prediction_id is None:
+
+                # Check the index before using it, there may be no prediction for this prompt yet
+                if last_prediction_index is None or last_prediction_index >= len(prediction_features):
                     self.iface.messageBar().pushMessage("Error", "No matching prediction found for the last prompt.", level=Qgis.Critical, duration=3)
                     return
+
+                last_prediction_id = prediction_features[last_prediction_index]['properties']['id']
+                # self.iface.messageBar().pushMessage(f'Last prediction id: {last_prediction_id}', level=Qgis.Info)
 
                 self.predictions_geojson[self.get_image_name()]['features'] = [f for f in self.predictions_geojson[self.get_image_name()]['features'] if f['properties']['id'] != last_prediction_id] # removes the last prediction feature from predictions_geojson
                 self.prediction_count[self.get_image_name()] = self.prediction_count[self.get_image_name()] - 1 if self.prediction_count[self.get_image_name()] > 0 else 0 # updates the feature count
@@ -1759,7 +1828,7 @@ class EasyEarthPlugin:
 
     def get_prediction(self, prompts, aoi_features=None):
         if len(prompts) == 0:
-            if len(aoi_features) > 0:
+            if aoi_features:
                 for aoi in aoi_features:
                     self.get_prediction_per_prompt(prompts, aoi_features=aoi)
             else:
@@ -1839,7 +1908,7 @@ class EasyEarthPlugin:
                     self.model_type = model_type
 
             # use langsam model if text prompt is used for SAM model
-            if "text" in prompts[0].get('type', '').lower() and self.is_sam_model():
+            if prompts and "text" in prompts[0].get('type', '').lower() and self.is_sam_model():
                 self.model_type = "langsam"
 
             self.logger.debug(f"Model type: {self.model_type}")
@@ -2176,25 +2245,36 @@ class EasyEarthPlugin:
     #     except Exception as e:
     #         self.logger.error(f"Error cleaning up Docker: {str(e)}")
 
+    def remove_tracked_layers(self):
+        """Remove the prompt and prediction layers this plugin created from the project.
+
+        Both attributes are dicts mapping image name -> QgsVectorLayer.
+        """
+
+        instance = QgsProject.instance()
+
+        for layer_dict in (self.prompts_layer, self.predictions_layer):
+            for layer in list(layer_dict.values()):
+                try:
+                    if layer is not None and layer.isValid():
+                        instance.removeMapLayer(layer.id())
+                except (RuntimeError, AttributeError) as e:
+                    # Layer may already have been deleted on the C++ side
+                    self.logger.debug(f"Could not remove layer: {str(e)}")
+            layer_dict.clear()
+
     def cleanup_previous_session(self):
         """Clean up temporary files and layers from previous session"""
 
         try:
-            # Remove existing layers
-            if self.prompts_layer and self.prompts_layer.isValid():
-                QgsProject.instance().removeMapLayer(self.prompts_layer.id())
-                self.prompts_layer = None
-            if self.predictions_layer and self.predictions_layer.isValid():
-                QgsProject.instance().removeMapLayer(self.predictions_layer.id())
-                self.predictions_layer = None
+            # Remove existing layers (both are dicts keyed by image name)
+            self.remove_tracked_layers()
 
             # Remove existing temporary files
             if self.temp_prompts_geojson and os.path.exists(self.temp_prompts_geojson):
                 os.remove(self.temp_prompts_geojson)
-                self.prompts_layer = None
             if self.temp_predictions_geojson and os.path.exists(self.temp_predictions_geojson):
                 os.remove(self.temp_predictions_geojson)
-                self.predictions_layer = None
 
             # Reset feature count
             self.prediction_count = {}
@@ -2212,58 +2292,80 @@ class EasyEarthPlugin:
     def unload(self):
         """Cleanup when unloading the plugin"""
 
-        try:
-            self.cleanup_previous_session() # cleans up temporary files and layers
+        # Each step is isolated so that one failure cannot leave the timer running
+        # or the dock widget attached to the QGIS main window.
+        def step(description, func):
+            try:
+                func()
+            except Exception as e:
+                self.logger.error(f"Error during plugin unload ({description}): {str(e)}")
+                self.logger.exception("Full traceback:")
 
-            # Remove the plugin menu item and icon
+        # Stop the status check timer first, it keeps firing on a half-torn-down plugin otherwise
+        def stop_timer():
+            if hasattr(self, 'status_timer'):
+                self.status_timer.stop()
+                del self.status_timer
+
+        def remove_dock_widget():
+            if self.dock_widget:
+                self.iface.removeDockWidget(self.dock_widget)
+                self.dock_widget.deleteLater()
+                self.dock_widget = None
+
+        def remove_menu_and_toolbar():
             if self.toolbar:
                 self.toolbar.deleteLater()
+                self.toolbar = None
 
             for action in self.actions:
                 self.iface.removePluginMenu("Easy Earth", action)
                 self.iface.removeToolBarIcon(action)
 
-            # self.cleanup_docker() # cleans up Docker resources
+            if self.action:
+                self.iface.removePluginMenu('EasyEarth', self.action)
+                self.iface.removeToolBarIcon(self.action)
+                self.action = None
 
-            self.sudo_password = None # clears sudo password
-
-            # Stop the status check timer
-            if hasattr(self, 'status_timer'):
-                self.status_timer.stop()
-                del self.status_timer
-
-            self.clear_points()
-
-            # Remove the plugin UI elements
-            if self.dock_widget:
-                self.iface.removeDockWidget(self.dock_widget)
-
-            # Clean up any other resources
-            if hasattr(self, 'point_layer') and self.point_layer:
-                QgsProject.instance().removeMapLayer(self.point_layer.id())
-
+        def release_shortcut():
             if hasattr(self, 'undo_shortcut') and self.undo_shortcut:
+                self.undo_shortcut.setEnabled(False)
                 self.undo_shortcut.setParent(None)
-    
+                self.undo_shortcut = None
+
+        def remove_other_layers():
+            instance = QgsProject.instance()
+
+            if getattr(self, 'point_layer', None):
+                instance.removeMapLayer(self.point_layer.id())
+                self.point_layer = None
+
             # Remove temporary drawn features layer
-            if hasattr(self, 'drawn_layer') and self.drawn_layer:
-                QgsProject.instance().removeMapLayer(self.drawn_layer.id())
+            if getattr(self, 'drawn_layer', None):
+                instance.removeMapLayer(self.drawn_layer.id())
+                self.drawn_layer = None
 
-            # Remove layers
-            if self.prompts_layer:
-                QgsProject.instance().removeMapLayer(self.prompts_layer.id())
-            if self.predictions_layer:
-                QgsProject.instance().removeMapLayer(self.predictions_layer.id())
-
-            # Remove temporary files
+        def remove_temp_files():
             for file_path in [self.temp_prompts_geojson, self.temp_predictions_geojson]:
                 if file_path and os.path.exists(file_path):
                     os.remove(file_path)
 
-            if hasattr(self, 'local_server_log_file') and self.local_server_log_file:
+        def close_log_file():
+            if getattr(self, 'local_server_log_file', None):
                 self.local_server_log_file.close()
+                self.local_server_log_file = None
 
-            self.logger.debug("Plugin unloaded successfully")
-        except Exception as e:
-            self.logger.error(f"Error during plugin unload: {str(e)}")
-            self.logger.exception("Full traceback:")
+        step("stopping status timer", stop_timer)
+        step("releasing undo shortcut", release_shortcut) # must precede dock widget removal, it is a child of it
+        step("removing dock widget", remove_dock_widget)
+        step("removing menu and toolbar", remove_menu_and_toolbar)
+        step("cleaning up session", self.cleanup_previous_session) # temporary files and layers
+        step("clearing points", self.clear_points)
+        step("removing remaining layers", remove_other_layers)
+        step("removing temporary files", remove_temp_files)
+        step("closing local server log", close_log_file)
+
+        # self.cleanup_docker() # cleans up Docker resources
+        self.sudo_password = None # clears sudo password
+
+        self.logger.debug("Plugin unloaded successfully")

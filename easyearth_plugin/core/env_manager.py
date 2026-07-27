@@ -49,8 +49,7 @@ class EnvManager:
 
         # Run the download script
         result = subprocess.Popen(
-            f'bash \"{download_script}\"',
-            shell=True,
+            ["bash", download_script],
             stdout=self.download_env_log_file,
             stderr=subprocess.STDOUT,
             text=True,
