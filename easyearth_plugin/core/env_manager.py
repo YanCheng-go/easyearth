@@ -9,7 +9,7 @@ class EnvManager:
     """
     Python environment manager for EasyEarth plugin.
     """
-    def __init__(self, iface, logs_dir, plugin_dir):
+    def __init__(self, iface, logs_dir, plugin_dir, base_dir):
         """
         Initialize the environment manager.
         Args:
@@ -20,9 +20,67 @@ class EnvManager:
         self.iface = iface
         self.logs_dir = logs_dir
         self.plugin_dir = plugin_dir
+        self.base_dir = base_dir
 
         self.download_env_log_file = None
         self.logger = logging.getLogger("easyearth_plugin")
+
+    def download_windows_env(self):
+        """ Download the Windows environment from Google Drive.
+        This method runs a batch script to download the environment setup for Windows.
+        It logs the output to a file and provides feedback to the user.
+        """
+        suffix = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        self.download_env_log_file = open(
+            os.path.join(self.logs_dir, f"download_windows_env_{suffix}.log"), "w")
+
+        download_script = os.path.join(self.plugin_dir, "download_windows_env.bat")
+        if not os.path.exists(download_script):
+            self.iface.messageBar().pushMessage(
+                "Download script not found",
+                level=Qgis.Critical
+            )
+            QMessageBox.critical(
+                None,
+                "Error",
+                "Download script not found. Please use Docker mode for Windows."
+            )
+            return
+
+        # Run the download script. A .bat is not an executable image, it needs the
+        # command interpreter, and start_new_session is POSIX only.
+        result = subprocess.Popen(
+            ["cmd", "/c", str(download_script)],
+            stdout=self.download_env_log_file,
+            stderr=subprocess.STDOUT,
+            text=True,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+            env={**os.environ, "BASE_DIR": str(self.base_dir)}  # env values must be str
+        )
+
+        self.iface.messageBar().pushMessage(
+            "Downloading environment from Google Drive...",
+            level=Qgis.Info
+        )
+
+        # Wait for the process to complete
+        result.wait()
+        if result.returncode != 0:
+            self.logger.error("Failed to download the environment.")
+            QMessageBox.critical(
+                None,
+                "Download Error",
+                "Failed to download the environment. Check logs for details."
+            )
+            self.download_env_log_file.close()
+            self.download_env_log_file = None
+            return
+
+        self.download_env_log_file.close()
+        self.download_env_log_file = None
+        self.logger.info("Download process completed. Check logs for details.")
+        self.iface.messageBar().pushMessage("Download completed", level=Qgis.Success)
 
     def download_linux_env(self):
         """ Download the Linux environment from Google Drive.
@@ -53,7 +111,8 @@ class EnvManager:
             stdout=self.download_env_log_file,
             stderr=subprocess.STDOUT,
             text=True,
-            start_new_session=True
+            start_new_session=True,
+            env={**os.environ, "BASE_DIR": str(self.base_dir)}  # was env=env, an undefined name
         )
 
         self.iface.messageBar().pushMessage(
